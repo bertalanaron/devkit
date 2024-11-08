@@ -22,6 +22,7 @@ add_compile_options(/Zc:preprocessor)
 find_package(GLEW CONFIG REQUIRED)
 find_package(SDL2 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/lib/$<CONFIG>")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/bin/$<CONFIG>")
@@ -29,22 +30,31 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/$<CONFIG>")
 
 set(INCLUDE_DIR include/${PROJECT_NAME})
 
+set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS YES CACHE BOOL "Export all symbols")
+
 # Add source files
 set(SOURCES 
     src/devkit.cpp 
+    src/graphics.cpp 
     src/graphics_includes.h
     ${INCLUDE_DIR}/devkit.h
-    ${INCLUDE_DIR}/log.h)
+    ${INCLUDE_DIR}/log.h
+    ${INCLUDE_DIR}/util.h
+    ${INCLUDE_DIR}/graphics.h
+    ${INCLUDE_DIR}/asset_manager.h)
     
-link_directories(${CMAKE_SOURCE_DIR}/build/vcpkg_installed/${CMAKE_VCPKG_TARGET_TRIPLET}/lib)
-link_directories(${CMAKE_SOURCE_DIR}/build/vcpkg_installed/${CMAKE_VCPKG_TARGET_TRIPLET}/lib/manual-link)
+# link_directories(${CMAKE_SOURCE_DIR}/build/vcpkg_installed/${CMAKE_VCPKG_TARGET_TRIPLET}/lib)
+# link_directories(${CMAKE_SOURCE_DIR}/build/vcpkg_installed/${CMAKE_VCPKG_TARGET_TRIPLET}/lib/manual-link)
 
 add_library(${PROJECT_NAME} STATIC ${SOURCES})
 
-target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2 SDL2::SDL2main GLEW::GLEW imgui::imgui)
+target_link_libraries(${PROJECT_NAME} PUBLIC SDL2::SDL2 SDL2::SDL2main GLEW::GLEW imgui::imgui glm::glm)
 target_include_directories(${PROJECT_NAME} PUBLIC include)
 target_include_directories(${PROJECT_NAME} PUBLIC ${SDL2_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
 
 add_executable(examples_basic examples/basic/examples_basic.cpp)
 target_link_libraries(examples_basic PRIVATE ${PROJECT_NAME})
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT examples_basic)
+
+add_executable(examples_viewports examples/viewports/examples_viewports.cpp)
+target_link_libraries(examples_viewports PRIVATE ${PROJECT_NAME})

@@ -5,24 +5,25 @@
 #include <ctime>
 #include <codecvt>
 #include <mutex>
+#include <unordered_map>
 
 enum class LogLevel : unsigned { Error, Debug, Trace };
 
-unsigned& logLevel() {
+inline unsigned& logLevel() {
 	static LogLevel level = LogLevel::Debug;
 	return (unsigned&)level;
 }
 
-void logLevel(LogLevel level) {
+inline void logLevel(LogLevel level) {
 	logLevel() = (unsigned)level;
 }
 
-std::ostream*& logStream() {
+inline std::ostream*& logStream() {
 	static std::ostream* os = &std::cout;
 	return os;
 }
 
-void logStream(std::ostream* os) {
+inline void logStream(std::ostream* os) {
 	logStream() = os;
 }
 
@@ -71,7 +72,7 @@ inline std::unordered_map<int, int> g_threadToShort{};
 #define TRACE(...)
 #endif
 
-std::string utf8(const wchar_t* wcstr) {
+inline std::string utf8(const wchar_t* wcstr) {
 	std::wstring wstr(wcstr);
 	std::string narrow;
 	for (wchar_t wc : wstr) {
