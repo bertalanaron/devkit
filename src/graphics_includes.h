@@ -3,7 +3,7 @@
 #undef main
 #include <GL/glew.h>
 #include <iostream>
-#include <imgui/imgui.h>
+#include <imgui.h>
 
 #include <glm/glm.hpp>
 

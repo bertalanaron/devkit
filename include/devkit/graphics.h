@@ -1,7 +1,7 @@
 #pragma once
 #include <memory>
 
-#include <imgui/imgui.h>
+#include <imgui.h>
 #include "devkit/util.h"
 
 namespace NS_DEVKIT {

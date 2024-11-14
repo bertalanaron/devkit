@@ -4,9 +4,9 @@
 #pragma comment (lib, "Dwmapi")
 #include <dwmapi.h>
 #include "SDL2/SDL_syswm.h"
-#include <imgui/imgui.h>
-#include <imgui/imgui_impl_sdl2.h>
-#include <imgui/imgui_impl_opengl3.h>
+#include <imgui.h>
+#include <imgui_impl_sdl2.h>
+#include <imgui_impl_opengl3.h>
 
 #include "graphics_includes.h"
 #include "devkit/devkit.h"

@@ -1,6 +1,6 @@
 #include <devkit/devkit.h>
 #include <devkit/graphics.h>
-#include <imgui/imgui.h>
+#include <imgui.h>
 
 int main(int argc, char** argv) {
 	dk::AssetManager assetManager;
