@@ -1,14 +1,19 @@
 #pragma once
+#include <iostream>
+#include <optional>
+
 #include <SDL.h>
 #undef main
 #include <GL/glew.h>
-#include <iostream>
 #include <imgui.h>
-
 #include <glm/glm.hpp>
 
-void pushViewport(glm::i32vec2 offset, glm::i32vec2 size);
+void pushViewportSize(glm::i32vec2 size);
+void popViewportSize();
+void pushViewportOffset(glm::i32vec2 offset);
+void popViewportOffset();
 
-void popViewport();
+std::optional<glm::i32vec2> currentViewportSize();
+std::optional<glm::i32vec2> currentViewportOffset();
 
 SDL_GLContext currentGlContext();

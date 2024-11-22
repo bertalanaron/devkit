@@ -10,6 +10,7 @@
       "features": [ "opengl3-binding", "sdl2-binding" ]
     },
 	"glm",
-	"stb"
+	"stb",
+	"nlohmann-json"
   ]
 }

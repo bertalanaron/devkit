@@ -3,17 +3,17 @@
 #include <imgui.h>
 
 int main(int argc, char** argv) {
-	dk::AssetManager assetManager;
-	assetManager.attachInitHandler(L"png", dk::Texture::load);
+	//dk::AssetManager assetManager;
+	//assetManager.attachInitHandler(L"png", dk::Texture::load);
 
-	dk::Window window;
-	window.open();
+	//dk::Window window;
+	//window.open();
 
-	while (window.isOpen()) {
-		dk::Frame frame(window);
+	//while (window.isOpen()) {
+	//	dk::Frame frame(window);
 
-		assetManager.synchronize(L"assets/");
-	}
+	//	assetManager.synchronize(L"assets/");
+	//}
 
 	return 0;
 }
