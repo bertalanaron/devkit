@@ -11,6 +11,7 @@
     },
 	  "glm",
 	  "stb",
-	  "nlohmann-json"
+	  "nlohmann-json",
+	  "spdlog"
   ]
 }

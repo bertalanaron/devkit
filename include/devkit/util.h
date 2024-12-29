@@ -12,6 +12,9 @@
 
 #include <nlohmann/json.hpp>
 
+#include <spdlog/spdlog.h>
+#undef DELETE
+
 namespace glm {
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec2, x, y)
@@ -70,6 +73,29 @@ private:
 	}
 };
 
+}
+
+namespace fmt {
+	template <typename T>
+	struct formatter<glm::vec<2, T, glm::defaultp>> : formatter<std::string> {
+		auto format(glm::vec<2, T, glm::defaultp> my, format_context &ctx) const -> decltype(ctx.out()) {
+			return fmt::format_to(ctx.out(), "({},{})", my.x, my.y);
+		}
+	};
+
+	template <typename T>
+	struct formatter<glm::vec<3, T, glm::defaultp>> : formatter<std::string> {
+		auto format(glm::vec<3, T, glm::defaultp> my, format_context &ctx) const -> decltype(ctx.out()) {
+			return fmt::format_to(ctx.out(), "({},{},{})", my.x, my.y, my.z);
+		}
+	};
+
+	template <typename T>
+	struct formatter<glm::vec<4, T, glm::defaultp>> : formatter<std::string> {
+		auto format(glm::vec<4, T, glm::defaultp> my, format_context &ctx) const -> decltype(ctx.out()) {
+			return fmt::format_to(ctx.out(), "({},{},{},{})", my.x, my.y, my.z, my.w);
+		}
+	};
 }
 
 namespace NS_DEVKIT {
