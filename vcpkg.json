@@ -5,12 +5,12 @@
   "dependencies": [
     "sdl2",
     "glew",
-	{
+	  {
       "name": "imgui",
       "features": [ "opengl3-binding", "sdl2-binding" ]
     },
-	"glm",
-	"stb",
-	"nlohmann-json"
+	  "glm",
+	  "stb",
+	  "nlohmann-json"
   ]
 }

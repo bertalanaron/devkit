@@ -1,2 +1,0 @@
-add_executable(examples_viewports examples_viewports.cpp)
-target_link_libraries(examples_viewports PRIVATE ${PROJECT_NAME})
