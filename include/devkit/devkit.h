@@ -14,15 +14,6 @@
 
 // TODO: look into natvis: https://learn.microsoft.com/en-us/visualstudio/debugger/create-custom-views-of-native-objects?view=vs-2022
 
-template <>
-struct std::formatter<glm::vec4> : std::formatter<std::string> {
-	auto format(const glm::vec4& value, std::format_context& ctx) const {
-		std::stringstream sstr;
-		sstr << "{" << (int)value.r << "," << (int)value.g << "," << (int)value.b << "," << (int)value.a << "}";
-		return std::formatter<std::string>::format(sstr.str(), ctx);
-	}
-};
-
 struct ImGuiContext;
 
 namespace NS_DEVKIT {
@@ -325,7 +316,6 @@ public:
 
 private:
     struct Impl; std::unique_ptr<Impl> m_impl;
-    // TODO: std::optional<FrameBuffer&>
 };
 
 struct Viewport::Properties {
@@ -347,6 +337,7 @@ struct InputCombination {
 
     InputCombination(KeyMod mod, Activator activator);
     InputCombination(Activator activator);
+    InputCombination() = default;
 
     bool active() const;
     bool activated() const;

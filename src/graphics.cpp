@@ -1,8 +1,8 @@
 #include <algorithm>
 #include <fstream>
+#include <stack>
 
 #include "devkit/graphics.h"
-#include "devkit/log.h"
 #include "graphics_includes.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -44,8 +44,8 @@ struct VertexBufferBase::Impl {
     std::vector<std::byte> m_data;
     size_t                 m_count;
 
-    bool                   m_inited = false;
     bool                   m_changed = false;
+    bool                   m_resized = true;
     int	    	           m_minUpdatedIndex = 0;
     int	    	           m_maxUpdatedIndex = 0;
 
@@ -69,14 +69,31 @@ struct VertexBufferBase::Impl {
     void bind() { 
         m_glVertexBuffer.bind();
 
-        if (!m_inited) {
-            m_inited = true;
+        if (m_resized) {
+            m_resized = false;
             glBufferData(GL_ARRAY_BUFFER, m_vertexSize * m_count, m_data.data(), GL_STATIC_DRAW);
+
+            m_minUpdatedIndex = std::numeric_limits<int>::max();
+            m_maxUpdatedIndex = -1;
         }
         else
             update();
 
         enableVertexAttribPointers();
+    }
+
+    void push(size_t count, uintptr_t data) {
+        size_t newCount = m_count + count; 
+        m_data.resize(m_vertexSize * newCount);
+        memcpy(&m_data.data()[m_count * m_vertexSize], reinterpret_cast<std::byte*>(data), count * m_vertexSize);
+        m_count += count;
+        m_resized = true;
+    }
+
+    void clear() {
+        m_count = 0;
+        m_data.clear();
+        m_resized = true;
     }
 
     void vertexUpdated(size_t index) {
@@ -134,14 +151,24 @@ void VertexBufferBase::bind() const {
     m_impl->bind();
 }
 
-void VertexBufferBase::draw(Primitive primitive) const {
+void VertexBufferBase::draw(PrimitiveType primitive) const {
     bind();
     glDrawArrays((GLenum)primitive, 0, m_impl->m_count);
 }
 
-void VertexBufferBase::draw(Primitive primitive, Shader& shader) const {
+void VertexBufferBase::draw(PrimitiveType primitive, Shader& shader) const {
     shader.use();
     draw(primitive);
+}
+
+void VertexBufferBase::push(size_t count, uintptr_t data)
+{
+    m_impl->push(count, data);
+}
+
+void VertexBufferBase::clear()
+{
+    m_impl->clear();
 }
 
 VertexBufferBase::~VertexBufferBase() { }
@@ -159,7 +186,7 @@ void writeShaderCompilationErrorInfo(unsigned int handle) {
     if (logLen > 0) {
         std::string log(logLen, '\0');
         glGetShaderInfoLog(handle, logLen, &written, &log[0]);
-        ERR("Shader log:\n{}", log);
+        spdlog::error("Shader log:\n{}", log);
     }
 }
 
@@ -168,13 +195,13 @@ bool checkShaderCompilation(unsigned id, const char* source) {
     glGetShaderiv(id, GL_COMPILE_STATUS, &OK);
     if (!OK) {
         if (source)
-            ERR("{}", source);
+            spdlog::error("{}", source);
 
-        ERR("Failed to compile shader!");
+        spdlog::error("Failed to compile shader!");
         writeShaderCompilationErrorInfo(id);
         return false;
     }
-    DBG("Compiled shader source");
+    spdlog::info("Compiled shader source");
     return true;
 }
 
@@ -211,7 +238,7 @@ bool ShaderSource::compile(unsigned type, unsigned& id)
     // Create shader
     id = glCreateShader(type);
     if (!id) {
-        ERR("Error creating shader source");
+        spdlog::error("Error creating shader source");
         exit(1);
     }
 
@@ -241,7 +268,7 @@ bool checkShaderLinking(unsigned int program) {
     int OK;
     glGetProgramiv(program, GL_LINK_STATUS, &OK);
     if (!OK) {
-        ERR("Failed to link shader program!");
+        spdlog::error("Failed to link shader program!");
         writeShaderCompilationErrorInfo(program);
         return false;
     }
@@ -383,7 +410,7 @@ void setUniform(const Shader& shader, const std::string& name, const glm::vec4& 
 
 void setUniform(const Shader& shader, const std::string& name, const Texture& texture) {
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture.id());
+    texture.bind();
     glUniform1i(getLocation(shader, name), 0);
 }
 
@@ -535,9 +562,9 @@ public:
 
         // Check for errors
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-            ERR("Framebuffer: Framebuffer is not complete!");
+            spdlog::error("Framebuffer: Framebuffer is not complete!");
         else
-            DBG("Framebuffer: Created successfully {{{},{}}}", m_glFrameBuffer.frameBufferId, m_glFrameBuffer.renderBufferId);
+            spdlog::info("Framebuffer: Created successfully {{{},{}}}", m_glFrameBuffer.frameBufferId, m_glFrameBuffer.renderBufferId);
 
         // Bind originaly bound objects
         glBindFramebuffer(GL_FRAMEBUFFER, currentFbo);
@@ -637,7 +664,7 @@ public:
         allocate(pixels);
     }
 
-    void bind() {
+    void bind() const {
         if (m_openglImpl.glContext != currentGlContext())
             throw std::runtime_error("Texture was created in a different gl context.");
 
@@ -686,7 +713,7 @@ glm::u32vec2 Texture::size() const
     return m_impl->m_properties.size;
 }
 
-void Texture::bind() {
+void Texture::bind() const {
     m_impl->bind();
 }
 
@@ -713,7 +740,7 @@ Texture Texture::load(const wchar_t* path)
     int width, height, channels;
     stbi_set_flip_vertically_on_load(true);
     unsigned char* pixels = stbi_load(utf8(path).c_str(), &width, &height, &channels, 0);
-    DBG("Loaded texture from {}", utf8(path));
+    spdlog::info("Loaded texture from {}", utf8(path));
     return Texture(pixels, { width, height });
 }
 
@@ -723,6 +750,63 @@ void Texture::update(const wchar_t* path)
 }
 
 Texture::~Texture() { }
+
+
+void Camera::castRay(const glm::vec2& ndc, glm::vec3& origin, glm::vec3& direction)
+{
+    glm::vec2 _ndc = ndc * 2.f - glm::vec2(1, 1);
+
+    // Calculate camera basis vectors
+    glm::vec3 w = glm::normalize(position - lookat);
+    glm::vec3 u = glm::normalize(cross(vup, w));
+    glm::vec3 v = glm::cross(w, u);
+
+    if (projection == Projection::Perspective) {
+        // Perspective projection
+        float tanFov = tanf(fov / 2.0f);
+        float x = _ndc.x * tanFov * asp;
+        float y = _ndc.y * tanFov;
+
+        direction = glm::normalize(u * x + v * y - w);
+        origin = position;
+    }
+    else {
+        // Orthographic projection
+        // In orthographic, direction is the same as -w (camera facing direction)
+        glm::vec3 dir = -w;
+        // Calculate the ray's origin based on NDC
+        float zoom = glm::length(position - lookat);
+        origin = position + u * _ndc.x * zoom * asp + v * _ndc.y * zoom;
+    }
+}
+
+void Camera::castRay(const glm::vec2& ndc, glm::dvec3& origin, glm::dvec3& direction)
+{
+    glm::vec2 _ndc = ndc * 2.f - glm::vec2(1, 1);
+
+    // Calculate camera basis vectors
+    glm::dvec3 w = glm::normalize((glm::dvec3)position - (glm::dvec3)lookat);
+    glm::dvec3 u = glm::normalize(cross((glm::dvec3)vup, w));
+    glm::dvec3 v = glm::cross(w, u);
+
+    if (projection == Projection::Perspective) {
+        // Perspective projection
+        double tanFov = tanf(fov / 2.0f);
+        double x = _ndc.x * tanFov * asp;
+        double y = _ndc.y * tanFov;
+
+        direction = glm::normalize(u * x + v * y - w);
+        origin = position;
+    }
+    else {
+        // Orthographic projection
+        // In orthographic, direction is the same as -w (camera facing direction)
+        glm::vec3 dir = -w;
+        // Calculate the ray's origin based on NDC
+        double zoom = glm::length((glm::dvec3)position - (glm::dvec3)lookat);
+        origin = (glm::dvec3)position + u * (double)_ndc.x * zoom * (double)asp + v * (double)_ndc.y * zoom;
+    }
+}
 
 
 Camera& CameraController::camera() 
@@ -818,7 +902,203 @@ void CameraController::handle(const CameraControllHandler& handler, const glm::v
         zoom(1.f - zoomAmount * handler.zoomMultiplier);
 }
 
-void DebugLines::flus()
-{
+//class DebugLines::Impl {
+//public:
+//    VertexBuffer<glm::vec3, glm::vec4> m_vertexBuffer;
+//
+//private:
+//};
 
+class PrimitiveStream::Impl {
+public:
+    struct Node {
+        std::optional<Shader*>                              shader;
+        std::optional<Texture*>                             texture;
+        std::unique_ptr<VertexBuffer<glm::vec3, glm::vec4>> lines;
+        std::unique_ptr<VertexBuffer<glm::vec3, glm::vec4>> trigs;
+        std::unique_ptr<VertexBuffer<glm::vec3, glm::vec2>> uvTrigs;
+
+        Node(Shader& _shader) 
+            : shader(std::addressof(_shader)) 
+            , texture(std::nullopt) 
+            , lines(std::make_unique<VertexBuffer<glm::vec3, glm::vec4>>()) 
+            , trigs(std::make_unique<VertexBuffer<glm::vec3, glm::vec4>>()) 
+            , uvTrigs(std::make_unique<VertexBuffer<glm::vec3, glm::vec2>>()) 
+        { }
+        Node() 
+            : shader(std::nullopt)
+            , texture(std::nullopt) 
+            , lines(std::make_unique<VertexBuffer<glm::vec3, glm::vec4>>()) 
+            , trigs(std::make_unique<VertexBuffer<glm::vec3, glm::vec4>>()) 
+            , uvTrigs(std::make_unique<VertexBuffer<glm::vec3, glm::vec2>>()) 
+        { }
+    };
+    std::vector<Node>     m_batches;
+    std::binary_semaphore m_semaphore{ 1 };
+};
+
+PrimitiveStream& PrimitiveStream::operator<<(Shader& shader) 
+{
+    if (m_impl->m_batches.empty() 
+        || !m_impl->m_batches.back().shader.has_value()
+        || std::addressof(shader) != m_impl->m_batches.back().shader.value())
+    m_impl->m_batches.push_back(Impl::Node(shader));
+    return *this;
+}
+
+PrimitiveStream& NS_DEVKIT::PrimitiveStream::operator<<(Texture& texture)
+{
+    if (m_impl->m_batches.empty()) {
+        spdlog::warn("PrimitiveStream didn't recieve a shader before texture.");
+        return *this;
+    }
+    m_impl->m_batches.back().texture = std::addressof(texture);
+    return *this;
+}
+
+PrimitiveStream& PrimitiveStream::operator<<(const Primitive& primitive) 
+{
+    auto& node = (!m_impl->m_batches.empty()) 
+        ? m_impl->m_batches.back()
+        : m_impl->m_batches.emplace_back();
+    std::visit(overload{
+        [&](const primitives::Line& line) { 
+            node.lines->push({ line.color, line.a });
+            node.lines->push({ line.color, line.b }); },
+        [&](const primitives::LineGradient& line) { 
+            node.lines->push({ line.aColor, line.a });
+            node.lines->push({ line.bColor, line.b }); },
+        [&](const primitives::Rect& rect) { 
+            glm::vec3 right = glm::normalize(rect.right);
+            glm::vec3 up = glm::cross(glm::normalize(rect.normal), right);
+            node.trigs->push({ rect.color, rect.center - up * rect.size.y / 2.f - right * rect.size.x / 2.f });
+            node.trigs->push({ rect.color, rect.center + up * rect.size.y / 2.f + right * rect.size.x / 2.f });
+            node.trigs->push({ rect.color, rect.center - up * rect.size.y / 2.f + right * rect.size.x / 2.f });
+            node.trigs->push({ rect.color, rect.center - up * rect.size.y / 2.f - right * rect.size.x / 2.f });
+            node.trigs->push({ rect.color, rect.center + up * rect.size.y / 2.f + right * rect.size.x / 2.f });
+            node.trigs->push({ rect.color, rect.center + up * rect.size.y / 2.f - right * rect.size.x / 2.f }); },
+        [&](const primitives::UVRect& rect) { 
+            glm::vec3 right = glm::normalize(rect.right);
+            glm::vec3 up = glm::cross(glm::normalize(rect.normal), right);
+            node.uvTrigs->push({ { 0.f, 0.f }, rect.center - up * rect.size.y / 2.f - right * rect.size.x / 2.f });
+            node.uvTrigs->push({ { 1.f, 1.f }, rect.center + up * rect.size.y / 2.f + right * rect.size.x / 2.f });
+            node.uvTrigs->push({ { 0.f, 1.f }, rect.center - up * rect.size.y / 2.f + right * rect.size.x / 2.f });
+            node.uvTrigs->push({ { 0.f, 0.f }, rect.center - up * rect.size.y / 2.f - right * rect.size.x / 2.f });
+            node.uvTrigs->push({ { 1.f, 1.f }, rect.center + up * rect.size.y / 2.f + right * rect.size.x / 2.f });
+            node.uvTrigs->push({ { 1.f, 0.f }, rect.center + up * rect.size.y / 2.f - right * rect.size.x / 2.f }); },
+        }, primitive);
+    return *this;
+}
+
+void PrimitiveStream::draw()
+{
+    for (auto& node : m_impl->m_batches) {
+        if (!node.shader.has_value()) {
+            spdlog::warn("PrimitiveStream didn't recieve a shader before primitive.");
+            continue;
+        }
+
+        if (node.texture.has_value())
+            node.shader.value()->setUniform("u_texture", *node.texture.value());
+
+        node.lines->draw(PrimitiveType::Lines, *node.shader.value());
+        node.trigs->draw(PrimitiveType::Triangles, *node.shader.value());
+        node.uvTrigs->draw(PrimitiveType::Triangles, *node.shader.value());
+    }
+}
+
+void PrimitiveStream::clear()
+{
+    m_impl->m_batches.clear();
+}
+
+void PrimitiveStream::flush()
+{
+    draw();
+    clear();
+}
+
+PrimitiveStream::PrimitiveStream()
+    : m_impl(std::make_unique<Impl>())
+{ }
+
+PrimitiveStream::~PrimitiveStream() { }
+
+//void DebugLines::flus(Shader& shader)
+//{
+//    m_impl->m_vertexBuffer.draw(PrimitiveType::Lines, shader);
+//    m_impl->m_vertexBuffer.clear();
+//}
+//
+//void DebugLines::draw(glm::vec3 a, glm::vec3 b, glm::vec4 color)
+//{
+//    m_impl->m_vertexBuffer.push(std::make_tuple(color, a));
+//    m_impl->m_vertexBuffer.push(std::make_tuple(color, b));
+//}
+//
+//DebugLines::DebugLines()
+//    : m_impl(std::make_unique<Impl>())
+//{ }
+//
+//DebugLines::~DebugLines() { }
+
+ConcurrentStream& NS_DEVKIT::ConcurrentStream::operator<<(Shader& shader)
+{
+    if (m_createdOn == std::this_thread::get_id())
+        for (auto& stream : m_streams)
+            stream << shader;
+    else
+        m_streams.at(index()) << shader;
+    return *this;
+}
+
+ConcurrentStream& NS_DEVKIT::ConcurrentStream::operator<<(Texture& texture)
+{
+    m_streams.at(index()) << texture;
+    return *this;
+}
+
+ConcurrentStream& NS_DEVKIT::ConcurrentStream::operator<<(const Primitive& primitive)
+{
+    if (m_createdOn == std::this_thread::get_id())
+        m_streams.at(0) << primitive;
+    else 
+        m_streams.at(index()) << primitive;
+    return *this;
+}
+
+void NS_DEVKIT::ConcurrentStream::draw()
+{
+    std::lock_guard lock(m_mut);
+    for (auto& stream : m_streams)
+        stream.draw();
+}
+
+void NS_DEVKIT::ConcurrentStream::clear()
+{
+    std::lock_guard lock(m_mut);
+    for (auto& stream : m_streams)
+        stream.clear();
+}
+
+void NS_DEVKIT::ConcurrentStream::flush()
+{
+    draw();
+    clear();
+}
+
+int NS_DEVKIT::ConcurrentStream::index()
+{
+    const auto& id = std::this_thread::get_id();
+#ifdef _DEBUG
+    if (m_createdOn == id)
+        throw std::runtime_error("index should only be called from worker threads");
+#endif // _DEBUG
+
+    auto it = m_indices.find(id);
+    if (it == m_indices.end()) {
+        std::lock_guard lock(m_mut);
+        return m_indices.insert({ id, m_indices.size() }).first->second;
+    }
+    return it->second;
 }

@@ -12,7 +12,6 @@
 
 #include "graphics_includes.h"
 #include "devkit/devkit.h"
-#include "devkit/log.h"
 
 #include <stb_image.h>
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -169,7 +168,7 @@ struct SDL : public SingletonBase<SDL> {
 
 		keyboardState.init();
 
-		DBG("Initialized SDL");
+		spdlog::info("Initialized SDL");
 	}
 
 	void handleEvents() 
@@ -244,11 +243,11 @@ void SDLWindowImpl::handleEvent(SDL_WindowEvent event)
 
 	switch (event.event)
 	{
-	case SDL_WINDOWEVENT_CLOSE: close(); DBG("Window#{} closed", windowId); break;
+	case SDL_WINDOWEVENT_CLOSE: close(); spdlog::info("Window#{} closed", windowId); break;
 	case SDL_WINDOWEVENT_RESIZED: {
 		properties.width = event.data1; prevProperties.width = event.data1;
 		properties.height = event.data2; prevProperties.height = event.data2;
-		DBG("Window#{} resized {} {}", windowId, properties.width, properties.height);
+		spdlog::info("Window#{} resized {} {}", windowId, properties.width, properties.height);
 	} break;
 	default:
 		break;
@@ -305,7 +304,7 @@ struct Window::Impl {
 		// Create opengl context
 		m_sdlImpl.glContext = SDL_GL_CreateContext(m_sdlImpl.window);
 		if (!m_sdlImpl.glContext) {
-			ERR("OpenGL context could not be created! SDL Error: {}", SDL_GetError());
+			spdlog::error("OpenGL context could not be created! SDL Error: {}", SDL_GetError());
 			return WindowStatus::GraphicsInitError;
 		}
 		SDL_GL_MakeCurrent(m_sdlImpl.window, m_sdlImpl.glContext);
@@ -313,11 +312,15 @@ struct Window::Impl {
 		SDL::instance().currentWindow = m_sdlImpl.window;
 		SDL::instance().glToWindow.insert({ m_sdlImpl.glContext, &m_sdlImpl });
 
+		// TODO: do this as part of frame producer properties
+		// Enable depth testing
+		glEnable(GL_DEPTH_TEST);  
+
 		// Initialize GLEW after creating OpenGL context
 		glewExperimental = GL_TRUE;
 		GLenum glewError = glewInit();
 		if (glewError != GLEW_OK) {
-			ERR("Error initializing GLEW!");
+			spdlog::error("Error initializing GLEW!");
 			return WindowStatus::GraphicsInitError;
 		}
 		// Remove error caused by glewExperimental
@@ -333,7 +336,7 @@ struct Window::Impl {
 
 		updateProperties();
 
-		DBG("Window#{} opened", m_sdlImpl.windowId);
+		spdlog::info("Window#{} opened", m_sdlImpl.windowId);
 		return WindowStatus::Ok;
 	}
 
@@ -365,7 +368,7 @@ struct Window::Impl {
 	{
 		if (!propertyChanged(property))
 			return;
-		DBG("Window#{} properties.{} = {}", m_sdlImpl.windowId, name, m_properties.*property);
+		spdlog::info("Window#{} properties.{} = {}", m_sdlImpl.windowId, name, m_properties.*property);
 		func(m_properties.*property);
 	}
 

@@ -29,15 +29,18 @@ add_compile_options(/Zc:preprocessor)
 set(INCLUDE_DIR include/${PROJECT_NAME})
 set(PUBLIC_SOURCES
     ${INCLUDE_DIR}/devkit.h
-    ${INCLUDE_DIR}/log.h
     ${INCLUDE_DIR}/util.h
     ${INCLUDE_DIR}/graphics.h
-    ${INCLUDE_DIR}/asset_manager.h)
+    ${INCLUDE_DIR}/asset_manager.h
+    ${INCLUDE_DIR}/algorithms.h)
 set(PRIVATE_SOURCES 
     src/devkit.cpp 
     src/graphics.cpp 
     src/graphics_includes.h
-    src/gl_types.cpp)
+    src/gl_types.cpp
+    src/algorithms.cpp
+    src/polypartition.h
+    src/polypartition.cpp)
 set(SOURCES ${PRIVATE_SOURCES} ${PUBLIC_SOURCES})
 source_group("include" FILES ${PUBLIC_SOURCES})
 source_group("src" FILES ${PRIVATE_SOURCES})

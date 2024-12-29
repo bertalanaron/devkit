@@ -27,7 +27,7 @@ namespace NS_DEVKIT {
 
 class Shader;
 
-enum class Primitive : unsigned int 
+enum class PrimitiveType : unsigned int 
 { Points = 0x0000, Lines = 0x0001, LineLoop = 0x0002, LineStrip = 0x0003, Triangles = 0x0004 };
 
 // TODO: check for initialization gl context
@@ -43,19 +43,24 @@ public:
 	~VertexBufferBase();
 
 	template <typename... Ts>
-	reverse_tuple<Ts...>& at(size_t index) {
+	const reverse_tuple<Ts...>& get(size_t index) const {
 		return *reinterpret_cast<reverse_tuple<Ts...>*>(at_impl(index));
 	}
 
 	template <typename... Ts>
-	const reverse_tuple<Ts...>& at(size_t index) const {
-		return *reinterpret_cast<reverse_tuple<Ts...>*>(at_impl(index));
+	void set(size_t index, reverse_tuple<Ts...>& value) {
+		*reinterpret_cast<reverse_tuple<Ts...>*>(at_impl(index)) = value;
 	}
 
 	void bind() const;
 
-	void draw(Primitive primitive) const;
-	void draw(Primitive primitive, Shader& shader) const;
+	void draw(PrimitiveType primitive) const;
+	void draw(PrimitiveType primitive, Shader& shader) const;
+
+	void clear();
+
+protected:
+	void push(size_t count, uintptr_t data);
 
 private:
 	class Impl; std::unique_ptr<Impl> m_impl;
@@ -78,12 +83,16 @@ public:
 		: VertexBufferBase(VertexBufferBase::init<Ts...>(vertices.size(), reinterpret_cast<uintptr_t>(vertices.data()))) 
 	{ }
 
-	Vertex& at(size_t index) {
-		return VertexBufferBase::at<Ts...>(index);
+	const Vertex& get(size_t index) const {
+		return VertexBufferBase::get<Ts...>(index);
 	}
 
-	const Vertex& at(size_t index) const {
-		return VertexBufferBase::at<Ts...>(index);
+	void set(size_t index, Vertex& vertex) {
+		VertexBufferBase::set<Ts...>(index, vertex);
+	}
+
+	void push(const Vertex& vertex) {
+		VertexBufferBase::push(1, reinterpret_cast<uintptr_t>(&vertex));
 	}
 };
 
@@ -165,7 +174,7 @@ public:
 	uint32_t id() const;
 	glm::u32vec2 size() const;
 
-	void bind();
+	void bind() const;
 
 	unsigned char* getPixelBuffer();
 	void save(const wchar_t* path);
@@ -235,6 +244,9 @@ public:
 	float      fp  = 1000.f;
 
 	Projection projection = Projection::Perspective;
+
+	void castRay(const glm::vec2& ndc, glm::vec3& origin, glm::vec3& direction);
+	void castRay(const glm::vec2& ndc, glm::dvec3& origin, glm::dvec3& direction);
 
 	bool operator==(const Camera&) const = default;
 	Camera& operator=(const Camera&) = default;
@@ -324,27 +336,104 @@ struct CameraControllerFPS : ICameraControllerStrategy {
 
 namespace NS_DEVKIT {
 
-class DebugPrimitives {
+namespace primitives {
+
+struct Line 
+{ glm::vec3 a; glm::vec3 b; glm::vec4 color; };
+
+struct LineGradient 
+{ glm::vec3 a; glm::vec4 aColor; glm::vec3 b; glm::vec4 bColor; };
+
+struct Rect 
+{ glm::vec3 center; glm::vec2 size; glm::vec3 normal; glm::vec3 right; glm::vec4 color; };
+
+struct UVRect 
+{ glm::vec3 center; glm::vec2 size; glm::vec3 normal; glm::vec3 right; };
+
+}
+
+using Primitive = std::variant<
+	primitives::Line, 
+	primitives::LineGradient, 
+	primitives::Rect, 
+	primitives::UVRect>;
+
+class PrimitiveStream {
 public:
-	virtual void flus() = 0;
+	PrimitiveStream& operator<<(Shader& shader);
+	PrimitiveStream& operator<<(Texture& texture);
+	PrimitiveStream& operator<<(const Primitive& primitive);
 
-protected:
-	
+	void draw();
+	void clear();
+	void flush();
 
-private:
-	VertexBufferBase m_vertexBuffer;
-};
+	PrimitiveStream();
+	~PrimitiveStream();
 
-class DebugLines : public DebugPrimitives {
-public:
-	void flus() override;
-
-	void draw(glm::vec2 a, glm::vec2 b, glm::vec4 color = colors::white);
-
-	DebugLines();
-	~DebugLines();
 private:
 	class Impl; std::unique_ptr<Impl> m_impl;
+};
+
+class ConcurrentStream {
+public:
+	ConcurrentStream(size_t threadCount = std::thread::hardware_concurrency())
+		: m_streams(threadCount)
+		, m_createdOn(std::this_thread::get_id())
+	{
+		m_indices.reserve(threadCount);
+	}
+
+	ConcurrentStream& operator<<(Shader& shader);
+	ConcurrentStream& operator<<(Texture& texture);
+	ConcurrentStream& operator<<(const Primitive& primitive);
+
+	void draw();
+	void clear();
+	void flush();
+
+private:
+	std::vector<PrimitiveStream>              m_streams;
+	std::unordered_map<std::jthread::id, int> m_indices;
+
+	std::mutex                                m_mut;
+	std::jthread::id                          m_createdOn;
+
+	int index();
+};
+
+//class DebugPrimitives {
+//public:
+//	virtual void flus(Shader& shader) = 0;
+//};
+//
+//class DebugLines : public DebugPrimitives {
+//public:
+//	void flus(Shader& shader) override;
+//
+//	void draw(glm::vec3 a, glm::vec3 b, glm::vec4 color = colors::white);
+//
+//	DebugLines();
+//	~DebugLines();
+//
+//private:
+//	class Impl; std::unique_ptr<Impl> m_impl;
+//};
+}
+
+namespace NS_DEVKIT {
+
+template <typename... Ts>
+class Mesh {
+public:
+	// Example: Mesh<glm::vec3, glm::vec2>::loadObjFile(L"file.obj", "vn", "vt");
+	static Mesh importObjFile(const wchar_t* path)
+	{
+		return {};
+	}
+private:
+	VertexBuffer<glm::vec3, Ts...> m_vertices;
+	// TODO: IndexBuffer<unsigned>
 };
 
 }

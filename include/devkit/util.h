@@ -3,6 +3,7 @@
 #include <utility>
 #include <optional>
 #include <variant>
+#include <fstream>
 
 #define NS_DEVKIT dk
 
@@ -11,7 +12,6 @@
 #include <glm/gtx/string_cast.hpp>
 
 #include <nlohmann/json.hpp>
-
 #include <spdlog/spdlog.h>
 #undef DELETE
 
@@ -23,6 +23,45 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::vec4, x, y, z, w)
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::i32vec2, x, y)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(glm::u32vec2, x, y)
+
+}
+
+template <>
+struct std::hash<glm::vec2> {
+	std::size_t operator()(const glm::vec2& v) const {
+		std::size_t h1 = std::hash<glm::vec2::value_type>{}(v.x);
+		std::size_t h2 = std::hash<glm::vec2::value_type>{}(v.y);
+		return h1 ^ (h2 << 1);
+	}
+};
+
+template <>
+struct std::hash<glm::dvec2> {
+	std::size_t operator()(const glm::dvec2& v) const {
+		std::size_t h1 = std::hash<glm::dvec2::value_type>{}(v.x);
+		std::size_t h2 = std::hash<glm::dvec2::value_type>{}(v.y);
+		return h1 ^ (h2 << 1);
+	}
+};
+
+template <>
+struct std::hash<std::array<glm::dvec2, 2>> {
+	std::size_t operator()(const std::array<glm::dvec2, 2>& p) const {
+		std::size_t h1 = std::hash<glm::dvec2>{}(p.at(0));
+		std::size_t h2 = std::hash<glm::dvec2>{}(p.at(1));
+		return h1 ^ (h2 << 1);
+	}
+};
+
+namespace glm {
+
+inline bool operator<(const glm::vec2& a, const glm::vec2& b) {
+	return std::hash<glm::vec2>()(a) < std::hash<glm::vec2>()(b);
+}
+
+inline bool operator<(const glm::dvec2& a, const glm::dvec2& b) {
+	return std::hash<glm::dvec2>()(a) < std::hash<glm::dvec2>()(b);
+}
 
 }
 
@@ -76,26 +115,59 @@ private:
 }
 
 namespace fmt {
-	template <typename T>
-	struct formatter<glm::vec<2, T, glm::defaultp>> : formatter<std::string> {
-		auto format(glm::vec<2, T, glm::defaultp> my, format_context &ctx) const -> decltype(ctx.out()) {
-			return fmt::format_to(ctx.out(), "({},{})", my.x, my.y);
-		}
-	};
 
-	template <typename T>
-	struct formatter<glm::vec<3, T, glm::defaultp>> : formatter<std::string> {
-		auto format(glm::vec<3, T, glm::defaultp> my, format_context &ctx) const -> decltype(ctx.out()) {
-			return fmt::format_to(ctx.out(), "({},{},{})", my.x, my.y, my.z);
-		}
-	};
+template <typename T>
+struct formatter<glm::vec<2, T, glm::defaultp>> : formatter<std::string> {
+	auto format(glm::vec<2, T, glm::defaultp> my, format_context &ctx) const -> decltype(ctx.out()) {
+		return fmt::format_to(ctx.out(), "({},{})", my.x, my.y);
+	}
+};
 
-	template <typename T>
-	struct formatter<glm::vec<4, T, glm::defaultp>> : formatter<std::string> {
-		auto format(glm::vec<4, T, glm::defaultp> my, format_context &ctx) const -> decltype(ctx.out()) {
-			return fmt::format_to(ctx.out(), "({},{},{},{})", my.x, my.y, my.z, my.w);
+template <typename T>
+struct formatter<glm::vec<3, T, glm::defaultp>> : formatter<std::string> {
+	auto format(glm::vec<3, T, glm::defaultp> my, format_context &ctx) const -> decltype(ctx.out()) {
+		return fmt::format_to(ctx.out(), "({},{},{})", my.x, my.y, my.z);
+	}
+};
+
+template <typename T>
+struct formatter<glm::vec<4, T, glm::defaultp>> : formatter<std::string> {
+	auto format(glm::vec<4, T, glm::defaultp> my, format_context &ctx) const -> decltype(ctx.out()) {
+		return fmt::format_to(ctx.out(), "({},{},{},{})", my.x, my.y, my.z, my.w);
+	}
+};
+
+}
+
+namespace NS_DEVKIT {
+
+inline std::string utf8(const wchar_t* wcstr) {
+	std::wstring wstr(wcstr);
+	std::string narrow;
+	for (wchar_t wc : wstr) {
+		if (wc <= 0x7F) {
+			narrow.push_back(static_cast<char>(wc));
 		}
-	};
+		else if (wc <= 0x7FF) {
+			narrow.push_back(static_cast<char>(0xC0 | ((wc >> 6) & 0x1F)));
+			narrow.push_back(static_cast<char>(0x80 | (wc & 0x3F)));
+		}
+		else if (wc <= 0xFFFF) {
+			narrow.push_back(static_cast<char>(0xE0 | ((wc >> 12) & 0x0F)));
+			narrow.push_back(static_cast<char>(0x80 | ((wc >> 6)  & 0x3F)));
+			narrow.push_back(static_cast<char>(0x80 | (wc & 0x3F)));
+		}
+		else {
+			narrow.push_back(static_cast<char>(0xF0 | ((wc >> 18) & 0x07)));
+			narrow.push_back(static_cast<char>(0x80 | ((wc >> 12) & 0x3F)));
+			narrow.push_back(static_cast<char>(0x80 | ((wc >> 6)  & 0x3F)));
+			narrow.push_back(static_cast<char>(0x80 | (wc & 0x3F)));
+		}
+	}
+
+	return narrow;
+}
+
 }
 
 namespace NS_DEVKIT {
@@ -123,6 +195,26 @@ struct string_literal {
 	const char* c_str() const { return value; }
 };
 
+template <unsigned N>
+struct wstring_literal {
+	constexpr wstring_literal(const wchar_t(&str)[N]) {
+		std::copy_n(str, N, value);
+	}
+	constexpr wstring_literal() { };
+	wchar_t value[N]{};
+	const wchar_t* c_str() const { return value; }
+};
+
+constexpr bool strcmp_constexpr(const char* str1, const char* str2) {
+	while (*str1 != '\0' && *str2 != '\0') {
+		if (*str1 != *str2)
+			return false;
+		++str1;
+		++str2;
+	}
+	return *str1 == '\0' && *str2 == '\0';
+}
+
 template <std::size_t ... Is, typename Tuple>
 auto _reverse_tuple_impl(std::index_sequence<Is...>, Tuple&& tuple)
 {
@@ -144,6 +236,49 @@ struct overload : Ts... { using Ts::operator()...; };
 }
 
 namespace NS_DEVKIT {
+
+template <typename T>
+class jsonfile_raii {
+public:
+	jsonfile_raii(const wchar_t* path, T&& initial)
+		: m_path(path)
+	{
+		loadOrInit(std::forward<T&&>(initial));
+	}
+
+	~jsonfile_raii() 
+	{
+		std::ofstream ofs(m_path);
+		if (!ofs.is_open())
+			throw std::runtime_error("Failed to open output file.");
+		nlohmann::json json = m_value;
+		ofs << json;
+		ofs.close();
+	}
+
+	operator T&() { return m_value; }
+
+private:
+	T			   m_value;
+	const wchar_t* m_path;
+
+	void loadOrInit(T&& initial) {
+		std::ifstream ifs(m_path);
+		if (ifs.is_open()) {
+			nlohmann::json json;
+			ifs >> json;
+			try {
+				m_value = json.get<T>();
+				ifs.close();
+				return;
+			}
+			catch (...) { }
+			ifs.close();
+		}
+		
+		m_value = initial;
+	}
+};
 
 template <typename T>
 class watched {
@@ -227,6 +362,8 @@ namespace NS_DEVKIT::colors {
 	FV( purple	   , 0x800080ff )\
 	             				 \
 	FV( dodgerBlue , 0x1e90ffff )\
+	FV( orangeRed  , 0xff4500ff )\
+	FV( orange     , 0xffa500ff )\
 	/* end of table */
 
 _DEVKIT_COLOR_TABLE(DEVKIT_COLOR_DECL_STATIC)
