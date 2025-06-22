@@ -1,0 +1,135 @@
+cmake_minimum_required(VERSION 3.21)
+
+# Use vcpkg by default
+if (EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+CACHE STRING "Vcpkg toolchain file")
+set(VCPKG_TARGET_TRIPLET "x64-windows"
+CACHE STRING "default vcpkg triplet")
+endif ()
+
+project(devkit LANGUAGES CXX)
+
+# Enable testing
+include(CTest)
+enable_testing()
+
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+
+# Set output directories
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/lib/$<CONFIG>")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/bin/$<CONFIG>")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/$<CONFIG>")
+
+# Set Compile Options
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+add_compile_options(/std:c++latest)
+add_compile_options(/bigobj)
+add_compile_options(/Zc:preprocessor)
+
+# List source files
+# common
+set(COMMON_PUBLIC_SOURCES
+    include/devkit/common/utils.h
+    include/devkit/common/properties.h
+    include/devkit/common/constants.h
+    include/devkit/common/move_only_any.h
+    include/devkit/common/runtime_buffer.h)
+# io
+set(IO_PUBLIC_SOURCES
+    include/devkit/io/asset_manager.h
+    include/devkit/io/input_combination.h
+    include/devkit/io/window.h)
+set(IO_PRIVATE_SOURCES
+    src/io/asset_manager.cpp
+    src/io/window.cpp)
+# gfx
+set(GFX_PUBLIC_SOURCES
+    include/devkit/gfx/mesh.h
+    include/devkit/gfx/common.h
+    include/devkit/gfx/scene.h
+    include/devkit/gfx/draw_data.h
+    include/devkit/gfx/shader.h
+    include/devkit/gfx/vertex.h
+    include/devkit/gfx/uniforms.h
+    include/devkit/gfx/frame_buffer.h
+    include/devkit/gfx/vertex_buffer.h
+    include/devkit/gfx/camera.h
+    include/devkit/gfx/texture.h
+    include/devkit/gfx/element_buffer.h
+    include/devkit/gfx/font.h
+    include/devkit/gfx/vertex_sink.h)
+set(GFX_PRIVATE_SOURCES
+    src/gfx/common.cpp
+    src/gfx/vertex.cpp
+    src/gfx/uniforms.cpp
+    src/gfx/scene.cpp
+    src/gfx/model.cpp
+    src/gfx/shader.cpp
+    src/gfx/frame_buffer.cpp
+    src/gfx/vertex_buffer.cpp
+    src/gfx/camera.cpp
+    src/gfx/element_buffer.cpp
+    src/gfx/mesh.cpp
+    src/gfx/texture.cpp
+    src/gfx/font.cpp
+    src/gfx/vertex_sink.cpp)
+# algo
+set(ALGO_PUBLIC_SOURCES
+    include/devkit/algo/geometry.h
+    include/devkit/algo/draw.h)
+set(ALGO_PRIVATE_SOURCES
+    src/algo/geometry.cpp)
+set(SOURCES 
+    ${COMMON_PUBLIC_SOURCES}
+    ${IO_PUBLIC_SOURCES} 
+    ${IO_PRIVATE_SOURCES}
+    ${GFX_PUBLIC_SOURCES}
+    ${GFX_PRIVATE_SOURCES}
+    ${ALGO_PUBLIC_SOURCES}
+    ${ALGO_PRIVATE_SOURCES}
+    )
+source_group("common/include" FILES ${COMMON_PUBLIC_SOURCES})
+source_group("io/include" FILES ${IO_PUBLIC_SOURCES})
+source_group("io/src" FILES ${IO_PRIVATE_SOURCES})
+source_group("gfx/include" FILES ${GFX_PUBLIC_SOURCES})
+source_group("gfx/src" FILES ${GFX_PRIVATE_SOURCES})
+source_group("algo/include" FILES ${ALGO_PUBLIC_SOURCES})
+source_group("algo/src" FILES ${ALGO_PRIVATE_SOURCES})
+
+# Create library
+add_library(${PROJECT_NAME} STATIC ${SOURCES})
+add_library(devkit::devkit ALIAS devkit)
+
+# Include library headers
+target_include_directories(${PROJECT_NAME} PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+# Find dependencies
+find_package(GLEW CONFIG REQUIRED)
+find_package(SDL2 CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
+find_package(assimp REQUIRED)
+find_package(magic_enum CONFIG REQUIRED)
+find_package(yaml-cpp REQUIRED)
+
+# Link dependencies
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 SDL2::SDL2main GLEW::GLEW assimp::assimp)
+target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui glm::glm nlohmann_json::nlohmann_json spdlog::spdlog_header_only magic_enum::magic_enum yaml-cpp)
+target_include_directories(${PROJECT_NAME} PRIVATE ${SDL2_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
+
+# Set compile options
+target_compile_options(${PROJECT_NAME} PRIVATE "/MP")
+
+# Add tests
+add_subdirectory(tests)
+
+# Add examples
+add_subdirectory(examples)
