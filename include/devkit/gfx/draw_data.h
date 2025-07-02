@@ -8,12 +8,12 @@ struct DrawData {
 	Primitive           type;
 	std::vector<Vertex> vertices;
 
-	constexpr DrawData(Primitive _type, const std::vector<Vertex>& _vertices)
+	DrawData(Primitive _type, const std::vector<Vertex>& _vertices)
 		: type(_type)
 		, vertices(_vertices)
 	{ }
 
-	constexpr DrawData(Primitive _type, std::vector<Vertex>&& _vertices)
+	DrawData(Primitive _type, std::vector<Vertex>&& _vertices)
 		: type(_type)
 		, vertices(std::move(_vertices))
 	{ }

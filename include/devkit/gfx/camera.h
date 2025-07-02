@@ -1,5 +1,7 @@
 #pragma once
 #include <devkit/gfx/vertex.h>
+#include <devkit/gfx/draw_data.h>
+#include <devkit/algo/geometry.h>
 
 namespace dk::gfx {
 
@@ -34,8 +36,16 @@ public:
 		void tilt(Camera& camera, const glm::vec2& delta);
 		void zoom(Camera& camera, float factor);
 	};
+
+	geom::ray3 castRay(const glm::vec2&) const;
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Camera, position, lookat, vup, fov, asp, np, fp, projection);
 
 } // dk::gfx
+
+namespace dk::gfx {
+
+[[nodiscard]] std::vector<RGBADrawData> draw(const Camera& camera, const glm::vec4& color);
+
+}

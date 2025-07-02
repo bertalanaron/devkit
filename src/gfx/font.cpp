@@ -3,6 +3,8 @@
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
 
+#define DK_TEXTU_NUM_CHARS 200
+
 std::vector<unsigned char> loadTTF(const std::string& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file.is_open())
@@ -18,7 +20,7 @@ std::vector<unsigned char> loadTTF(const std::string& path) {
     return buffer;
 }
 
-dk::gfx::Texture textureFromTTF(unsigned char* ttfBuffer, int atlasWidth, int atlasHeight, float pixelHeight, void* packContext) 
+dk::gfx::Texture textureFromTTF(unsigned char* ttfBuffer, int atlasWidth, int atlasHeight, float pixelHeight, void* packContext/*, dk::gfx::Font::Character characters[200]*/)
 {
     std::vector<uint8_t> atlasBitmap(atlasWidth * atlasHeight);
 
