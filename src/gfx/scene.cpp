@@ -63,7 +63,7 @@ dk::gfx::Mesh dk::gfx::Scene::processMesh(void* _mesh, const void* _scene)
 
     // Push vertices
     for(unsigned int i = 0; i < mesh->mNumVertices; i++)
-        result.vertices().push(getVertex(result.vertices().vertexAttributes()->size(), flags, mesh, i));
+        result.vertices().push_back(getVertex(result.vertices().vertexAttributes()->size(), flags, mesh, i));
 
     // Push indices
     for(unsigned int i = 0; i < mesh->mNumFaces; i++)

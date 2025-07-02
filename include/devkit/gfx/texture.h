@@ -23,6 +23,8 @@ int toUnderlying(dk::gfx::properties::mag_filter);
 
 namespace dk::gfx {
 
+class FrameBuffer;
+
 class Texture
 	: public details::gfx::TextureProperties<Texture>
 {
@@ -36,7 +38,12 @@ public:
 
 	static Texture create(unsigned width, unsigned height, std::vector<uint8_t>&& pixels, int channels);
 
+	// @brief Create empty texture
+	static Texture create(unsigned width, unsigned height, int channels);
+
 	void makeActive(int unit);
+
+	void attachTo(FrameBuffer& frameBuffer, int attachmentIndex);
 
 	unsigned int handle() const;
 

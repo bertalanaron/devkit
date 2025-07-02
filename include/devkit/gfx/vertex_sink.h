@@ -20,7 +20,15 @@ public:
 	template <typename Vertex>
 	VertexSink& operator<<(const DrawData<Vertex>& drawData)
 	{
-		getBuffer<Vertex>(drawData) << drawData;
+		m_demux.at((unsigned)drawData.type)->local().insert<Vertex>(drawData.vertices.cbegin(), drawData.vertices.cend());
+		return *this;
+	}
+
+	template <typename Vertex>
+	VertexSink& operator<<(const std::vector<DrawData<Vertex>>& drawData)
+	{
+		for (const auto& dd : drawData) 
+			m_demux.at((unsigned)dd.type)->local().insert<Vertex>(dd.vertices.cbegin(), dd.vertices.cend());
 		return *this;
 	}
 
@@ -34,30 +42,11 @@ private:
 	const VertexAttributes* m_vertexAttributes;
 
 	static constexpr size_t s_primitiveCount = magic_enum::enum_count<Primitive>();
-	using primitive_map_t = std::array<std::unique_ptr<VertexBuffer>, s_primitiveCount>;
-	using thread_map_t    = std::unordered_map<std::thread::id, primitive_map_t>;
+	using primitive_demux_t = std::array<std::unique_ptr<common::ThreadDemuxContainer<VertexBuffer>>, s_primitiveCount>;
 
-	thread_map_t    m_storages;
-	std::thread::id m_creatorThread;
+	primitive_demux_t m_demux;
 
-	template <typename Vertex>
-	VertexBuffer& getBuffer(const DrawData<Vertex>& drawData)
-	{
-		auto threadId = std::this_thread::get_id();
-		auto storageIt = m_storages.find(threadId);
-		if (storageIt == m_storages.end())
-			storageIt = createStorage(drawData);
-
-		if (!storageIt->second.at((size_t)drawData.type))
-			storageIt->second.at((size_t)drawData.type) = std::make_unique<VertexBuffer>(std::move(VertexBuffer::create(m_vertexAttributes)));
-		return *storageIt->second.at((size_t)drawData.type);
-	}
-
-	template <typename Vertex>
-	auto createStorage(const DrawData<Vertex>& drawData) 
-	{
-		return m_storages.insert({ std::this_thread::get_id(), {} }).first;
-	}
+	static VertexBuffer createVertexBuffer(const VertexAttributes* attributes);
 
 	VertexSink(const VertexAttributes* vertexAttributes);
 };

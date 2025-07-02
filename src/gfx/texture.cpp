@@ -65,6 +65,14 @@ dk::gfx::Texture dk::gfx::Texture::create(unsigned width, unsigned height, std::
     return texture;
 }
 
+dk::gfx::Texture dk::gfx::Texture::create(unsigned width, unsigned height, int channels)
+{
+    Texture texture;
+    texture.m_size = { width, height };
+    texture.m_channels = channels;
+    return texture;
+}
+
 void dk::gfx::Texture::makeActive(int unit)
 {
     init();
@@ -72,6 +80,15 @@ void dk::gfx::Texture::makeActive(int unit)
     // Bind texture
     glActiveTexture(GL_TEXTURE0 + unit);
     glBindTexture(details::gfx::toUnderlying(m_type), m_handle);
+
+    callPropertySetters(true);
+}
+
+void dk::gfx::Texture::attachTo(FrameBuffer& frameBuffer, int attachmentIndex)
+{
+    init();
+
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + attachmentIndex, GL_TEXTURE_2D, details::gfx::toUnderlying(m_type), 0);
 
     callPropertySetters(true);
 }

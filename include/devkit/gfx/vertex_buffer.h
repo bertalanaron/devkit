@@ -11,7 +11,7 @@ public:
 	template <typename Vertex>
 	static VertexBuffer create() 
 	{
-		return VertexBuffer(Vertex::attributes(), std::move(dk::common::RuntimeBuffer::create<Vertex>()));
+		return VertexBuffer(Vertex::attributes(), std::move(common::TypelessBuffer(common::id_t<Vertex>{})));
 	}
 
 	static VertexBuffer create(VertexFlags flags);
@@ -41,20 +41,20 @@ public:
 	}
 
 	template <typename Vertex>
-	void push(const Vertex& vertex)
+	void push_back(const Vertex& vertex)
 	{
 		DK_ASSERT(("Vertex layout mismatch", Vertex::attributes() == m_vertexAttributes));
-		m_vertices.push(vertex);
+		m_vertices.push_back(vertex);
 		m_resized = true;
 	}
 
-	void push(const std::vector<uint8_t>& vertex);
+	void push_back(const std::vector<uint8_t>& vertex);
 
 	template <typename Vertex>
-	void push(std::vector<Vertex>::const_iterator begin, std::vector<Vertex>::const_iterator end)
+	void insert(std::vector<Vertex>::const_iterator begin, std::vector<Vertex>::const_iterator end)
 	{
 		for (auto it = begin; it != end; ++it)
-			push(*it);
+			push_back(*it);
 	}
 
 	size_t size() const
@@ -71,8 +71,8 @@ public:
 	}
 
 private:
-	const VertexAttributes*     m_vertexAttributes;
-	dk::common::RuntimeBuffer   m_vertices;
+	const VertexAttributes* m_vertexAttributes;
+	common::TypelessBuffer  m_vertices;
 
 	unsigned m_vao = 0;
 	unsigned m_vbo = 0;
@@ -80,7 +80,7 @@ private:
 	int      m_changedMin = std::numeric_limits<int>::max();
 	int      m_changedMax = std::numeric_limits<int>::min();
 
-	VertexBuffer(const dk::gfx::VertexAttributes* vertexAttributes, dk::common::RuntimeBuffer&& vertices) 
+	VertexBuffer(const dk::gfx::VertexAttributes* vertexAttributes, common::TypelessBuffer&& vertices) 
 		: m_vertexAttributes(vertexAttributes)
 		, m_vertices(std::move(vertices))
 	{ }

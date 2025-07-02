@@ -18,6 +18,8 @@ void main()
     vec4 vM = vec4(a_position.xyz, 1.0);
 
     gl_Position = vM * u_camera.VP;
+    gl_PointSize = 3;
+
     Position = gl_Position.xyz / gl_Position.w;
     Color = a_color;
 }

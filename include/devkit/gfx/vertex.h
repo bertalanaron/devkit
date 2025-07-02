@@ -75,12 +75,22 @@ public:
 	constexpr static std::size_t size() 
 	{ return sizeof(data_t); }
 
-private:
+protected:
 	data_t m_data;
 };
 
 using NullVertex = Vertex<>;
-using RGBVertex  = Vertex<glm::vec3, glm::vec3>;
-using RGBAVertex = Vertex<glm::vec3, glm::vec4>;
+
+struct RGBVertex : public Vertex<glm::vec3, glm::vec3> {
+	using Vertex::Vertex;
+	auto& postition() { return std::get<0>(m_data); }
+	auto& color()     { return std::get<1>(m_data); }
+};
+
+struct RGBAVertex : public Vertex<glm::vec3, glm::vec4> {
+	using Vertex::Vertex;
+	auto& postition() { return std::get<0>(m_data); }
+	auto& color()     { return std::get<1>(m_data); }
+};
 
 } // dk::gfx

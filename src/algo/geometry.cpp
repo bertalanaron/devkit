@@ -52,6 +52,19 @@ double dk::geom::ray2::intersectProjection(const glm::dvec2& point) const
     return glm::dot(pointVector, direction) / edgeLengthSquared;
 }
 
+double dk::geom::ray3::intersect(const plane& plane) const
+{
+    const double denom = glm::dot(direction, plane.normal);
+    if (std::abs(denom) < 1e-10) {
+        // Ray is parallel to the plane
+        return std::numeric_limits<double>::infinity(); // or NaN
+    }
+
+    const glm::dvec3 diff = plane.point - origin;
+    const double t = glm::dot(diff, plane.normal) / denom;
+    return t;
+}
+
 glm::dvec3 dk::geom::plane::transform(const glm::dvec2& _point, const glm::dvec3& right) const
 {
     const auto up = glm::cross(normal, right);

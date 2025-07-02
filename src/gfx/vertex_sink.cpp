@@ -7,27 +7,27 @@ dk::gfx::VertexSink dk::gfx::VertexSink::create(VertexFlags flags)
 
 void dk::gfx::VertexSink::clear()
 {
-    for (auto& storage : m_storages) {
-        for (auto& buffer : storage.second) {
-            if (!buffer)
-                continue;
-            buffer->clear();
-        }
+    for (int i = 0; i < s_primitiveCount; ++i) {
+        auto&     tdemux    = m_demux.at(i);
+        if (!tdemux)
+            continue;
+
+        for (auto& vb : *tdemux->global())
+            vb.second.clear();
     }
 }
 
 void dk::gfx::VertexSink::draw(Shader& shader, FrameBuffer& frameBuffer)
 {
-    for (auto& storage : m_storages) {
-        for (int i = 0; i < s_primitiveCount; ++i) {
-            Primitive primitive = magic_enum::enum_cast<Primitive>(i).value();
-            auto&     buffer    = storage.second.at(i);
+    for (int i = 0; i < s_primitiveCount; ++i) {
+        Primitive primitive = Primitive(i);
+        auto&     tdemux    = m_demux.at(i);
+        if (!tdemux)
+            continue;
 
-            if (!buffer)
-                continue;
-
-            shader.layout(std::ref(*buffer));
-            frameBuffer.render(shader, *buffer, primitive);
+        for (auto& vb : *tdemux->global()) {
+            shader.layout(std::ref(vb.second));
+            frameBuffer.render(shader, vb.second, primitive);
         }
     }
 }
@@ -38,7 +38,17 @@ void dk::gfx::VertexSink::flush(Shader& shader, FrameBuffer& frameBuffer)
     clear();
 }
 
+dk::gfx::VertexBuffer dk::gfx::VertexSink::createVertexBuffer(const VertexAttributes* attributes)
+{
+    return VertexBuffer::create(attributes);
+}
+
 dk::gfx::VertexSink::VertexSink(const VertexAttributes* vertexAttributes)
     : m_vertexAttributes(vertexAttributes)
-    , m_creatorThread(std::this_thread::get_id())
-{ }
+    , m_demux()
+{ 
+    std::for_each(m_demux.begin(), m_demux.end(), 
+        [&](auto& tdemuxPtr) { 
+            tdemuxPtr = std::make_unique<common::ThreadDemuxContainer<VertexBuffer>>(std::bind_front(createVertexBuffer, vertexAttributes)); 
+        });
+}
