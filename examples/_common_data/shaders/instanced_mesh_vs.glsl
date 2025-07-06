@@ -35,7 +35,6 @@ void main()
     vec4 vM = M * vec4(vertex.xyz, 1.0);
 
     gl_Position =  vM * u_camera.VP;
-    gl_PointSize = gl_Position.z;
 
     Position = vec3(vM.x / vM.w, vM.y / vM.w, vM.z / vM.w);
     Normal = normalize(mat3(transpose(inverse(M))) * normal);

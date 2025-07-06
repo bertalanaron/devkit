@@ -49,7 +49,8 @@ dk::geom::ray3 dk::gfx::Camera::castRay(const glm::vec2& ndc) const
 
 void dk::gfx::Camera::Orbit::shift(Camera & camera, const glm::vec3& amount)
 {
-
+	camera.position += amount;
+	camera.lookat += amount;
 }
 
 void dk::gfx::Camera::Orbit::tilt(Camera& camera, const glm::vec2& delta)

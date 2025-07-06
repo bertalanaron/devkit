@@ -28,13 +28,21 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/string_cast.hpp>
 
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 
 #include <devkit/common/constants.h>
 
 #define DK_ASSERT assert
 
 #define BIT(i) (1ull << i)
+
+#ifndef MAGIC_ENUM_ENABLE_ENUM_FLAGS
+#define MAGIC_ENUM_ENABLE_ENUM_FLAGS(type)         \
+template <>                                        \
+struct magic_enum::customize::enum_range<type> { \
+	static constexpr bool is_flags = true;         \
+};
+#endif
 
 namespace details::common {
 
@@ -79,6 +87,11 @@ constexpr auto reverse_args(const Ts&... args) {
 	constexpr auto N = sizeof...(Ts);
 	return details::common::_reverse_args_impl(original, details::common::_reverse_index_sequence(std::make_index_sequence<N>{}));
 }
+
+template <typename E>
+	requires(std::is_enum_v<E>)
+E toggle(const E& e)
+{ return E(!(bool)e); }
 
 template <typename... Ts> 
 struct overload : Ts... { using Ts::operator()...; };
@@ -175,7 +188,36 @@ std::array<T, N> fill_array(Fn&& generator)
 	return result;
 }
 
+std::filesystem::path executable_path();
+
 } // dk::common
+
+namespace magic_enum_extension {
+
+template <typename E>
+std::vector<std::string> enum_flags(E flags) 
+{
+	std::vector<std::string> result;
+	using T = std::underlying_type_t<E>;
+
+	for (const auto& entry : magic_enum::enum_entries<E>())
+	{
+		if (!(static_cast<T>(flags) & static_cast<T>(entry.first)))
+			continue;
+		result.emplace_back(entry.second);
+	}
+	return result;
+}
+
+}
+
+namespace nlohmann_extension {
+
+void smart_dump(const nlohmann::json& j, std::ostream& os, int indent = 0, int indent_step = 2, int threshold = 80);
+
+std::string smart_dump(const nlohmann::json& j, int indent = 0, int indent_step = 2, int threshold = 80);
+
+}
 
 namespace details::dbg {
 

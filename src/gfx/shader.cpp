@@ -175,6 +175,55 @@ void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::proper
         glDisable(GL_CULL_FACE);
 }
 
+unsigned details::gfx::toUnderlying(dk::gfx::properties::blend_func_src_factor bfs)
+{
+    switch (bfs)
+    {
+    case dk::gfx::properties::blend_func_src_factor::one:                 return GL_ONE;
+    case dk::gfx::properties::blend_func_src_factor::zero:                return GL_ZERO;
+    case dk::gfx::properties::blend_func_src_factor::src_alpha:           return GL_ALPHA;
+    case dk::gfx::properties::blend_func_src_factor::one_minus_src_alpha: return GL_ONE_MINUS_SRC_ALPHA;
+    default: return 0;
+    }
+}
+
+unsigned details::gfx::toUnderlying(dk::gfx::properties::blend_func_dst_factor bfs)
+{
+    switch (bfs)
+    {
+    case dk::gfx::properties::blend_func_dst_factor::zero:                return GL_ZERO;
+    case dk::gfx::properties::blend_func_dst_factor::one:                 return GL_ONE;
+    case dk::gfx::properties::blend_func_dst_factor::src_alpha:           return GL_ALPHA;
+    case dk::gfx::properties::blend_func_dst_factor::one_minus_src_alpha: return GL_ONE_MINUS_SRC_ALPHA;
+    default: return 0;
+    }
+}
+
+template <>
+void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::blend& b)
+{
+    if (b == dk::gfx::properties::blend::enabled)
+        glEnable(GL_BLEND);
+    else
+        glDisable(GL_BLEND);
+}
+
+template <>
+void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::blend_func_src_factor& srcf)
+{
+    GLint currentDst;
+    glGetIntegerv(GL_BLEND_DST_RGB, &currentDst);
+    glBlendFunc(details::gfx::toUnderlying(srcf), currentDst);
+}
+
+template <>
+void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::blend_func_dst_factor& dstf)
+{
+    GLint currentSrc;
+    glGetIntegerv(GL_BLEND_SRC_RGB, &currentSrc);
+    glBlendFunc(currentSrc, details::gfx::toUnderlying(dstf));
+}
+
 void dk::gfx::Shader::makeActive()
 {
     if (!m_program)

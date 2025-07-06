@@ -15,11 +15,13 @@
 #include <devkit/gfx/vertex_sink.h>
 
 #include <imgui.h>
-#include <magic_enum.hpp>
+#include <magic_enum/magic_enum.hpp>
 #include <yaml-cpp/yaml.h>
 
 #include <assimp/scene.h>
 #include <assimp/Importer.hpp>
+
+#include <nfd.h>
 
 #include <fstream>
 
@@ -129,6 +131,8 @@ class Example01 {
 public:
 	void run()
 	{
+		dk::gfx::VertexSink textVertexSink = dk::gfx::VertexSink::create<dk::gfx::Font::CharVertex>();
+
 		while (m_window.beginFrame()) {
 			// Clear backbuffer
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color, DK_COLOR(0x1e1e1eff));
@@ -138,6 +142,8 @@ public:
 
 			showGUI();
 			moveCamera();
+
+			ImGui::ShowDemoWindow();
 
 			// Draw scene
 			m_shaders["planet"]->uniforms() << m_ucCamera;
@@ -150,7 +156,21 @@ public:
 
 			// Bind uniforms and textures
 			m_shaders["rgba"]->uniforms()     << m_ucCamera;
-			m_colorSink->draw(*m_shaders["rgba"], dk::gfx::backBuffer());
+			//m_colorSink->draw(*m_shaders["rgba"], dk::gfx::backBuffer());
+
+			// Draw text
+			std::string localTimeString = [] {
+				return std::format("{:%Y-%m-%d %H:%M:%S}", std::chrono::system_clock::now());
+			}();
+			m_shaders["text"]->uniforms() << m_ucCamera;
+			auto& font        = m_assetManager.get<dk::gfx::Font>(assetPath("font"));
+			auto& fontAtlas   = font.atlas(conf<int>("font_size"));
+			auto& fontTexture = font.texture(conf<int>("font_size"));
+			m_shaders["text"]->uniformTexture("u_atlas", fontTexture);
+			const auto textTransform = glm::translate(glm::vec3(0, 10, 0)) * glm::scale(glm::vec3(-.01, -.01, -.01));
+			textVertexSink.push_back(dk::gfx::Primitive::Triangles, 
+				fontAtlas.get(localTimeString, dk::colors::aqua, textTransform));
+			textVertexSink.flush(*m_shaders["text"], dk::gfx::backBuffer());
 
 			// Draw asteroids
 			m_shaders["asteroid"]->uniforms() << m_ucCamera;
@@ -171,6 +191,12 @@ public:
 			auto& unitCubeMesh = m_assetManager.get<dk::gfx::Scene>(ABSOLUTE_RESOURCE_PATH "models\\cube.obj").meshes().at(0);
 			m_shaders["skybox"]->layout(std::ref(unitCubeMesh.vertices()));
 			dk::gfx::backBuffer().render(*m_shaders["skybox"], unitCubeMesh.indices(), dk::gfx::Primitive::Triangles);
+
+			// Close window with esc
+			if (dk::io::key::esc) m_window.close();
+			// Toggle fullscreen with the f key
+			if (dk::io::key::f(dk::io::currentInputState()) && !dk::io::key::f(dk::io::previousInputState()))
+				m_window.property(dk::common::toggle(m_window.property<dk::io::properties::window::mode>()));
 
 			m_window.endFrame();
 		}
@@ -205,6 +231,13 @@ public:
 		m_shaders["rgba"] = std::make_unique<dk::gfx::Shader>(
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\rgba_vs.glsl"), 
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\rgba_fs.glsl"));
+		m_shaders["text"] = std::make_unique<dk::gfx::Shader>(
+			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\text_vs.glsl"), 
+			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\text_fs.glsl"));
+		m_shaders["text"]->properties(
+			dk::gfx::properties::blend::enabled,
+			dk::gfx::properties::blend_func_src_factor::src_alpha,
+			dk::gfx::properties::blend_func_dst_factor::one_minus_src_alpha);
 		m_shaders["planet"] = std::make_unique<dk::gfx::Shader>(
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\mesh_vs.glsl"), 
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\textured_fs.glsl"));
@@ -213,6 +246,7 @@ public:
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\instanced_mesh_vs.glsl"), 
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\asteroid_fs.glsl"));
 		m_shaders["asteroid"]->property(dk::gfx::properties::depth_test::enabled);
+		m_shaders["asteroid"]->property(dk::gfx::properties::blend::disabled);
 		m_shaders["skybox"] = std::make_unique<dk::gfx::Shader>(
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\skybox_vs.glsl"), 
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\skybox_fs.glsl"));
@@ -231,7 +265,7 @@ public:
 		m_skybox->property(dk::gfx::properties::min_filter::linear);
 
 		// Bind camera
-		m_ucCamera.bind("u_camera.VP",      [&]() -> glm::mat4   { return m_camera.P() * m_camera.V(); });
+		m_ucCamera.bind("u_camera.VP",        [&]() -> glm::mat4 { return m_camera.P() * m_camera.V(); });
 		m_ucCamera.bind("u_camera.position",  [&]() -> glm::vec3 { return m_camera.position; });
 		m_ucCamera.bind("u_camera.direction", [&]() -> glm::vec3 { return m_camera.lookat - m_camera.position; });
 		// Create camera asset if doesn't exist
@@ -245,12 +279,12 @@ public:
 			m_meteors->push_back(dk::gfx::Vertex(glm::mat4(1.0)));
 		placeAsteroids(*m_meteors);
 
-		// Create debug sink
-		m_colorSink = std::make_unique<dk::gfx::VertexSink>(std::move(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>()));
-		*m_colorSink 
-			<< dk::gfx::draw(dk::geom::ray3(glm::vec3(10,10,0), glm::vec3(5,5,0) - glm::vec3(10,10,0)), dk::colors::yellow)
-			//<< dk::gfx::draw(m_camera, dk::colors::lime)
-			;
+		//// Create debug sink
+		//m_colorSink = std::make_unique<dk::gfx::VertexSink>(std::move(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>()));
+		//*m_colorSink 
+		//	<< dk::gfx::draw(dk::geom::ray3(glm::vec3(10,10,0), glm::vec3(5,5,0) - glm::vec3(10,10,0)), dk::colors::yellow)
+		//	//<< dk::gfx::draw(m_camera, dk::colors::lime)
+		//	;
 	}
 
 private:
@@ -298,18 +332,25 @@ private:
 
 	void moveCamera()
 	{
-		if (dk::io::inclusive(dk::io::key::d))
+		if (dk::io::button::left)
+			m_orbit.tilt(m_camera, m_window.cursorDeltaP() * glm::vec2(.004, .004));
+		if (dk::io::wheel::up)
+			m_orbit.zoom(m_camera, 0.9);
+		if (dk::io::wheel::down)
+			m_orbit.zoom(m_camera, 1.1);
+
+		if (dk::io::key::d)
 			m_orbit.tilt(m_camera, { -0.005, 0 });
-		if (dk::io::inclusive(dk::io::key::a))
+		if (dk::io::key::a(dk::io::currentInputState()))
 			m_orbit.tilt(m_camera, { 0.005, 0 });
-		if (dk::io::inclusive(dk::io::key::w))
+		if (dk::io::key::w)
 			m_orbit.tilt(m_camera, { 0, 0.005 });
-		if (dk::io::inclusive(dk::io::key::s))
+		if (dk::io::key::s(dk::io::currentInputState()))
 			m_orbit.tilt(m_camera, { 0, -0.005 });
 
-		if (dk::io::inclusive(dk::io::key::j))
+		if (dk::io::key::j(dk::io::currentInputState()))
 			m_orbit.zoom(m_camera, 0.999);
-		if (dk::io::inclusive(dk::io::key::k))
+		if (dk::io::key::k(dk::io::currentInputState()))
 			m_orbit.zoom(m_camera, 1.001);
 
 		m_camera.asp = dk::gfx::backBuffer().aspectRatio();
@@ -352,7 +393,7 @@ private:
 
 
 int main(void) {
-	spdlog::set_level(spdlog::level::trace);
+	//spdlog::set_level(spdlog::level::trace);
 
 	dk::common::ThreadDemuxContainer<dk::common::TypelessBuffer> tdc(
 		[]{ return dk::common::TypelessBuffer(dk::common::id_t<glm::vec4>{}); });
@@ -379,6 +420,8 @@ int main(void) {
 			spdlog::info("{}", nlohmann::json(v).dump(0));
 		}
 	}
+
+	spdlog::info("{}", nlohmann_extension::smart_dump(nlohmann::json(dk::io::modkey::ctrl + dk::io::key::s)));
 
 	Example01 app;
 	app.setup();

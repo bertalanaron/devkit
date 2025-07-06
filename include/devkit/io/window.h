@@ -3,15 +3,15 @@
 #include <devkit/common/properties.h>
 
 namespace dk::io::properties {
-	namespace window {
-		DK_DECL_DERIVED_PROP(size , glm, ivec2 , 720, 480);
-		DK_DECL_DERIVED_PROP(title, std, string, "devkit window");
-		enum class border { enabled, disabled };
-		enum class mode { windowed, fullscreen };
-		enum class theme { light, dark };
-		enum class vsync { disabled, retrace, adaptive };
-		enum class mouse_grab { disabled, enabled };
-	}
+namespace window {
+	DK_DECL_DERIVED_PROP(size , glm, ivec2 , 720, 480);
+	DK_DECL_DERIVED_PROP(title, std, string, "devkit window");
+	enum class border { enabled, disabled };
+	enum class mode { windowed, fullscreen };
+	enum class theme { light, dark };
+	enum class vsync { disabled, retrace, adaptive };
+	enum class mouse_grab { disabled, enabled };
+}
 } // dk::io::properties
 
 namespace details::io {
@@ -61,6 +61,18 @@ public:
 	void useContext();
 
 	std::chrono::nanoseconds dt() const;
+
+	template <typename T = double>
+	T dtSeconds() const 
+	{ return std::chrono::duration<T>(dt()).count(); }
+
+	// @brief Get the cursor position relative to the window in pixels
+	glm::vec2 cursorP() const;
+	glm::vec2 cursorDeltaP() const;
+
+	// @brief Get the normalized cursor position relative to the window
+	glm::vec2 cursorN() const;
+	glm::vec2 cursorDeltaN() const;
 
 	~Window();
 

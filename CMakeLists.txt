@@ -32,21 +32,29 @@ add_compile_options(/Zc:preprocessor)
 # List source files
 # common
 set(COMMON_PUBLIC_SOURCES
+    include/devkit/common.h
     include/devkit/common/utils.h
     include/devkit/common/properties.h
     include/devkit/common/constants.h
     include/devkit/common/move_only_any.h
     include/devkit/common/runtime_buffer.h)
+set(COMMON_PRIVATE_SOURCES
+    src/common/utils.cpp)
 # io
 set(IO_PUBLIC_SOURCES
+    include/devkit/io.h
     include/devkit/io/asset_manager.h
     include/devkit/io/input_combination.h
-    include/devkit/io/window.h)
+    include/devkit/io/window.h
+    include/devkit/io/file_dialog.h)
 set(IO_PRIVATE_SOURCES
     src/io/asset_manager.cpp
-    src/io/window.cpp)
+    src/io/window.cpp
+    src/io/input_combination.cpp
+    src/io/file_dialog.cpp)
 # gfx
 set(GFX_PUBLIC_SOURCES
+    include/devkit/gfx.h
     include/devkit/gfx/mesh.h
     include/devkit/gfx/common.h
     include/devkit/gfx/scene.h
@@ -78,12 +86,14 @@ set(GFX_PRIVATE_SOURCES
     src/gfx/vertex_sink.cpp)
 # algo
 set(ALGO_PUBLIC_SOURCES
+    include/devkit/algo.h
     include/devkit/algo/geometry.h
     include/devkit/algo/draw.h)
 set(ALGO_PRIVATE_SOURCES
     src/algo/geometry.cpp)
 set(SOURCES 
     ${COMMON_PUBLIC_SOURCES}
+    ${COMMON_PRIVATE_SOURCES}
     ${IO_PUBLIC_SOURCES} 
     ${IO_PRIVATE_SOURCES}
     ${GFX_PUBLIC_SOURCES}
@@ -92,6 +102,7 @@ set(SOURCES
     ${ALGO_PRIVATE_SOURCES}
     )
 source_group("common/include" FILES ${COMMON_PUBLIC_SOURCES})
+source_group("common/src" FILES ${COMMON_PRIVATE_SOURCES})
 source_group("io/include" FILES ${IO_PUBLIC_SOURCES})
 source_group("io/src" FILES ${IO_PRIVATE_SOURCES})
 source_group("gfx/include" FILES ${GFX_PUBLIC_SOURCES})
@@ -111,7 +122,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 # Find dependencies
 find_package(GLEW CONFIG REQUIRED)
-find_package(SDL2 CONFIG REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
@@ -119,11 +130,14 @@ find_package(spdlog CONFIG REQUIRED)
 find_package(assimp REQUIRED)
 find_package(magic_enum CONFIG REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(nfd CONFIG REQUIRED)
+find_package(ftxui CONFIG REQUIRED)
+find_package(Boost REQUIRED COMPONENTS dll)
 
 # Link dependencies
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL2::SDL2 SDL2::SDL2main GLEW::GLEW assimp::assimp)
-target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui glm::glm nlohmann_json::nlohmann_json spdlog::spdlog_header_only magic_enum::magic_enum yaml-cpp)
-target_include_directories(${PROJECT_NAME} PRIVATE ${SDL2_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 GLEW::GLEW assimp::assimp nfd::nfd Boost::dll)
+target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui glm::glm nlohmann_json::nlohmann_json spdlog::spdlog_header_only magic_enum::magic_enum yaml-cpp ftxui::dom ftxui::screen ftxui::component)
+target_include_directories(${PROJECT_NAME} PRIVATE ${SDL3_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
 
 # Set compile options
 target_compile_options(${PROJECT_NAME} PRIVATE "/MP")

@@ -71,6 +71,12 @@ struct ray2 {
 	std::pair<double, double> intersect(const ray2& ray) const;
 };
 
+inline glm::dvec2 intersection(const ray2& ray, const auto& target)
+{
+	double t = ray.intersect(target);
+	return ray.origin + ray.direction * t;
+}
+
 struct ray3 {
 	glm::dvec3 origin;
 	glm::dvec3 direction;
@@ -80,6 +86,12 @@ struct ray3 {
 	double intersect(const plane& plane) const;
 	double intersect(const aabb3& aabb) const;
 };
+
+inline glm::dvec3 intersection(const ray3& ray, const auto& target)
+{
+	double t = ray.intersect(target);
+	return ray.origin + ray.direction * t;
+}
 
 // @brief 3D Axis Aligned Bounding Box 
 struct aabb3 {
@@ -124,6 +136,11 @@ struct polygon2 {
 
 	glm::dvec2 centeroid() const;
 	bool isPointInside(const glm::dvec2& point) const;
+};
+
+struct circle2 {
+	glm::dvec2 center;
+	double     radius;
 };
 
 }
