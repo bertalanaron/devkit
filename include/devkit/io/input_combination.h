@@ -1,218 +1,205 @@
 #pragma once
 #include <devkit/common/utils.h>
 
-namespace details::io {
-
-void commitInputState(uint8_t, uint8_t, uint64_t);
-
-}
-
 namespace dk::io {
 
+using button_t = uint8_t;
+using modkey_t = uint8_t;
+using key_t    = uint64_t;
+using wheel_t  = uint8_t;
+
+struct InputState {
+	button_t buttons = 0;
+	modkey_t modkeys = 0;
+	key_t    keys    = 0;
+	wheel_t  wheel   = 0;
+	float    wheelDirection = 0;
+};
+
+InputState currentInputState();
+
+InputState previousInputState();
+
+#define DK_IO_DECL_IC(type, name, value) constexpr auto name = InputCombination(type##_mask::name);
+#define DK_IO_DECL_MASK(name, value, ...) name = value,
+#define DK_IO_SWITCH_CASE(type, name, value) case type##_mask::name: json = #name; break;
+#define DK_IO_MAP_ENTRY(type, name, value) { #name, type##_mask::name },
+#define DK_IO_MASK_JSON_CONVERSION(type, TABLE)                            \
+	inline void to_json(nlohmann::json& json, const type##_mask& type) {   \
+		switch (type) { TABLE(DK_IO_SWITCH_CASE, type) default: break; } } \
+	inline void from_json(const nlohmann::json& json, type##_mask& type) { \
+		static std::unordered_map<std::string, type##_mask> map = { TABLE(DK_IO_MAP_ENTRY, type) }; \
+		if (auto it = map.find(std::string(json)); it != map.end())        \
+			type = it->second; }                                           \
+	/* end of macro */
+
+#define DK_IO_BUTTONS_TABLE(F, ...)                \
+	F( __VA_ARGS__ __VA_OPT__(,) left   , BIT(0) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) middle , BIT(1) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) right  , BIT(2) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) x1     , BIT(3) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) x2     , BIT(4) ) \
+	/* end of macro */
+#define DK_IO_MODKEYS_TABLE(F, ...)               \
+	F( __VA_ARGS__ __VA_OPT__(,) none  , 0ll    ) \
+	F( __VA_ARGS__ __VA_OPT__(,) shift , BIT(1) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) ctrl  , BIT(2) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) alt   , BIT(3) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) caps  , BIT(4) ) \
+	/* end of macro */
+#define DK_IO_KEYS_TABLE(F, ...)                       \
+	F( __VA_ARGS__ __VA_OPT__(,)    _0     , BIT( 1) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    _1     , BIT( 2) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    _2     , BIT( 3) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    _3     , BIT( 4) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    _4     , BIT( 5) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    _5     , BIT( 6) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    _6     , BIT( 7) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    _7     , BIT( 8) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    _8     , BIT( 9) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    _9     , BIT(10) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     a     , BIT(11) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     b     , BIT(12) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     c     , BIT(13) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     d     , BIT(14) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     e     , BIT(15) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     f     , BIT(16) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     g     , BIT(17) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     h     , BIT(18) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     i     , BIT(19) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     j     , BIT(20) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     k     , BIT(21) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     l     , BIT(22) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     m     , BIT(23) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     n     , BIT(24) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     o     , BIT(25) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     p     , BIT(26) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     q     , BIT(27) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     r     , BIT(28) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     s     , BIT(29) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     t     , BIT(30) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     u     , BIT(31) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     v     , BIT(32) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     w     , BIT(33) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     x     , BIT(34) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     y     , BIT(35) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)     z     , BIT(36) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) grave     , BIT(37) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)   esc     , BIT(38) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)   tab     , BIT(39) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)   del     , BIT(40) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)   win     , BIT(41) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) enter     , BIT(42) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) backspace , BIT(43) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) backslash , BIT(44) ) \
+	/* end of macro */
+#define DK_IO_WHEELS_TABLE(F, ...)               \
+	F( __VA_ARGS__ __VA_OPT__(,) up   , BIT(1) ) \
+	F( __VA_ARGS__ __VA_OPT__(,) down , BIT(2) ) \
+	/* end of macro */
+
+enum class button_mask : button_t { DK_IO_BUTTONS_TABLE(DK_IO_DECL_MASK) };
+enum class modkey_mask : modkey_t { DK_IO_MODKEYS_TABLE(DK_IO_DECL_MASK) };
+enum class key_mask    : key_t    { DK_IO_KEYS_TABLE(DK_IO_DECL_MASK)    };
+enum class wheel_mask  : wheel_t  { DK_IO_WHEELS_TABLE(DK_IO_DECL_MASK)  };
+
+DK_IO_MASK_JSON_CONVERSION(button, DK_IO_BUTTONS_TABLE)
+DK_IO_MASK_JSON_CONVERSION(modkey, DK_IO_MODKEYS_TABLE)
+DK_IO_MASK_JSON_CONVERSION(key   , DK_IO_KEYS_TABLE)
+DK_IO_MASK_JSON_CONVERSION(wheel , DK_IO_WHEELS_TABLE)
+
 class InputCombination {
+public:
+	constexpr InputCombination(button_mask button) : m_activator(button) { }
+	constexpr InputCombination(modkey_mask modkey) : m_mods(modkey)      { }
+	constexpr InputCombination(key_mask key)       : m_activator(key)    { }
+	constexpr InputCombination(wheel_mask wheel)   : m_activator(wheel)  { }
+
+	InputCombination operator+(const InputCombination& other) const;
+
+	bool operator()(const InputState& state) const;
+
+	explicit operator bool() const;
+
 private:
-	using button_mask_t = uint8_t;
-	using modkey_mask_t = uint8_t;
-	using key_mask_t    = uint64_t;
-	
-	struct state_t {
-		button_mask_t button;
-		modkey_mask_t modkey;
-		key_mask_t    key;
+	using Activator = std::variant<button_mask, key_mask, wheel_mask>;
+
+	std::optional<modkey_mask> m_mods      = std::nullopt;
+	std::optional<Activator>   m_activator = std::nullopt;
+
+	friend void from_json(const nlohmann::json& json, InputCombination& ic);
+	friend void to_json(nlohmann::json& json, const InputCombination& ic);
+};
+
+namespace button { DK_IO_BUTTONS_TABLE(DK_IO_DECL_IC, button) }
+namespace modkey { DK_IO_MODKEYS_TABLE(DK_IO_DECL_IC, modkey) }
+namespace key    { DK_IO_KEYS_TABLE(DK_IO_DECL_IC, key)       }
+namespace wheel  { DK_IO_WHEELS_TABLE(DK_IO_DECL_IC, wheel)   }
+
+class InputManager {
+public:
+	struct DefinitionMap {
+		std::unordered_map<std::string, InputCombination> definitions;
+
+		DefinitionMap() = default;
+		DefinitionMap(const nlohmann::json& json);
+
+		DefinitionMap& operator+=(const DefinitionMap& other);
+
+		//NLOHMANN_DEFINE_TYPE_INTRUSIVE(DefinitionMap, definitions);
 	};
 
 public:
-	class Evaluator;
+	void define(const std::string& name, const InputCombination& inputCombination);
 
-	constexpr InputCombination(button_mask_t button, modkey_mask_t modkey, key_mask_t key)
-		: mask({ button, modkey, key })
-	{ }
+	void define(DefinitionMap&& definitions);
 
-	constexpr InputCombination operator+(const InputCombination& rhs) const 
+	bool isDefined(const std::string& name) const;
+
+	const InputCombination& inputCombinationOf(const std::string& name) const;
+
+	// @brief Returns true if a definition with the given name exists and it's input combination is active
+	bool active(const std::string& name) const
 	{
-		return InputCombination(mask.button + rhs.mask.button, mask.modkey + rhs.mask.modkey, mask.key + rhs.mask.key);
+		auto it = m_definitions.definitions.find(name);
+		if (it == m_definitions.definitions.end())
+			return false;
+		return it->second(currentInputState());
+	}
+
+	// @brief Returns true if a definition with the given name exists 
+	// and it's input combination became active in the last tick
+	bool activated(const std::string& name) const
+	{
+		auto it = m_definitions.definitions.find(name);
+		if (it == m_definitions.definitions.end())
+			return false;
+		return it->second(currentInputState()) && !it->second(previousInputState());
+	}
+
+	// @brief Returns true if a definition with the given name exists 
+	// and it's input combination became inactive in the last tick
+	bool deactivated(const std::string& name) const 
+	{
+		auto it = m_definitions.definitions.find(name);
+		if (it == m_definitions.definitions.end())
+			return false;
+		return !it->second(currentInputState()) && it->second(previousInputState());
 	}
 
 private:
-	state_t mask;
-
-	friend void details::io::commitInputState(uint8_t, uint8_t, uint64_t);
-};
-
-#define DK_IO_DECL_BUTTON(name, index) constexpr InputCombination name   = InputCombination(1u << index, 0, 0)
-#define DK_IO_DECL_MODKEY(name, index) constexpr InputCombination name   = InputCombination(0, 1u << index, 0)
-#define DK_IO_DECL_KEY(name, index)    constexpr InputCombination name   = InputCombination(0, 0, uint64_t(1) << (uint64_t)index)
-
-namespace button {
-
-#define DK_IO_BUTTONS_TABLE(FV)\
-	FV( left   , 0 );          \
-	FV( middle , 1 );          \
-	FV( right  , 2 );          \
-	FV( x1     , 3 );          \
-	FV( x2     , 4 );          \
-	/* end of table */
-
-DK_IO_BUTTONS_TABLE(DK_IO_DECL_BUTTON)
-
-}
-
-namespace modkey {
-
-#define DK_IO_MODKEYS_TABLE(FV)\
-	FV( shift , 0 );           \
-	FV( ctrl  , 1 );           \
-	FV( alt   , 2 );           \
-	FV( caps  , 3 );           \
-	/* end of table */
-
-DK_IO_MODKEYS_TABLE(DK_IO_DECL_MODKEY)
-
-}
-
-namespace key {
-
-#define DK_IO_KEYS_TABLE(FV)\
-	FV( _0 , 0 );           \
-	FV( _1 , 1 );           \
-	FV( _2 , 2 );           \
-	FV( _3 , 3 );           \
-	FV( _4 , 4 );           \
-	FV( _5 , 5 );           \
-	FV( _6 , 6 );           \
-	FV( _7 , 7 );           \
-	FV( _8 , 8 );           \
-	FV( _9 , 9 );           \
-                            \
-	FV( a , 10 );           \
-	FV( b , 11 );           \
-	FV( c , 12 );           \
-	FV( d , 13 );           \
-	FV( e , 14 );           \
-	FV( f , 15 );           \
-	FV( g , 16 );           \
-	FV( h , 17 );           \
-	FV( i , 18 );           \
-	FV( j , 19 );           \
-	FV( k , 20 );           \
-	FV( l , 21 );           \
-	FV( m , 22 );           \
-	FV( n , 23 );           \
-	FV( o , 24 );           \
-	FV( p , 25 );           \
-	FV( q , 26 );           \
-	FV( r , 27 );           \
-	FV( s , 28 );           \
-	FV( t , 29 );           \
-	FV( u , 30 );           \
-	FV( v , 31 );           \
-	FV( w , 32 );           \
-	FV( x , 33 );           \
-	FV( y , 34 );           \
-	FV( z , 35 );           \
-	                        \
-	FV( f1  , 35 );         \
-	FV( f2  , 36 );         \
-	FV( f3  , 37 );         \
-	FV( f4  , 38 );         \
-	FV( f5  , 39 );         \
-	FV( f6  , 40 );         \
-	FV( f7  , 41 );         \
-	FV( f8  , 42 );         \
-	FV( f9  , 43 );         \
-	FV( f10 , 44 );         \
-	FV( f11 , 45 );         \
-	FV( f12 , 46 );         \
-	                        \
-	FV( esc   , 47 );       \
-	FV( tilda , 48 );       \
-	FV( space , 48 );       \
-	/* end of table */
-
-DK_IO_KEYS_TABLE(DK_IO_DECL_KEY)
-
-}
-
-#undef DK_IO_BUTTONS_TABLE
-#undef DK_IO_MODKEYS_TABLE
-#undef DK_IO_DECL_BUTTON
-#undef DK_IO_DECL_MODKEY
-#undef DK_IO_DECL_KEY
-
-class InputCombination::Evaluator {
-private:
-	enum Inclusivity { Inclusive, Exclusive };
-	enum Repeatability { Continous, Trigger };
+	DefinitionMap m_definitions;
 
 public:
-	constexpr Evaluator triggered() const
-	{
-		Evaluator res(*this);
-		res.m_repeatability = Trigger;
-		return res;
-	}
-
-	operator bool() const
-	{
-		const bool forCurrent = evaluateForState(m_inputCombination, s_currentState, m_inclusivity);
-		if (m_repeatability == Continous)
-			return forCurrent;
-		const bool forPrevious = evaluateForState(m_inputCombination, s_previousState, m_inclusivity);
-		return forCurrent && !forPrevious;
-	}
-
-private:
-	Inclusivity      m_inclusivity;
-	Repeatability    m_repeatability;
-	InputCombination m_inputCombination;
-
-	inline static InputCombination::state_t s_currentState{};
-	inline static InputCombination::state_t s_previousState{};
-
-	constexpr static bool evaluateForState(const InputCombination& ic, const state_t& state, Inclusivity inclusivity) 
-	{
-		if (inclusivity == Inclusive)
-			return ((ic.mask.button & state.button) || (!ic.mask.button))
-			    && ((ic.mask.modkey & state.modkey) || (!ic.mask.modkey)) 
-			    && ((ic.mask.key & state.key)       || (!ic.mask.key));
-		return (ic.mask.button == state.button) && (ic.mask.modkey == state.modkey) && (ic.mask.key == state.key);
-	}
-
-	constexpr Evaluator(const Evaluator&) = default;
-
-	constexpr Evaluator(Inclusivity inc, Repeatability rep, InputCombination ic)
-		: m_inclusivity(inc)
-		, m_repeatability(rep)
-		, m_inputCombination(ic)
-	{ }
-
-	friend void details::io::commitInputState(uint8_t, uint8_t, uint64_t);
-	friend constexpr InputCombination::Evaluator exclusive(const InputCombination& ic);
-	friend constexpr InputCombination::Evaluator inclusive(const InputCombination& ic);
+	//NLOHMANN_DEFINE_TYPE_INTRUSIVE(InputManager, m_definitions);
 };
-
-// @brief Evaluates input connection to true only when no other inputs are active than the ones required by the combination
-inline constexpr InputCombination::Evaluator exclusive(const InputCombination& ic) 
-{
-	return InputCombination::Evaluator(InputCombination::Evaluator::Exclusive, InputCombination::Evaluator::Continous, ic);
-}
-
-// @brief Evaluates input connection to true even when other inputs are active, not just the ones required by the combination
-inline constexpr InputCombination::Evaluator inclusive(const InputCombination& ic) 
-{
-	return InputCombination::Evaluator(InputCombination::Evaluator::Inclusive, InputCombination::Evaluator::Continous, ic);
-}
 
 }
 
 namespace details::io {
-
-inline void commitInputState(uint8_t button, uint8_t modkey, uint64_t key)
-{
-	dk::io::InputCombination::Evaluator::s_previousState = dk::io::InputCombination::Evaluator::s_currentState;
-	dk::io::InputCombination::Evaluator::s_currentState.button = button;
-	dk::io::InputCombination::Evaluator::s_currentState.modkey = modkey;
-	dk::io::InputCombination::Evaluator::s_currentState.key = key;
-}
-
+void commitInputState(const dk::io::InputState& state);
+bool imguiDoCaptureMouse();
+void imguiDoCaptureMouse(bool enable);
+bool imguiDoCaptureKeyboard();
+void imguiDoCaptureKeyboard(bool enable);
 }

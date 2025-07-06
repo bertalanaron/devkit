@@ -32,9 +32,9 @@ public:
 
 	struct Orbit {
 		glm::vec3 center = { 0, 0, 0 };
-		void shift(Camera& camera, const glm::vec3& amount);
-		void tilt(Camera& camera, const glm::vec2& delta);
-		void zoom(Camera& camera, float factor);
+		static void shift(Camera& camera, const glm::vec3& amount);
+		static void tilt(Camera& camera, const glm::vec2& delta);
+		static void zoom(Camera& camera, float factor);
 	};
 
 	geom::ray3 castRay(const glm::vec2&) const;

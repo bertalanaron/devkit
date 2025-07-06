@@ -63,8 +63,14 @@ public:
 		};
 	}
 
+	template <dk::common::OfList<Es...>... Ess>
+	void properties(Ess... props)
+	{
+		(property(props), ...);
+	}
+
 	template <dk::common::OfList<Es...> E>
-	E property() 
+	E property() const
 	{
 		auto it = m_properties.find(typeid(E));
 		if (it != m_properties.end())

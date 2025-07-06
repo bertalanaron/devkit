@@ -135,4 +135,48 @@ namespace dk::gfx {
 	return res;
 }
 
+// @brief Draw 2d circle on plane
+[[nodiscard]] RGBADrawData draw(
+	const dk::geom::circle2& circle,
+	int                      vertexCount, 
+	const glm::vec4&         color,
+	const dk::geom::plane&   plane, 
+	const glm::dvec3&        right)
+{
+	RGBADrawData res(Primitive::Lines, {});
+
+	double angleIncrementRad = 2.0 * glm::pi<double>() / (double)vertexCount;
+	double angle = 0;
+	for (int i = 0; i <= vertexCount; ++i, angle += angleIncrementRad)
+		res << draw(dk::geom::edge2{ 
+			circle.center + circle.radius * glm::dvec2(glm::cos(angle), glm::sin(angle)), 
+			circle.center + circle.radius * glm::dvec2(glm::cos(angle + angleIncrementRad), glm::sin(angle + angleIncrementRad))
+		}, color, plane, right);
+
+	return res;
+}
+
+// @brief Draw 2d circle on plane, auto set vertex count based on radius
+[[nodiscard]] RGBADrawData draw(
+	const dk::geom::circle2& circle,
+	const glm::vec4&         color,
+	const dk::geom::plane&   plane, 
+	const glm::dvec3&        right)
+{
+	RGBADrawData res(Primitive::Lines, {});
+
+	const int vertexCount = 31 * circle.radius;
+	return draw(circle, vertexCount, color, plane, right);
+}
+
+struct drawer2d {
+	geom::plane plane;
+	glm::dvec3  right;
+
+	auto operator()(auto&&... args) const
+	{
+		return dk::gfx::draw(std::forward<decltype(args)>(args)..., plane, right);
+	}
+};
+
 }

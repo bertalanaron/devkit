@@ -34,6 +34,7 @@ private:
 
 public:
 	enum class ClearMask { Color = 0x00004000, Depth = 0x00000100 };
+	inline friend ClearMask operator|(ClearMask a, ClearMask b) { return ClearMask((int)a | (int)b); }
 
 	// @brief Create framebuffer and texture together. 
 	// Use this constructor if the texture doesn't need to be reused. 
@@ -62,7 +63,7 @@ public:
 	void resize(int width, int height, int colorAttachment = 0);
 
 	// Has to be run on the render thread.
-	void clear(ClearMask mask, const glm::vec4& color);
+	void clear(ClearMask mask, const glm::vec4& color = dk::colors::black);
 
 	// @brief Draw data bound in the shader using it's layout(...) method. Use a vertex buffer for indexing. 
 	// Has to be run on the render thread.

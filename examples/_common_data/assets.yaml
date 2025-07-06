@@ -2,7 +2,7 @@ planet_texture: "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data
 planet_model: "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data\\models\\sphere.obj"
 
 font: "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data\\fonts\\times.ttf"
-font_size: 124
+font_size: 64
 
 asteroid_count: 10000
 asteroid_texture: "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data\\textures\\Asteroid2b_Color.png"

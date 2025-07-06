@@ -5,28 +5,35 @@
 
 #include <GL/glew.h>
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_main.h>
-#undef main
-#include "SDL2/SDL_syswm.h"
+#include <SDL3/SDL.h>
+//#include <SDL3/SDL_main.h>
+//#undef main
+#include <SDL3/SDL_system.h>
 
 #include <imgui.h>
-#include <imgui_impl_sdl2.h>
+#include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
 
 #pragma comment (lib, "Dwmapi")
 #include <dwmapi.h>
 #undef DELETE
 
+#if defined(SDL_PLATFORM_WIN32)
+using WindowHandle = HWND;
+#endif
+
 struct dk::io::Window::Context {
 	Window*            m_owner;
 	SDL_Window*        m_window;
 	Uint32             m_id;
-	SDL_SysWMinfo      m_windowHandle;
+	WindowHandle       m_windowHandle;
 	SDL_GLContext      m_glContext;
 	long long unsigned m_lastTick = 0;
 	bool               m_isOpen;
 	ImGuiContext*      m_imguiContext;
+
+	glm::vec2          m_cursorCurrentPos;
+	glm::vec2          m_cursorPreviousPos;
 
 	details::io::SDL_StaticContext* _m_staticContext;
 
@@ -61,7 +68,7 @@ void details::io::SDL_StaticContext::initialize()
 		return;
 
 	// Init SDL
-	SDL_Init(SDL_INIT_EVERYTHING);
+	SDL_Init(0);
 	spdlog::trace("Initialized SDL");
 
 	// Use OpenGL 3.3
@@ -72,62 +79,101 @@ void details::io::SDL_StaticContext::initialize()
 	m_initialized = true;
 }
 
-void updateInputState() 
+void updateInputState(float wheelDirection) 
 {
-	// Button
-	uint8_t button = SDL_GetMouseState(nullptr, nullptr);
+	// Allow ImGui to capture mouse and keyboard
+	auto& imguiIO = ImGui::GetIO();
+	bool mouseCaptured = false;
+	if (details::io::imguiDoCaptureMouse() && imguiIO.WantCaptureMouse)
+		mouseCaptured = true;
+	bool keyboardCaptured = false;
+	if (details::io::imguiDoCaptureKeyboard() && imguiIO.WantCaptureKeyboard)
+		keyboardCaptured = true;
 
-	// Modkey
-	uint8_t modkey = 0;
-	SDL_Keymod mod = SDL_GetModState();
-	if (mod & KMOD_SHIFT) modkey |= 1u << 0;
-	if (mod & KMOD_CTRL)  modkey |= 1u << 1;
-	if (mod & KMOD_ALT)   modkey |= 1u << 2;
-	if (mod & KMOD_CAPS)  modkey |= 1u << 3;
+	dk::io::InputState state;
 
-	// Key
-	uint64_t key = 0;
-	const Uint8* keystate = SDL_GetKeyboardState(nullptr);
-	// Numbers
-	for (int i = 0; i < 10; ++i) {
-		if (keystate[SDL_SCANCODE_0 + i]) 
-			key |= (1ull << i);  // bits 0–9
-	}
-	// Letters
-	for (int i = 0; i < 26; ++i) {
-		if (keystate[SDL_SCANCODE_A + i])
-			key |= (1ull << (10 + i));  // bits 10–35
+	if (!mouseCaptured) {
+		// Button
+		state.buttons = SDL_GetMouseState(nullptr, nullptr);
+
+		// Wheel
+		state.wheelDirection = wheelDirection;
+		if (wheelDirection > 0) state.wheel |= (dk::io::wheel_t)dk::io::wheel_mask::up;
+		if (wheelDirection < 0) state.wheel |= (dk::io::wheel_t)dk::io::wheel_mask::down;
 	}
 
-	details::io::commitInputState(button, modkey, key);
+	if (!keyboardCaptured) {
+		// Modkey
+		SDL_Keymod mod = SDL_GetModState();
+		if (mod & SDL_KMOD_SHIFT) state.modkeys |= (dk::io::modkey_t)dk::io::modkey_mask::shift;
+		if (mod & SDL_KMOD_CTRL)  state.modkeys |= (dk::io::modkey_t)dk::io::modkey_mask::ctrl;
+		if (mod & SDL_KMOD_ALT)   state.modkeys |= (dk::io::modkey_t)dk::io::modkey_mask::alt;
+		if (mod & SDL_KMOD_CAPS)  state.modkeys |= (dk::io::modkey_t)dk::io::modkey_mask::caps;
+
+		// Key
+		const bool* keystate = SDL_GetKeyboardState(nullptr);
+		// Numbers
+		for (auto i = 0ull; i < 10; ++i) {
+			if (keystate[SDL_SCANCODE_1 + i]) 
+				state.keys |= ((dk::io::key_t)dk::io::key_mask::_0 << ((i + 1) % 10));
+		}
+		// Letters
+		for (auto i = 0ull; i < 26; ++i) {
+			if (keystate[SDL_SCANCODE_A + i])
+				state.keys |= ((dk::io::key_t)dk::io::key_mask::a << i);
+		}
+		// Special
+		if (keystate[SDL_SCANCODE_GRAVE])     state.keys |= (dk::io::key_t)dk::io::key_mask::grave;
+		if (keystate[SDL_SCANCODE_ESCAPE])    state.keys |= (dk::io::key_t)dk::io::key_mask::esc;
+		if (keystate[SDL_SCANCODE_TAB])       state.keys |= (dk::io::key_t)dk::io::key_mask::tab;
+		if (keystate[SDL_SCANCODE_DELETE])    state.keys |= (dk::io::key_t)dk::io::key_mask::del;
+		if (keystate[SDL_SCANCODE_EXECUTE])   state.keys |= (dk::io::key_t)dk::io::key_mask::enter;
+		if (keystate[SDL_SCANCODE_BACKSPACE]) state.keys |= (dk::io::key_t)dk::io::key_mask::backspace;
+		if (keystate[SDL_SCANCODE_BACKSLASH]) state.keys |= (dk::io::key_t)dk::io::key_mask::backslash;
+	}
+
+	details::io::commitInputState(state);
+}
+
+bool isWindowEvent(SDL_Event const& e) 
+{
+	return e.type >= SDL_EVENT_WINDOW_FIRST && e.type <= SDL_EVENT_WINDOW_LAST;
 }
 
 void details::io::SDL_StaticContext::handleEvents()
 {
 	++m_ticks;
 
-	// Update mouse and keyboard state
-	updateInputState();
+	float mouseWheelY = 0;
 
 	// Poll events
 	SDL_Event event;
 	while (SDL_PollEvent(&event)) {
 		switch (event.type)
 		{
-		case SDL_WINDOWEVENT: {
-			// Pass event to affected window
-			auto it = m_windows.find(event.window.windowID);
-			if (it != m_windows.end())
-				it->second->handleEvent(event.window);
-		} break;
+		case SDL_EVENT_MOUSE_WHEEL: {
+			SDL_MouseWheelEvent& wheenEvent = event.wheel;
+			mouseWheelY = wheenEvent.y;
+			break;
+		}
 		default:
 			break;
 		}
 
+		if (isWindowEvent(event)) {
+			// Pass event to affected window
+			auto it = m_windows.find(event.window.windowID);
+			if (it != m_windows.end())
+				it->second->handleEvent(event.window);
+		}
+
 		// Pass event to ImGui
-		ImGui_ImplSDL2_ProcessEvent(&event);
+		ImGui_ImplSDL3_ProcessEvent(&event);
 		// TODO: handle multiple windows
 	}
+
+	// Update mouse and keyboard state
+	updateInputState(mouseWheelY);
 }
 
 bool details::io::SDL_StaticContext::isFirstContextInTick(long long unsigned contextLastHandledTick) const
@@ -150,8 +196,8 @@ void dk::io::Window::Context::initialize(const std::string& title, const glm::iv
 	details::io::SDL_StaticContext::instance().initialize();
 
 	// Create window
-	m_window = SDL_CreateWindow(title.c_str(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-		size.x, size.y, SDL_WINDOW_RESIZABLE | SDL_RENDERER_ACCELERATED);
+	m_window = SDL_CreateWindow(title.c_str(), /*SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,*/
+		size.x, size.y, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL /*| SDL_RENDERER_ACCELERATED*/);
 	m_isOpen = true;
 	// Get window id and insert window to global collection
 	m_id = SDL_GetWindowID(m_window);
@@ -185,8 +231,9 @@ void dk::io::Window::Context::initialize(const std::string& title, const glm::iv
 	glEnable(GL_PROGRAM_POINT_SIZE);  
 
 	// Get window handle
-	SDL_VERSION(&m_windowHandle.version);
-	SDL_GetWindowWMInfo(m_window, &m_windowHandle);
+#if defined(SDL_PLATFORM_WIN32)
+	m_windowHandle = (HWND)SDL_GetPointerProperty(SDL_GetWindowProperties(m_window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
+#endif
 
 	// Initialize imgui context
 	initializeImGui();
@@ -197,15 +244,15 @@ void dk::io::Window::Context::initializeImGui()
 	m_imguiContext = ImGui::CreateContext();
 	ImGui::SetCurrentContext(m_imguiContext);
 
-	ImGui_ImplSDL2_InitForOpenGL(m_window, m_glContext);
+	ImGui_ImplSDL3_InitForOpenGL(m_window, m_glContext);
 	ImGui_ImplOpenGL3_Init("#version 330");
 
 	ImGuiIO& io = ImGui::GetIO(); (void)io;
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-	//io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-	//io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-	ImGui::StyleColorsClassic();
+	ImGui::StyleColorsDark();
 }
 
 void dk::io::Window::Context::handleEvents()
@@ -214,16 +261,20 @@ void dk::io::Window::Context::handleEvents()
 	if (details::io::SDL_StaticContext::instance().isFirstContextInTick(m_lastTick))
 		details::io::SDL_StaticContext::instance().handleEvents();
 	m_lastTick = details::io::SDL_StaticContext::instance().ticks();
+
+	// Update cursor state
+	m_cursorPreviousPos = m_cursorCurrentPos;
+	SDL_GetMouseState(&m_cursorCurrentPos.x, &m_cursorCurrentPos.y);
 }
 
 void dk::io::Window::Context::handleEvent(SDL_WindowEvent event)
 {
-	switch (event.event)
+	switch (event.type)
 	{
-	case SDL_WINDOWEVENT_CLOSE: 
+	case SDL_EVENT_WINDOW_CLOSE_REQUESTED: 
 		close(); 
 		break;
-	case SDL_WINDOWEVENT_RESIZED:
+	case SDL_EVENT_WINDOW_RESIZED:
 		m_owner->propertyChanged(dk::io::properties::window::size(event.data1, event.data2));
 		break;
 	default:
@@ -240,7 +291,7 @@ void dk::io::Window::Context::close()
 {
 	m_isOpen = false;
 	SDL_DestroyWindow(m_window);
-	SDL_GL_DeleteContext(m_glContext);
+	SDL_GL_DestroyContext(m_glContext);
 	spdlog::trace("Closed window: {}", (int)m_id); 
 }
 
@@ -275,8 +326,9 @@ bool dk::io::Window::beginFrame()
 
 	// Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
-	ImGui_ImplSDL2_NewFrame();
+	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
+	ImGui::DockSpaceOverViewport(0, (const ImGuiViewport*)0, ImGuiDockNodeFlags_PassthruCentralNode);
 
 	// Handle events
 	m_context->handleEvents();
@@ -295,6 +347,16 @@ void dk::io::Window::endFrame()
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 	ImGui::EndFrame();
+
+	// ImGui multi viewports support
+	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
+		SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+		SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
+	}
 
 	// Swap buffers
 	SDL_GL_SwapWindow(m_context->m_window);
@@ -319,6 +381,26 @@ std::chrono::nanoseconds dk::io::Window::dt() const
 	return std::chrono::duration_cast<std::chrono::nanoseconds>(m_timeSinceLastFrame);
 }
 
+glm::vec2 dk::io::Window::cursorP() const
+{
+	return m_context->m_cursorCurrentPos;
+}
+
+glm::vec2 dk::io::Window::cursorDeltaP() const
+{
+	return m_context->m_cursorCurrentPos - m_context->m_cursorPreviousPos;
+}
+
+glm::vec2 dk::io::Window::cursorN() const
+{
+	return glm::vec2(0, 1) + glm::vec2(1, -1) * (cursorP() / (glm::vec2)property<dk::io::properties::window::size>());
+}
+
+glm::vec2 dk::io::Window::cursorDeltaN() const
+{
+	return (cursorDeltaP() * glm::vec2(1, -1)) / (glm::vec2)property<dk::io::properties::window::size>();
+}
+
 dk::io::Window::~Window()
 {
 }
@@ -341,7 +423,7 @@ template <>
 void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::border& border)
 {
 	bool isEnabled = border == dk::io::properties::window::border::enabled;
-	SDL_SetWindowBordered(window.m_context->m_window, (SDL_bool)isEnabled);
+	SDL_SetWindowBordered(window.m_context->m_window, isEnabled);
 	spdlog::trace("Set border {} for window: {}", (isEnabled ? "enabled" : "disabled"), window.m_context->m_id);
 }
 
@@ -350,14 +432,14 @@ void details::common::setProperty(dk::io::Window& window, const dk::io::properti
 {
 	BOOL USE_DARK_MODE = theme == dk::io::properties::window::theme::dark;
 	BOOL SET_IMMERSIVE_DARK_MODE_SUCCESS = SUCCEEDED(DwmSetWindowAttribute(
-		window.m_context->m_windowHandle.info.win.window, DWMWINDOWATTRIBUTE::DWMWA_USE_IMMERSIVE_DARK_MODE,
+		window.m_context->m_windowHandle, DWMWINDOWATTRIBUTE::DWMWA_USE_IMMERSIVE_DARK_MODE,
 		&USE_DARK_MODE, sizeof(USE_DARK_MODE)));
 	spdlog::trace("Set {} theme for window: {}", (USE_DARK_MODE ? "dark" : "light"), window.m_context->m_id);
 
 	// hack: Have to hide and show the window to apply color change
 	bool border = window.property<dk::io::properties::window::border>() == dk::io::properties::window::border::enabled;
-	SDL_SetWindowBordered(window.m_context->m_window, (SDL_bool)!border);
-	SDL_SetWindowBordered(window.m_context->m_window, (SDL_bool)border);
+	SDL_SetWindowBordered(window.m_context->m_window, !border);
+	SDL_SetWindowBordered(window.m_context->m_window, border);
 }
 
 template <>
@@ -375,7 +457,7 @@ void details::common::setProperty(dk::io::Window& window, const dk::io::properti
 template <>
 void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::mouse_grab& mode)
 {
-	SDL_SetWindowMouseGrab(window.m_context->m_window, (SDL_bool)mode);
+	SDL_SetWindowMouseGrab(window.m_context->m_window, (bool)mode);
 }
 
 int details::io::toUnderlying(dk::io::properties::window::vsync vsync)
@@ -394,7 +476,7 @@ uint32_t details::io::toUnderlying(dk::io::properties::window::mode mode) {
 	switch (mode)
 	{
 	case dk::io::properties::window::mode::windowed:   return 0;
-	case dk::io::properties::window::mode::fullscreen: return SDL_WINDOW_FULLSCREEN_DESKTOP;
+	case dk::io::properties::window::mode::fullscreen: return SDL_WINDOW_FULLSCREEN;
 		break;
 	default:
 		break;
