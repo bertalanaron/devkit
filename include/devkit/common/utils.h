@@ -16,6 +16,9 @@
 #include <future>
 #include <semaphore>
 #include <numeric>
+#include <expected>
+#include <deque>
+#include <queue>
 
 #include <spdlog/spdlog.h>
 

@@ -57,7 +57,7 @@ private:
 	using data_t = common::reverse_tuple<Ts...>;
 
 	template <std::size_t I>
-	using element_t = std::tuple_element_t<I, data_t>;
+	using element_t = std::tuple_element_t<sizeof...(Ts) - I - 1, data_t>;
 
 public:
 	Vertex() = default;
@@ -65,6 +65,14 @@ public:
 	Vertex(const Ts&... data)
 		: m_data(dk::common::reverse_args(data...))
 	{ }
+
+	template <std::size_t I>
+	element_t<I>& elem()
+	{ return std::get<sizeof...(Ts) - I - 1>(m_data); }
+
+	template <std::size_t I>
+	const element_t<I>& elem() const
+	{ return std::get<sizeof...(Ts) - I - 1>(m_data); }
 
 	static const VertexAttributes* attributes()
 	{ 

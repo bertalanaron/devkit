@@ -9,7 +9,17 @@
 		name(const ns::base& v) : ns::base(v) { }                \
 		inline static std::string Name = #name;                  \
     }                                                            \
-	/* */
+	/* end of macro */
+#define DK_DECL_NUMERIC_PROPERTY(name, base, defaultValue)       \
+	struct name  {                                               \
+		using type = base;                                       \
+		type value = defaultValue;                               \
+		name(base v) : value(v) { }								 \
+		name& operator=(base v) { value = v; return *this; }	 \
+		operator base() const { return value; }					 \
+		inline static std::string Name = #name;                  \
+	}															 \
+	/* end of macro */
 
 namespace details::common {
 

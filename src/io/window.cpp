@@ -10,9 +10,13 @@
 //#undef main
 #include <SDL3/SDL_system.h>
 
+#define DK_USE_IMGUI
+
+#ifdef DK_USE_IMGUI
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
+#endif
 
 #pragma comment (lib, "Dwmapi")
 #include <dwmapi.h>
@@ -27,18 +31,30 @@ struct dk::io::Window::Context {
 	SDL_Window*        m_window;
 	Uint32             m_id;
 	WindowHandle       m_windowHandle;
-	SDL_GLContext      m_glContext;
+	SDL_GLContext      m_glContext = nullptr;
 	long long unsigned m_lastTick = 0;
 	bool               m_isOpen;
+#ifdef DK_USE_IMGUI
 	ImGuiContext*      m_imguiContext;
+#endif
 
-	glm::vec2          m_cursorCurrentPos;
-	glm::vec2          m_cursorPreviousPos;
+	struct CursorWrapContext {
+		bool wrappedLeft   = false;
+		bool wrappedRight  = false;
+		bool wrappedTop    = false;
+		bool wrappedBottom = false;
+	};
+
+	glm::vec2         m_cursorCurrentPos;
+	glm::vec2         m_cursorPreviousPos;
+	CursorWrapContext m_cursorWrapContext;
 
 	details::io::SDL_StaticContext* _m_staticContext;
 
-	void initialize(const std::string& title, const glm::ivec2& size);
+	void initialize(const std::string& title, const glm::ivec2& size, int msaa);
+#ifdef DK_USE_IMGUI
 	void initializeImGui();
+#endif
 	void handleEvents();
 	// Handle window specific events
 	void handleEvent(SDL_WindowEvent event);
@@ -68,27 +84,30 @@ void details::io::SDL_StaticContext::initialize()
 		return;
 
 	// Init SDL
-	SDL_Init(0);
+	SDL_Init(SDL_INIT_VIDEO);
 	spdlog::trace("Initialized SDL");
 
 	// Use OpenGL 3.3
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
 
 	m_initialized = true;
 }
 
 void updateInputState(float wheelDirection) 
 {
+	bool mouseCaptured = false;
+	bool keyboardCaptured = false;
+#ifdef DK_USE_IMGUI
 	// Allow ImGui to capture mouse and keyboard
 	auto& imguiIO = ImGui::GetIO();
-	bool mouseCaptured = false;
 	if (details::io::imguiDoCaptureMouse() && imguiIO.WantCaptureMouse)
 		mouseCaptured = true;
-	bool keyboardCaptured = false;
 	if (details::io::imguiDoCaptureKeyboard() && imguiIO.WantCaptureKeyboard)
 		keyboardCaptured = true;
+#endif
 
 	dk::io::InputState state;
 
@@ -167,8 +186,10 @@ void details::io::SDL_StaticContext::handleEvents()
 				it->second->handleEvent(event.window);
 		}
 
+#ifdef DK_USE_IMGUI
 		// Pass event to ImGui
 		ImGui_ImplSDL3_ProcessEvent(&event);
+#endif
 		// TODO: handle multiple windows
 	}
 
@@ -191,9 +212,15 @@ void details::io::SDL_StaticContext::eraseWindow(Uint32 id)
 	m_windows.erase(id);
 }
 
-void dk::io::Window::Context::initialize(const std::string& title, const glm::ivec2& size)
+void dk::io::Window::Context::initialize(const std::string& title, const glm::ivec2& size, int msaa)
 {
 	details::io::SDL_StaticContext::instance().initialize();
+
+	// Set up MSAA
+	if (msaa > 1) {
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, msaa);
+	}
 
 	// Create window
 	m_window = SDL_CreateWindow(title.c_str(), /*SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,*/
@@ -235,10 +262,13 @@ void dk::io::Window::Context::initialize(const std::string& title, const glm::iv
 	m_windowHandle = (HWND)SDL_GetPointerProperty(SDL_GetWindowProperties(m_window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
 #endif
 
+#ifdef DK_USE_IMGUI
 	// Initialize imgui context
 	initializeImGui();
+#endif
 }
 
+#ifdef DK_USE_IMGUI
 void dk::io::Window::Context::initializeImGui()
 {
 	m_imguiContext = ImGui::CreateContext();
@@ -254,6 +284,7 @@ void dk::io::Window::Context::initializeImGui()
 
 	ImGui::StyleColorsDark();
 }
+#endif
 
 void dk::io::Window::Context::handleEvents()
 {
@@ -295,9 +326,9 @@ void dk::io::Window::Context::close()
 	spdlog::trace("Closed window: {}", (int)m_id); 
 }
 
-void dk::io::Window::open()
+void dk::io::Window::open(int msaa)
 {
-	m_context->initialize(property<dk::io::properties::window::title>(), property<dk::io::properties::window::size>());
+	m_context->initialize(property<dk::io::properties::window::title>(), property<dk::io::properties::window::size>(), msaa);
 }
 
 void dk::io::Window::close()
@@ -324,11 +355,13 @@ bool dk::io::Window::beginFrame()
 	// Update properties
 	callPropertySetters();
 
+#ifdef DK_USE_IMGUI
 	// Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
 	ImGui::DockSpaceOverViewport(0, (const ImGuiViewport*)0, ImGuiDockNodeFlags_PassthruCentralNode);
+#endif
 
 	// Handle events
 	m_context->handleEvents();
@@ -342,6 +375,9 @@ void dk::io::Window::endFrame()
 		return;
 
 	useContext();
+
+#ifdef DK_USE_IMGUI
+	dk::gfx::backBuffer().makeActive();
 
 	// Render ImGui draw data
 	ImGui::Render();
@@ -357,6 +393,7 @@ void dk::io::Window::endFrame()
 		ImGui::RenderPlatformWindowsDefault();
 		SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
 	}
+#endif
 
 	// Swap buffers
 	SDL_GL_SwapWindow(m_context->m_window);
@@ -372,7 +409,9 @@ dk::io::Window::Window()
 void dk::io::Window::useContext()
 {
 	m_context->useContext();
+#ifdef DK_USE_IMGUI
 	ImGui::SetCurrentContext(m_context->m_imguiContext);
+#endif
 	details::gfx::setBackbufferViewport(property<dk::io::properties::window::size>());
 }
 
@@ -401,9 +440,51 @@ glm::vec2 dk::io::Window::cursorDeltaN() const
 	return (cursorDeltaP() * glm::vec2(1, -1)) / (glm::vec2)property<dk::io::properties::window::size>();
 }
 
-dk::io::Window::~Window()
+bool dk::io::Window::wrapOutOfBoundsCursor(bool allowInnerBorder) const
 {
+	glm::ivec2 windowSize = property<dk::io::properties::window::size>();
+	glm::ivec2 cursorPos  = cursorP();
+	bool wrapped = false;
+
+	// Horizontal
+	if (cursorPos.x < allowInnerBorder && !m_context->m_cursorWrapContext.wrappedRight) {
+		cursorPos.x = windowSize.x - 1 - allowInnerBorder;
+		m_context->m_cursorWrapContext.wrappedLeft = true;
+		wrapped = true;
+	} 
+	else if (cursorPos.x >= windowSize.x - allowInnerBorder && !m_context->m_cursorWrapContext.wrappedLeft) {
+		cursorPos.x = allowInnerBorder;
+		m_context->m_cursorWrapContext.wrappedRight = true;
+		wrapped = true;
+	}
+	else {
+		m_context->m_cursorWrapContext.wrappedLeft  = false;
+		m_context->m_cursorWrapContext.wrappedRight = false;
+	}
+
+	// Vertical
+	if (cursorPos.y < allowInnerBorder && !m_context->m_cursorWrapContext.wrappedBottom) {
+		cursorPos.y = windowSize.y - 1 - allowInnerBorder;
+		m_context->m_cursorWrapContext.wrappedTop = true;
+		wrapped = true;
+	} 
+	else if (cursorPos.y >= windowSize.y - allowInnerBorder && !m_context->m_cursorWrapContext.wrappedTop) {
+		cursorPos.y = allowInnerBorder;
+		m_context->m_cursorWrapContext.wrappedBottom = true;
+		wrapped = true;
+	} 
+	else {
+		m_context->m_cursorWrapContext.wrappedTop    = false;
+		m_context->m_cursorWrapContext.wrappedBottom = false;
+	}
+
+	if (wrapped)
+		SDL_WarpMouseInWindow(m_context->m_window, cursorPos.x, cursorPos.y);
+	return wrapped;
 }
+
+dk::io::Window::~Window()
+{ }
 
 template <>
 void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::size& size) 

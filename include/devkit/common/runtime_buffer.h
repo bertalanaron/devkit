@@ -302,14 +302,17 @@ public:
 	Iterator begin() 
 	{ return at(0); }
 
+	Iterator back()
+	{ return at(size() - 1); }
+
 	Iterator end()
-	{ return ++at(size() - 1); }
+	{ return Iterator(elem_size(), data() + size() * elem_size()); }
 
 	const Iterator cbegin() const
 	{ return at(0); }
 
-	const Iterator cend() const
-	{ return at(size() - 1) + 1; }
+	Iterator cback() const
+	{ return at(size() - 1); }
 
 	void insert(Iterator where, const Iterator _begin, const Iterator _end)
 	{
@@ -333,6 +336,32 @@ public:
 
 		// Copy new data
 		std::memcpy(m_data.data() + insertPos * m_elemSize, _begin.get(), count * m_elemSize);
+	}
+
+	template <std::contiguous_iterator It>
+	void insert(Iterator where, const It _begin, const It _end)
+	{
+		using T = std::decay_t<decltype(*_begin)>;
+
+		DK_ASSERT((where.size() == m_elemSize, "Mismatched element size"));
+		DK_ASSERT((sizeof(T)    == m_elemSize, "Mismatched element size"));
+
+		size_t insertPos = (where.get() - m_data.data()) / m_elemSize;
+		size_t count = (std::to_address(_end) - std::to_address(_begin));
+		if (count == 0)
+			return;
+
+		// Resize buffer to fit new elements
+		size_t oldSize = size();
+		m_data.resize(m_data.size() + count * m_elemSize);
+
+		// Move existing data after insert position
+		uint8_t* dest = m_data.data() + (insertPos + count) * m_elemSize;
+		uint8_t* src  = m_data.data() + insertPos * m_elemSize;
+		std::memmove(dest, src, (oldSize - insertPos) * m_elemSize);
+
+		// Copy new data
+		std::memcpy(m_data.data() + insertPos * m_elemSize, std::to_address(_begin), count * m_elemSize);
 	}
 
 private:

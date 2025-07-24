@@ -11,6 +11,10 @@ constexpr glm::dvec3 Z = { 0, 0, 1 };
 
 }
 
+inline glm::dvec2 xy(const glm::dvec3& vec) { return glm::dvec2(vec.x, vec.y); }
+inline glm::dvec2 xz(const glm::dvec3& vec) { return glm::dvec2(vec.x, vec.z); }
+inline glm::dvec2 yz(const glm::dvec3& vec) { return glm::dvec2(vec.y, vec.z); }
+
 // Forward declarations
 struct aabb3;
 
@@ -18,6 +22,11 @@ bool isIntersecting(double t);
 
 using edge2 = std::array<glm::dvec2, 2>;
 using edge3 = std::array<glm::dvec3, 2>;
+
+// @brief Edge instance initialized with zeros
+constexpr edge2 nullEdge2 = edge2{ glm::dvec2(0,0)  , glm::dvec2(0,0)   };
+// @brief Edge instance initialized with zeros
+constexpr edge3 nullEdge3 = edge3{ glm::dvec3(0,0,0), glm::dvec3(0,0,0) };
 
 // @brief Projects point onto the line defined by the edge
 glm::dvec2 projectPoint(const edge2& edge, const glm::dvec2& point);
@@ -28,6 +37,17 @@ glm::dvec2 closestPoint(const edge2& edge, const glm::dvec2& point);
 double distance(const edge2& edge, const glm::dvec2& point);
 double distance(const glm::dvec2& point, const edge2& edge);
 double distance(const edge2& edge1, const edge2& edge2);
+
+// @brief clamp length of vector
+auto clampLength(const auto& vec, auto min, auto max)
+{
+	const auto length = glm::length(vec);
+	if (length < min)
+		return glm::normalize(vec) * min;
+	if (length > max)
+		return glm::normalize(vec) * max;
+	return vec;
+}
 
 // @brief 3D plane defined by a point and a normal vector
 struct plane {
@@ -93,6 +113,13 @@ inline glm::dvec3 intersection(const ray3& ray, const auto& target)
 	return ray.origin + ray.direction * t;
 }
 
+struct bbox2 {
+	glm::dvec2 min = glm::dvec2(std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity());
+	glm::dvec2 max = glm::dvec2(-std::numeric_limits<double>::infinity(), -std::numeric_limits<double>::infinity());
+
+	void include(const glm::dvec2& point);
+};
+
 // @brief 3D Axis Aligned Bounding Box 
 struct aabb3 {
 	glm::dvec3 min;
@@ -108,7 +135,12 @@ struct trig2 {
 	trig2(const glm::dvec2& a, const glm::dvec2& b, const glm::dvec2& c)
 		: vertices{a, b, c}
 	{ }
+
+	double signedArea() const;
 };
+
+// @brief Negative for clockwise and positive for counter clockwise
+double signedTriangle2Area(const glm::dvec2& a, const glm::dvec2& b, const glm::dvec2& c);
 
 struct trig3 {
 	std::array<glm::dvec3, 3> vertices;
@@ -141,6 +173,8 @@ struct polygon2 {
 struct circle2 {
 	glm::dvec2 center;
 	double     radius;
+
+	bool intersects(const edge2& edge) const;
 };
 
 }

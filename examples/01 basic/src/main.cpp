@@ -122,9 +122,6 @@ void imguiPropertiesPanel(auto& container, float labelColumnWidth) {
 	}
 }
 
-
-
-
 #define ABSOLUTE_RESOURCE_PATH "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data\\"
 
 class Example01 {
@@ -133,8 +130,21 @@ public:
 	{
 		dk::gfx::VertexSink textVertexSink = dk::gfx::VertexSink::create<dk::gfx::Font::CharVertex>();
 
+		dk::gfx::Texture sceneOutTexture = [&] {
+			const auto windowSize = m_window.property<dk::io::properties::window::size>();
+			return dk::gfx::Texture::create(windowSize.x, windowSize.y, 4);
+		}();
+		dk::gfx::Texture sceneOutDepth = [&] {
+			const auto windowSize = m_window.property<dk::io::properties::window::size>();
+			return dk::gfx::Texture::create(windowSize.x, windowSize.y, 5);
+		}();
+		dk::gfx::FrameBuffer sceneFrameBuffer;
+		sceneFrameBuffer.attachColor(sceneOutTexture, 0);
+		sceneFrameBuffer.attachDepth(sceneOutDepth);
+
 		while (m_window.beginFrame()) {
 			// Clear backbuffer
+			sceneFrameBuffer.clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0x1e1e1eff));
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color, DK_COLOR(0x1e1e1eff));
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0xffffffff));
 
@@ -143,7 +153,7 @@ public:
 			showGUI();
 			moveCamera();
 
-			ImGui::ShowDemoWindow();
+			//ImGui::ShowDemoWindow();
 
 			// Draw scene
 			m_shaders["planet"]->uniforms() << m_ucCamera;
@@ -152,29 +162,17 @@ public:
 			for (auto& mesh : m_assetManager.get<dk::gfx::Scene>(assetPath("planet_model")).meshes()) {
 				m_shaders["planet"]->layout(std::ref(mesh.vertices()));
 				dk::gfx::backBuffer().render(*m_shaders["planet"], mesh.indices(), dk::gfx::Primitive::Triangles);
+				sceneFrameBuffer.render(*m_shaders["planet"], mesh.indices(), dk::gfx::Primitive::Triangles);
 			}
 
 			// Bind uniforms and textures
 			m_shaders["rgba"]->uniforms()     << m_ucCamera;
 			//m_colorSink->draw(*m_shaders["rgba"], dk::gfx::backBuffer());
 
-			// Draw text
-			std::string localTimeString = [] {
-				return std::format("{:%Y-%m-%d %H:%M:%S}", std::chrono::system_clock::now());
-			}();
-			m_shaders["text"]->uniforms() << m_ucCamera;
-			auto& font        = m_assetManager.get<dk::gfx::Font>(assetPath("font"));
-			auto& fontAtlas   = font.atlas(conf<int>("font_size"));
-			auto& fontTexture = font.texture(conf<int>("font_size"));
-			m_shaders["text"]->uniformTexture("u_atlas", fontTexture);
-			const auto textTransform = glm::translate(glm::vec3(0, 10, 0)) * glm::scale(glm::vec3(-.01, -.01, -.01));
-			textVertexSink.push_back(dk::gfx::Primitive::Triangles, 
-				fontAtlas.get(localTimeString, dk::colors::aqua, textTransform));
-			textVertexSink.flush(*m_shaders["text"], dk::gfx::backBuffer());
-
 			// Draw asteroids
 			m_shaders["asteroid"]->uniforms() << m_ucCamera;
 			auto& asteroidTexture = m_assetManager.get<dk::gfx::Texture>(assetPath("asteroid_texture"));
+			asteroidTexture.property(dk::gfx::properties::min_filter::nearest_mipmap_linear);
 			m_shaders["asteroid"]->uniformTexture("u_texture", asteroidTexture);
 			auto& asteroidMesh = m_assetManager.get<dk::gfx::Scene>(assetPath("asteroid_model")).meshes().at(0);
 			m_shaders["asteroid"]->layout(std::ref(asteroidMesh.vertices()), std::make_pair(std::ref(*m_meteors), 1));
@@ -184,6 +182,7 @@ public:
 			m_shaders["asteroid"]->uniforms().set("u_t", t);
 			// Render
 			dk::gfx::backBuffer().render(*m_shaders["asteroid"], asteroidMesh.indices(), dk::gfx::Primitive::Triangles, m_meteors->size());
+			sceneFrameBuffer.render(*m_shaders["asteroid"], asteroidMesh.indices(), dk::gfx::Primitive::Triangles, m_meteors->size());
 
 			// Draw skybox
 			m_shaders["skybox"]->uniforms()   << m_ucCamera;
@@ -191,6 +190,7 @@ public:
 			auto& unitCubeMesh = m_assetManager.get<dk::gfx::Scene>(ABSOLUTE_RESOURCE_PATH "models\\cube.obj").meshes().at(0);
 			m_shaders["skybox"]->layout(std::ref(unitCubeMesh.vertices()));
 			dk::gfx::backBuffer().render(*m_shaders["skybox"], unitCubeMesh.indices(), dk::gfx::Primitive::Triangles);
+			sceneFrameBuffer.render(*m_shaders["skybox"], unitCubeMesh.indices(), dk::gfx::Primitive::Triangles);
 
 			// Close window with esc
 			if (dk::io::key::esc) m_window.close();
@@ -198,7 +198,14 @@ public:
 			if (dk::io::key::f(dk::io::currentInputState()) && !dk::io::key::f(dk::io::previousInputState()))
 				m_window.property(dk::common::toggle(m_window.property<dk::io::properties::window::mode>()));
 
-			m_window.endFrame();
+			if (ImGui::Begin("FrameBuffer")) {
+				sceneOutTexture.showAsImGuiImage();
+				ImVec2 size = ImGui::GetWindowSize();
+				sceneFrameBuffer.resize(glm::ivec2(size.x, size.y));
+				ImGui::End();
+			}
+
+			m_window.endFrame();	
 		}
 
 		auto& camera = m_assetManager.get<nlohmann::json>(ABSOLUTE_RESOURCE_PATH "camera.json");
@@ -210,7 +217,8 @@ public:
 	{
 		// Open window
 		m_window.property(dk::io::properties::window::theme::dark);
-		m_window.open();
+		m_window.open(4);
+		dk::gfx::backBuffer().property(dk::gfx::properties::multisampling::enabled);
 
 		// Register asset types
 		m_assetManager.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
@@ -234,10 +242,10 @@ public:
 		m_shaders["text"] = std::make_unique<dk::gfx::Shader>(
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\text_vs.glsl"), 
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\text_fs.glsl"));
-		m_shaders["text"]->properties(
-			dk::gfx::properties::blend::enabled,
-			dk::gfx::properties::blend_func_src_factor::src_alpha,
-			dk::gfx::properties::blend_func_dst_factor::one_minus_src_alpha);
+		//m_shaders["text"]->properties(
+		//	dk::gfx::properties::blend::enabled,
+		//	dk::gfx::properties::blend_func_src_factor::src_alpha,
+		//	dk::gfx::properties::blend_func_dst_factor::one_minus_src_alpha);
 		m_shaders["planet"] = std::make_unique<dk::gfx::Shader>(
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\mesh_vs.glsl"), 
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\textured_fs.glsl"));
@@ -247,6 +255,7 @@ public:
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\asteroid_fs.glsl"));
 		m_shaders["asteroid"]->property(dk::gfx::properties::depth_test::enabled);
 		m_shaders["asteroid"]->property(dk::gfx::properties::blend::disabled);
+		m_shaders["asteroid"]->property(dk::gfx::properties::sample_shading::enabled);
 		m_shaders["skybox"] = std::make_unique<dk::gfx::Shader>(
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\skybox_vs.glsl"), 
 			m_assetManager.getShared<dk::gfx::ShaderSource>(ABSOLUTE_RESOURCE_PATH "shaders\\skybox_fs.glsl"));
@@ -261,7 +270,7 @@ public:
 			ABSOLUTE_RESOURCE_PATH "textures\\skyboxes\\stars\\bottom.png",
 			ABSOLUTE_RESOURCE_PATH "textures\\skyboxes\\stars\\front.png",
 			ABSOLUTE_RESOURCE_PATH "textures\\skyboxes\\stars\\back.png"
-			})));
+		})));
 		m_skybox->property(dk::gfx::properties::min_filter::linear);
 
 		// Bind camera
@@ -269,8 +278,8 @@ public:
 		m_ucCamera.bind("u_camera.position",  [&]() -> glm::vec3 { return m_camera.position; });
 		m_ucCamera.bind("u_camera.direction", [&]() -> glm::vec3 { return m_camera.lookat - m_camera.position; });
 		// Create camera asset if doesn't exist
-		if (!m_assetManager.contains(ABSOLUTE_RESOURCE_PATH, "camera.json"))
-			m_assetManager.create(ABSOLUTE_RESOURCE_PATH, "camera.json", nlohmann::json(dk::gfx::Camera(m_camera)));
+		if (!m_assetManager.contains(ABSOLUTE_RESOURCE_PATH "camera.json"))
+			m_assetManager.create(ABSOLUTE_RESOURCE_PATH "camera.json", nlohmann::json(dk::gfx::Camera(m_camera)));
 		m_camera = m_assetManager.get<nlohmann::json>(ABSOLUTE_RESOURCE_PATH "camera.json");
 
 		// Create meteor instances
@@ -393,7 +402,7 @@ private:
 
 
 int main(void) {
-	//spdlog::set_level(spdlog::level::trace);
+	spdlog::set_level(spdlog::level::trace);
 
 	dk::common::ThreadDemuxContainer<dk::common::TypelessBuffer> tdc(
 		[]{ return dk::common::TypelessBuffer(dk::common::id_t<glm::vec4>{}); });

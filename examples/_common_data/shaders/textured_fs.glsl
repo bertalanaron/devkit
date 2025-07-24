@@ -19,25 +19,5 @@ void main()
     vec3 sunDir = normalize(vec3(1, 1, 0));
     float d = dot(sunDir, Normal);
 
-// 
-   // Normal = normalize(normal * mat3(transpose(inverse(u_object.M))));
-//    float prod = 0.0;
-//
-//    // PERSPECTIVE
-//    if (u_camera.VP[3][3] == 1.0) {
-//        prod = dot(normalize(-u_camera.direction), normalize(Normal));
-//    }
-//    // ORTHOGRAPHIC
-//    else {
-//        prod = dot(normalize(u_camera.position - Position), normalize(Normal));
-//    }
-//    
-//    if (prod < 0)
-//        prod *= -1;
-//
-//    prod = (prod / 2) + 0.5; 
-//
-//    FragColor = texture(u_texture, UV) * prod;
-    FragColor = texture(u_texture, vec2(UV.x, UV.y)) * d;
-    // FragColor.w = 1.0;
+    FragColor = texture(u_texture, UV) * d;
 }

@@ -338,3 +338,17 @@ void dk::gfx::Shader::detach()
     if (m_geometry != 0)
         glDetachShader(m_program, m_geometry);
 }
+
+template <>
+void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::sample_shading& sampleShading)
+{
+    if (!GLEW_ARB_sample_shading)
+        return;
+
+    if (sampleShading == dk::gfx::properties::sample_shading::enabled) {
+        glEnable(GL_SAMPLE_SHADING);
+        glMinSampleShading(1.0);
+    }
+    else
+        glDisable(GL_SAMPLE_SHADING);
+}

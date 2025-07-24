@@ -18,6 +18,8 @@ enum class blend { disabled, enabled };
 enum class blend_func_src_factor { one, zero, src_alpha, one_minus_src_alpha };
 enum class blend_func_dst_factor { zero, one, src_alpha, one_minus_src_alpha };
 
+enum class sample_shading { disabled, enabled };
+
 }
 
 namespace details::gfx {
@@ -35,7 +37,8 @@ using ShaderProperyCollection = dk::common::DeferredPropertyCollection<D,
 	dk::gfx::properties::backface_culling,
 	dk::gfx::properties::blend,
 	dk::gfx::properties::blend_func_src_factor,
-	dk::gfx::properties::blend_func_dst_factor>;
+	dk::gfx::properties::blend_func_dst_factor,
+	dk::gfx::properties::sample_shading>;
 
 }
 
