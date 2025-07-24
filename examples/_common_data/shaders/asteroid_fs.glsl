@@ -8,7 +8,7 @@ struct Camera {
 
 uniform sampler2D u_texture;
 
-in vec3 Normal;
+centroid in vec3 Normal;
 in vec3 Position;
 in vec2 UV;
 
@@ -19,7 +19,7 @@ void main()
     vec3 sunDir = normalize(vec3(1, 1, 0));
     float d = dot(sunDir, Normal);
 
-    vec4 color = texture(u_texture, vec2(UV.x, UV.y)) * d;
+    vec4 color = texture(u_texture, vec2(UV)) * d;
 
     FragColor = color;
 }

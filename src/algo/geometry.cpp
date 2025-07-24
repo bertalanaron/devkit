@@ -43,6 +43,15 @@ double dk::geom::distance(const edge2& edge1, const edge2& edge2)
     return std::min(std::min(d1, d2), std::min(d3, d4));
 }
 
+double dk::geom::signedTriangle2Area(const glm::dvec2& a, const glm::dvec2& b, const glm::dvec2& c)
+{
+    const double ax = b.x - a.x;
+    const double ay = b.y - a.y;
+    const double bx = c.x - a.x;
+    const double by = c.y - a.y;
+    return bx * ay - ax * by;
+}
+
 double dk::geom::ray2::intersectProjection(const glm::dvec2& point) const
 {
     const glm::dvec2 pointVector = point - origin;
@@ -70,4 +79,23 @@ glm::dvec3 dk::geom::plane::transform(const glm::dvec2& _point, const glm::dvec3
     const auto up = glm::cross(normal, right);
     const auto true_right   = glm::cross(normal, up);
     return true_right * _point.x + up * _point.y + point;
+}
+
+bool dk::geom::circle2::intersects(const edge2 & edge) const
+{
+    const auto closest = geom::closestPoint(edge, center);
+    return glm::distance(center, closest) <= radius;
+}
+
+void dk::geom::bbox2::include(const glm::dvec2& point)
+{
+    min.x = glm::min(min.x, point.x);
+    min.y = glm::min(min.y, point.y);
+    max.x = glm::max(max.x, point.x);
+    max.y = glm::max(max.y, point.y);
+}
+
+double dk::geom::trig2::signedArea() const
+{
+    return signedTriangle2Area(vertices[0], vertices[1], vertices[2]);
 }

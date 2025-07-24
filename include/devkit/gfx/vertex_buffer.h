@@ -53,8 +53,9 @@ public:
 	template <typename Vertex>
 	void insert(std::vector<Vertex>::const_iterator begin, std::vector<Vertex>::const_iterator end)
 	{
-		for (auto it = begin; it != end; ++it)
-			push_back(*it);
+		DK_ASSERT(("Vertex layout mismatch", Vertex::attributes() == m_vertexAttributes));
+		m_vertices.insert(m_vertices.end(), begin, end);
+		m_resized = true;
 	}
 
 	size_t size() const

@@ -35,8 +35,8 @@ public:
 	template <typename Vertex>
 	VertexSink& push_back(dk::gfx::Primitive primitive, const std::vector<Vertex>& vertices)
 	{
-		for (const auto& v : vertices)
-			m_demux.at((unsigned)primitive)->local().insert<Vertex>(vertices.cbegin(), vertices.cend());
+		//for (const auto& v : vertices)
+		m_demux.at((unsigned)primitive)->local().insert<Vertex>(vertices.cbegin(), vertices.cend());
 		return *this;
 	}
 

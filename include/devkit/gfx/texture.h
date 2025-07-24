@@ -1,10 +1,11 @@
 #pragma once
 #include <devkit/gfx/common.h>
 #include <devkit/common/properties.h>
+#include <devkit/gfx/attachment_base.h>
 
 namespace dk::gfx::properties {
 
-enum class min_filter { nearest, linear };
+enum class min_filter { nearest, linear, linear_mipmap_linear, linear_mipmap_nearest, nearest_mipmap_linear, nearest_mipmap_nearest };
 enum class mag_filter { nearest, linear };
 
 }
@@ -27,9 +28,10 @@ class FrameBuffer;
 
 class Texture
 	: public details::gfx::TextureProperties<Texture>
+	, public AttachmentBase
 {
 public:
-	enum class Type { Normal, Cubemap };
+	enum class Type { Normal, Cubemap, /* TODO: Multisample */ };
 
 	static Texture load(const std::string& path);
 
@@ -43,23 +45,27 @@ public:
 
 	void makeActive(int unit);
 
-	void attachTo(FrameBuffer& frameBuffer, int attachmentIndex);
-
-	unsigned int handle() const;
-
 	Type type() const;
+
+	void showAsImGuiImage() const;
+
+	Texture();
 
 private:
 	using opt_pixels_t = std::optional<std::variant<std::vector<uint8_t>, std::array<std::vector<uint8_t>, 6>>>;
 
 	Type         m_type = Type::Normal;
 	unsigned int m_handle = 0;
-	glm::ivec2   m_size;
 	int          m_channels = 0;
 
 	opt_pixels_t m_opt_pixels;
 
-	void init();
+	void initializeOrUpdate() override;
+
+	void attachAs(FrameBuffer& buffer, unsigned underlyingAttachmentIndex) override;
+
+	template <typename D, typename E>
+	friend void details::common::setProperty(D&, const E&);
 };
 
 class TextureUnit {

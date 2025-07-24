@@ -47,7 +47,8 @@ public:
 	Window();
 
 	// @brief Opens a window and activates it's context
-	void open();
+	// @param msaa - Multisample Anti Aliasing sample count (msaa is disabled when set to 1)
+	void open(int msaa = 1);
 	void close();
 
 	// @brief Begin new frame
@@ -73,6 +74,8 @@ public:
 	// @brief Get the normalized cursor position relative to the window
 	glm::vec2 cursorN() const;
 	glm::vec2 cursorDeltaN() const;
+
+	bool wrapOutOfBoundsCursor(bool allowInnerBorder = false) const;
 
 	~Window();
 

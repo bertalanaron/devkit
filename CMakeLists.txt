@@ -68,7 +68,8 @@ set(GFX_PUBLIC_SOURCES
     include/devkit/gfx/texture.h
     include/devkit/gfx/element_buffer.h
     include/devkit/gfx/font.h
-    include/devkit/gfx/vertex_sink.h)
+    include/devkit/gfx/vertex_sink.h
+    include/devkit/gfx/attachment_base.h)
 set(GFX_PRIVATE_SOURCES
     src/gfx/common.cpp
     src/gfx/vertex.cpp
@@ -83,14 +84,22 @@ set(GFX_PRIVATE_SOURCES
     src/gfx/mesh.cpp
     src/gfx/texture.cpp
     src/gfx/font.cpp
-    src/gfx/vertex_sink.cpp)
+    src/gfx/vertex_sink.cpp
+    src/gfx/attachment_base.cpp)
 # algo
 set(ALGO_PUBLIC_SOURCES
     include/devkit/algo.h
     include/devkit/algo/geometry.h
-    include/devkit/algo/draw.h)
+    include/devkit/algo/draw.h
+    include/devkit/algo/navmesh.h
+    include/devkit/algo/navmesh_pathfinding.h
+    include/devkit/algo/task_queue.h
+    include/devkit/algo/funnel.h)
 set(ALGO_PRIVATE_SOURCES
-    src/algo/geometry.cpp)
+    src/algo/geometry.cpp
+    src/algo/navmesh.cpp
+    src/algo/navmesh_pathfinding.cpp
+    src/algo/funnel.cpp)
 set(SOURCES 
     ${COMMON_PUBLIC_SOURCES}
     ${COMMON_PRIVATE_SOURCES}

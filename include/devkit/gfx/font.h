@@ -2,6 +2,8 @@
 #include <devkit/gfx/common.h>
 #include <devkit/gfx/texture.h>
 #include <devkit/gfx/vertex.h>
+#include <devkit/algo/geometry.h>
+#include <devkit/gfx/camera.h>
 
 #ifndef DK_GFX_FONT_NUMCHARS
 #define DK_GFX_FONT_NUMCHARS 128
@@ -13,6 +15,17 @@ class Font {
 public:
 	using CharVertex = Vertex<glm::vec3, glm::vec2, glm::vec4>;
 	using Character  = std::array<CharVertex, 6>;
+
+	struct TextTransfrom {
+		glm::vec3 position = glm::vec3(0, 0, 0);
+		glm::vec3 up       = geom::axis::Y;
+		glm::vec3 right    = geom::axis::X;
+
+		glm::vec2   offset; 
+		geom::bbox2 bbox;
+
+		static TextTransfrom billboard(const glm::vec3& position, const glm::vec2& offset, const Camera& camera, const glm::dvec3& up);
+	};
 
 private:
 	struct PackedCharData {
@@ -29,8 +42,10 @@ private:
 		dk::gfx::Texture& texture();
 
 		Character getCharacter(float& x, char c, const glm::vec4& color, const glm::mat4& transform) const;
-
 		std::vector<CharVertex> get(const std::string& text, const glm::vec4& color, const glm::mat4& transform) const;
+
+		Character getCharacter(float& x, char c, const glm::vec4& color, TextTransfrom& transform) const;
+		std::vector<CharVertex> get(const std::string& text, const glm::vec4& color, const TextTransfrom& transform) const;
 
 	private:
 		Font&            m_font;
