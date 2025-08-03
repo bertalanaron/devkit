@@ -355,6 +355,9 @@ bool dk::io::Window::beginFrame()
 	// Update properties
 	callPropertySetters();
 
+	// Handle events
+	m_context->handleEvents();
+
 #ifdef DK_USE_IMGUI
 	// Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
@@ -362,9 +365,6 @@ bool dk::io::Window::beginFrame()
 	ImGui::NewFrame();
 	ImGui::DockSpaceOverViewport(0, (const ImGuiViewport*)0, ImGuiDockNodeFlags_PassthruCentralNode);
 #endif
-
-	// Handle events
-	m_context->handleEvents();
 
 	return true;
 }
@@ -382,8 +382,6 @@ void dk::io::Window::endFrame()
 	// Render ImGui draw data
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-	ImGui::EndFrame();
-
 	// ImGui multi viewports support
 	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 	{
@@ -394,6 +392,7 @@ void dk::io::Window::endFrame()
 		SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
 	}
 #endif
+	ImGui::EndFrame();
 
 	// Swap buffers
 	SDL_GL_SwapWindow(m_context->m_window);

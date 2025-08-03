@@ -1,9 +1,0 @@
-planet_texture: "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data\\textures\\mars.png"
-planet_model: "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data\\models\\sphere.obj"
-
-font: "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data\\fonts\\Roboto-Black.ttf"
-font_size: 64
-
-asteroid_count: 10000
-asteroid_texture: "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data\\textures\\Asteroid2b_Color.png"
-asteroid_model: "D:\\Projects\\_Sandbox\\cpp\\devkit tdd\\examples\\_common_data\\models\\asteroid_2b_lower.obj"

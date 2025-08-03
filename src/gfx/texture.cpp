@@ -80,10 +80,11 @@ dk::gfx::Texture dk::gfx::Texture::create(unsigned width, unsigned height, int c
 
 void dk::gfx::Texture::makeActive(int unit)
 {
+    glActiveTexture(GL_TEXTURE0 + unit);
+
     initializeOrUpdate();
 
     // Bind texture
-    glActiveTexture(GL_TEXTURE0 + unit);
     glBindTexture(details::gfx::toUnderlying(m_type), m_handle);
 
     callPropertySetters(true);
@@ -97,6 +98,12 @@ dk::gfx::Texture::Type dk::gfx::Texture::type() const
 void dk::gfx::Texture::showAsImGuiImage() const
 {
     ImGui::Image((ImTextureID)(intptr_t)m_handle, ImVec2(m_size.x, m_size.y), ImVec2(0, 1), ImVec2(1, 0));
+}
+
+unsigned dk::gfx::Texture::imguiTextureId()
+{
+    initializeOrUpdate();
+    return (ImTextureID)(intptr_t)m_handle;
 }
 
 int toInternalFormat(int channels)
@@ -135,8 +142,9 @@ void dk::gfx::Texture::initializeOrUpdate()
         if (m_handle && isMipMapMinFilter(property<dk::gfx::properties::min_filter>()))
             glGenerateMipmap(details::gfx::toUnderlying(m_type));
     }
-    else
+    else {
         glBindTexture(details::gfx::toUnderlying(m_type), m_handle);
+    }
 
     if (!m_resized)
         return;

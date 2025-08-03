@@ -60,3 +60,24 @@ std::string nlohmann_extension::smart_dump(const nlohmann::json& j, int indent, 
 	smart_dump(j, oss, indent, indent_step, threshold);
 	return oss.str();
 }
+
+bool dk::common::fs::is_parent(const std::filesystem::path& path, const std::filesystem::path& parent)
+{
+	auto canon_parent = std::filesystem::weakly_canonical(parent);
+	auto canon_child  = std::filesystem::weakly_canonical(path);
+
+	auto parent_it = canon_parent.begin();
+	auto child_it  = canon_child.begin();
+
+	for (; parent_it != canon_parent.end(); ++parent_it, ++child_it) {
+		if (child_it == canon_child.end() || *parent_it != *child_it)
+			return false;
+	}
+
+	return true;
+}
+
+bool dk::common::fs::is_direct_child(const std::filesystem::path& path, const std::filesystem::path& child)
+{
+	return std::filesystem::equivalent(std::filesystem::weakly_canonical(child).parent_path(), std::filesystem::weakly_canonical(path));
+}

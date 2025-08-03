@@ -49,6 +49,8 @@ public:
 
 	void showAsImGuiImage() const;
 
+	unsigned imguiTextureId();
+
 	Texture();
 
 private:

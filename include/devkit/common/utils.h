@@ -193,6 +193,14 @@ std::array<T, N> fill_array(Fn&& generator)
 
 std::filesystem::path executable_path();
 
+namespace fs {
+
+bool is_parent(const std::filesystem::path& path, const std::filesystem::path& parent);
+
+bool is_direct_child(const std::filesystem::path& path, const std::filesystem::path& child);
+
+}
+
 } // dk::common
 
 namespace magic_enum_extension {
@@ -319,3 +327,43 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(ivec4, x, y, z, w);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(uvec4, x, y, z, w);
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(dvec4, x, y, z, w);
 }
+
+template <>
+struct std::hash<glm::dvec2> {
+	std::size_t operator()(const glm::dvec2& v) const {
+		std::size_t h1 = std::hash<glm::dvec2::value_type>{}(v.x);
+		std::size_t h2 = std::hash<glm::dvec2::value_type>{}(v.y);
+		return h1 ^ (h2 << 1);
+	}
+};
+
+template <>
+struct std::hash<glm::ivec2> {
+	std::size_t operator()(const glm::ivec2& v) const {
+		std::size_t h1 = std::hash<glm::ivec2::value_type>{}(v.x);
+		std::size_t h2 = std::hash<glm::ivec2::value_type>{}(v.y);
+		return h1 ^ (h2 << 1);
+	}
+};
+
+#define GLM_FMT(type, formatstring, ...)						     \
+	template <>                                                      \
+	struct fmt::formatter<glm::type> {                               \
+		constexpr auto parse(format_parse_context& ctx)              \
+		{ return ctx.begin(); }                                      \
+		template <typename FormatContext>                            \
+		auto format(const glm::type& v, FormatContext& ctx) const {  \
+			return format_to(ctx.out(), formatstring __VA_OPT__(,) __VA_ARGS__ ); \
+		}                                                            \
+	};                                                               \
+	/* end of macro */
+
+GLM_FMT(vec2 , "({}, {})", v.x, v.y)
+GLM_FMT(ivec2, "({}, {})", v.x, v.y)
+GLM_FMT(uvec2, "({}, {})", v.x, v.y)
+GLM_FMT(dvec2, "({}, {})", v.x, v.y)
+
+GLM_FMT(vec3 , "({}, {}, {})", v.x, v.y, v.z)
+GLM_FMT(ivec3, "({}, {}, {})", v.x, v.y, v.z)
+GLM_FMT(uvec3, "({}, {}, {})", v.x, v.y, v.z)
+GLM_FMT(dvec3, "({}, {}, {})", v.x, v.y, v.z)

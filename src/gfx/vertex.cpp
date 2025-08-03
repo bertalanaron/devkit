@@ -21,17 +21,19 @@ const dk::gfx::VertexAttributes* dk::gfx::VertexAttributes::get(std::vector<deta
 std::vector<details::gfx::GLType> toGLTypesVector(dk::gfx::VertexFlags flags)
 {
     std::vector<details::gfx::GLType> types;
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Position, glm::vec3);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color0  , glm::vec4);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color1  , glm::vec4);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color2  , glm::vec4);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color3  , glm::vec4);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color4  , glm::vec4);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color5  , glm::vec4);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color6  , glm::vec4);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color7  , glm::vec4);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(Normals , glm::vec3);
-    TRY_PUSH_VERTEX_ATTRIB_TYPE(TexCoord, glm::vec2);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Position , glm::vec3);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color0   , glm::vec4);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color1   , glm::vec4);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color2   , glm::vec4);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color3   , glm::vec4);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color4   , glm::vec4);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color5   , glm::vec4);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color6   , glm::vec4);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Color7   , glm::vec4);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Normals  , glm::vec3);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(TexCoord , glm::vec2);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Tangent  , glm::vec3);
+    TRY_PUSH_VERTEX_ATTRIB_TYPE(Bitangent, glm::vec3);
     // TODO: I'm not sure about bones
     TRY_PUSH_VERTEX_ATTRIB_TYPE(Bones   , glm::vec4);
     return types;

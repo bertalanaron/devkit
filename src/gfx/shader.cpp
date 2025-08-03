@@ -68,9 +68,15 @@ bool checkShaderCompilation(unsigned id, const char* source) {
     return true;
 }
 
-std::optional<unsigned> dk::gfx::ShaderSource::compileAs(Type type)
+void dk::gfx::ShaderSource::compileAs(Type type)
 {
-	m_updated = false;
+    m_updated = false;
+    if (m_type == Type::Unset)
+        m_type = type;
+    if (m_type != type) {
+        spdlog::error("Trying to compile {} shader as {}", magic_enum::enum_name(m_type), magic_enum::enum_name(type));
+        return;
+    }
 
     // Create shader
     unsigned id = glCreateShader(details::gfx::toUnderlying(type));
@@ -84,11 +90,41 @@ std::optional<unsigned> dk::gfx::ShaderSource::compileAs(Type type)
     glShaderSource(id, 1, (const GLchar**)&source, NULL);
     glCompileShader(id);
 
-    // Return compilation status
-    if (!checkShaderCompilation(id, m_source.c_str()))
-        return std::nullopt;
+    // Do nothing if compilation failed
+    if (!checkShaderCompilation(id, m_source.c_str())) {
+        glDeleteShader(id);
+        return;
+    }
 
-	return id;
+    ++m_version;
+    m_handle = id;
+}
+
+void dk::gfx::ShaderSource::tryDetach(Type type, unsigned program)
+{
+    GLint count = 0;
+    glGetProgramiv(program, GL_ATTACHED_SHADERS, &count);
+
+    std::vector<GLuint> shaders(count);
+    glGetAttachedShaders(program, count, nullptr, shaders.data());
+
+    for (GLuint shader : shaders) {
+        GLint type = 0;
+        glGetShaderiv(shader, GL_SHADER_TYPE, &type);
+        if (type == details::gfx::toUnderlying(m_type)) {
+            glDetachShader(program, shader);
+            return;
+        }
+    }
+}
+
+unsigned dk::gfx::ShaderSource::attach(Type type, unsigned program)
+{
+    if (m_updated)
+        compileAs(type);
+    tryDetach(type, program);
+    glAttachShader(program, m_handle);
+    return m_version;
 }
 
 bool dk::gfx::ShaderSource::updated() const
@@ -229,17 +265,7 @@ void dk::gfx::Shader::makeActive()
     if (!m_program)
         m_program = glCreateProgram();
     // Compile shaders and link if compiled successfully
-    if (sourceChangedOrUninitalized()) {
-        unsigned vertex = 0, fragment = 0, geometry = 0;
-        if (compile(vertex, fragment, geometry)) {
-            // Compilation was successful
-            detach();
-            m_vertex   = vertex;
-            m_fragment = fragment;
-            m_geometry = geometry;
-            attachAndLink();
-        }
-    }
+    compile();
     glUseProgram(m_program);
     
     callPropertySetters(true);
@@ -270,34 +296,27 @@ void dk::gfx::Shader::uniformTexture(const std::string& uniform, Texture& textur
     uniforms().set(uniform, opt_slot.value());
 }
 
-bool dk::gfx::Shader::sourceChangedOrUninitalized() const
+void dk::gfx::Shader::compile()
 {
-    return m_vertexSource->updated() || m_vertex == 0
-        || m_fragmentSource->updated() || m_fragment == 0 
-        || (m_geometrySource.has_value() && (m_geometrySource.value()->updated() || m_geometry == 0));
-}
+    // Compile and attach sources
+    unsigned vertexVersion   = m_vertexSource.lock()->attach(ShaderSource::Type::Vertex  , m_program);
+    unsigned fragmentVersion = m_fragmentSource.lock()->attach(ShaderSource::Type::Fragment, m_program);
+    unsigned geometryVersion = 0;
+    if (m_geometrySource.has_value())
+        geometryVersion = m_geometrySource.value().lock()->attach(ShaderSource::Type::Geometry, m_program);
 
-bool dk::gfx::Shader::compile(unsigned& vertex, unsigned& fragment, unsigned& geometry) const
-{
-    if (m_vertexSource->updated() || m_vertex == 0) {
-        auto maybe_vert = m_vertexSource->compileAs(dk::gfx::ShaderSource::Vertex);
-        if (!maybe_vert.has_value())
-            return false;
-        vertex = maybe_vert.value();
-    }
-    if (m_fragmentSource->updated() || m_fragment == 0) {
-        auto maybe_frag = m_fragmentSource->compileAs(dk::gfx::ShaderSource::Fragment);
-        if (!maybe_frag.has_value())
-            return false;
-        fragment = maybe_frag.value();
-    }
-    if (m_geometrySource.has_value() && (m_geometrySource.value()->updated() || m_geometry == 0)) {
-        auto maybe_geom = m_geometrySource.value()->compileAs(dk::gfx::ShaderSource::Geometry);
-        if (!maybe_geom.has_value())
-            return false;
-        geometry = maybe_geom.value();
-    }
-    return true;
+    // Check whether source version changed
+    bool shouldLink = false;
+    shouldLink |= vertexVersion   != m_vertexVersion;
+    shouldLink |= fragmentVersion != m_fragmentVersion;
+    shouldLink |= geometryVersion != m_geometryVersion;
+    m_vertexVersion   = vertexVersion;
+    m_fragmentVersion = fragmentVersion;
+    m_geometryVersion = geometryVersion;
+    
+    // Link if a source changed
+    if (shouldLink)
+        linkSources();
 }
 
 bool checkShaderLinking(unsigned int program) {
@@ -311,14 +330,8 @@ bool checkShaderLinking(unsigned int program) {
     return true;
 }
 
-void dk::gfx::Shader::attachAndLink(std::optional<std::string> fragDataLocation)
+void dk::gfx::Shader::linkSources(std::optional<std::string> fragDataLocation)
 {
-    // Attach shaders
-    glAttachShader(m_program, m_vertex);
-    glAttachShader(m_program, m_fragment);
-    if (m_geometrySource.has_value())
-        glAttachShader(m_program, m_geometry);
-
     // Connect the fragmentColor to the frame buffer memory
     if (fragDataLocation.has_value())
         glBindFragDataLocation(m_program, 0, fragDataLocation.value().c_str());
@@ -329,15 +342,15 @@ void dk::gfx::Shader::attachAndLink(std::optional<std::string> fragDataLocation)
         std::terminate();
 }
 
-void dk::gfx::Shader::detach()
-{
-    if (m_vertex != 0)
-        glDetachShader(m_program, m_vertex);
-    if (m_fragment != 0)
-        glDetachShader(m_program, m_fragment);
-    if (m_geometry != 0)
-        glDetachShader(m_program, m_geometry);
-}
+//void dk::gfx::Shader::detach()
+//{
+//    if (m_vertex != 0)
+//        glDetachShader(m_program, m_vertex);
+//    if (m_fragment != 0)
+//        glDetachShader(m_program, m_fragment);
+//    if (m_geometry != 0)
+//        glDetachShader(m_program, m_geometry);
+//}
 
 template <>
 void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::sample_shading& sampleShading)

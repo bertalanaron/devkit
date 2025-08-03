@@ -19,6 +19,8 @@
 	"yaml-cpp",
 	"nativefiledialog-extended", 
 	"ftxui",
-	"boost-dll"
+	"boost-dll",
+	"mini",
+	"poly2tri"
   ]
 }

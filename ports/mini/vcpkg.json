@@ -1,0 +1,6 @@
+{
+  "name": "mini",
+  "version": "1.0.0",
+  "description": "mINI is a tiny, header-only library for manipulating INI files.",
+  "license": "MIT"
+}

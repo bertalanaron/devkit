@@ -154,14 +154,14 @@ namespace dk::gfx {
 
 	const auto drawEdgeLoop = [&](const std::vector<glm::dvec2>& edgeLoop, const glm::vec4& color) 
 	{
-		for (int i = 0; i <= edgeLoop.size(); ++i)
+		for (int i = 0; i < edgeLoop.size(); ++i)
 			res << draw(dk::geom::edge2{ edgeLoop.at(i), edgeLoop.at((i + 1) % edgeLoop.size()) }, color, plane, right);
 	};
 
 	drawEdgeLoop(polygon.vertices, outerColor);
 
 	for (auto& hole : polygon.holes)
-		drawEdgeLoop(hole, outerColor);
+		drawEdgeLoop(hole, holeColor);
 
 	return res;
 }

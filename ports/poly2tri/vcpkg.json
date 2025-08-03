@@ -1,0 +1,6 @@
+{
+  "name": "poly2tri",
+  "version": "1.0.0",
+  "description": "2D constrained Delaunay triangulation library",
+  "license": "BSD-3-Clause"
+}
