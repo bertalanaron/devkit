@@ -7,18 +7,20 @@ namespace dk::gfx {
 class VertexAttributes;
 
 enum class VertexFlags {
-	Position = BIT(0),
-	Color0   = BIT(1),
-	Color1   = BIT(2),
-	Color2   = BIT(3),
-	Color3   = BIT(4),
-	Color4   = BIT(5),
-	Color5   = BIT(6),
-	Color6   = BIT(7),
-	Color7   = BIT(8),
-	Normals  = BIT(9),
-	TexCoord = BIT(10),
-	Bones    = BIT(11)
+	Position  = BIT(0),
+	Color0    = BIT(1),
+	Color1    = BIT(2),
+	Color2    = BIT(3),
+	Color3    = BIT(4),
+	Color4    = BIT(5),
+	Color5    = BIT(6),
+	Color6    = BIT(7),
+	Color7    = BIT(8),
+	Normals   = BIT(9),
+	TexCoord  = BIT(10),
+	Tangent   = BIT(11),
+	Bitangent = BIT(12),
+	Bones     = BIT(11)
 };
 
 VertexFlags operator|(VertexFlags lhs, VertexFlags rhs);

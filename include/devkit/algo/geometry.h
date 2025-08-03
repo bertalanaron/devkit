@@ -28,6 +28,8 @@ constexpr edge2 nullEdge2 = edge2{ glm::dvec2(0,0)  , glm::dvec2(0,0)   };
 // @brief Edge instance initialized with zeros
 constexpr edge3 nullEdge3 = edge3{ glm::dvec3(0,0,0), glm::dvec3(0,0,0) };
 
+enum class orientation { ClockWise, CounterClockWise };
+
 // @brief Projects point onto the line defined by the edge
 glm::dvec2 projectPoint(const edge2& edge, const glm::dvec2& point);
 
@@ -166,7 +168,7 @@ struct polygon2 {
 	std::vector<polygon2> triangulate() const;
 	std::vector<polygon2> convexDecomp() const;
 
-	glm::dvec2 centeroid() const;
+	glm::dvec2 centroid() const;
 	bool isPointInside(const glm::dvec2& point) const;
 };
 
@@ -177,4 +179,92 @@ struct circle2 {
 	bool intersects(const edge2& edge) const;
 };
 
+template <typename T>
+class grid2 {
+public:
+	grid2(const glm::ivec2& size)
+		: m_size(size)
+		, m_data(size.x * size.y)
+	{ }
+
+	T& at(const glm::ivec2& coord)
+	{ return m_data[coord.y * m_size.x + coord.x]; }
+
+	const T& at(const glm::ivec2& coord) const
+	{ return m_data[coord.y * m_size.x + coord.x]; }
+
+	void resize(const glm::ivec2& size)
+	{
+		std::vector<T> newData(size.x * size.y);
+		for (auto y = 0; y < std::min(m_size.y, size.y); ++y)
+			for (auto x = 0; x < std::min(m_size.x, size.x); ++x)
+				newData.at(y * size.x + x) = m_data.at(y * m_size.x + x);
+		m_size = size;
+		m_data = std::move(newData);
+	}
+
+protected:
+	glm::ivec2     m_size;
+	std::vector<T> m_data;
+};
+
+template <typename T>
+class chunked_grid2 {
+public:
+	chunked_grid2(const glm::ivec2& size, const glm::ivec2& chunkSize)
+		: m_size(size)
+		, m_data(size.x * size.y)
+		, m_chunkSize(chunkSize)
+	{ }
+
+	T& at(const glm::ivec2& coord)
+	{ return m_data[index(coord)]; }
+
+	const T& at(const glm::ivec2& coord) const
+	{ return m_data[index(coord)]; }
+
+	const glm::ivec2& size() const
+	{ return m_size; }
+
+	const glm::ivec2& chunkSize() const
+	{ return m_chunkSize; }
+
+	//void resize(const glm::ivec2& size)
+	//{
+	//	std::vector<T> newData(size.x * size.y);
+	//	for (auto y = 0; y < std::min(m_size.y, size.y); ++y)
+	//		for (auto x = 0; x < std::min(m_size.x, size.x); ++x)
+	//			newData.at(y * size.x + x) = m_data.at(y * m_size.x + x);
+	//	m_size = size;
+	//	m_data = std::move(newData);
+	//}
+
+	//void setChunkSize(const glm::ivec2& chunkSize)
+	//{ m_chunkSize = chunkSize; }
+
+	glm::ivec2 chunkOf(const glm::ivec2& coord) const
+	{ return coord / m_chunkSize; }
+
+protected:
+	glm::ivec2     m_size;
+	std::vector<T> m_data;
+	glm::ivec2     m_chunkSize;
+
+	int index(const glm::ivec2& coord) const
+	{ 
+		const auto chunkCoord = chunkOf(coord);
+		const int chunkBegIndex = chunkCoord.y * m_chunkSize.y * m_size.x + chunkCoord.x * m_chunkSize.x;
+		return chunkBegIndex + (coord.y % m_chunkSize.y * m_chunkSize.x + coord.x % m_chunkSize.x);
+	}
+};
+
 }
+
+template <>
+struct std::hash<dk::geom::edge2> {
+	std::size_t operator()(const dk::geom::edge2& p) const {
+		std::size_t h1 = std::hash<glm::dvec2>{}(p.at(0));
+		std::size_t h2 = std::hash<glm::dvec2>{}(p.at(1));
+		return h1 ^ (h2 << 1);
+	}
+};

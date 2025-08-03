@@ -21,6 +21,11 @@ dk::gfx::VertexFlags getFlags(aiMesh* mesh, const aiScene* scene)
     DK_CHECK_MESH_VERTEX_FLAG(HasVertexColors(7) , Color7);
     DK_CHECK_MESH_VERTEX_FLAG(HasNormals()       , Normals);
     DK_CHECK_MESH_VERTEX_FLAG(HasTextureCoords(0), TexCoord);
+    if (mesh->HasTangentsAndBitangents())
+    {
+        flags = flags | dk::gfx::VertexFlags::Tangent;
+        flags = flags | dk::gfx::VertexFlags::Bitangent;
+    }
     DK_CHECK_MESH_VERTEX_FLAG(HasBones()         , Bones);
     return flags;
 }
@@ -49,6 +54,16 @@ std::vector<uint8_t> getVertex(size_t completeSize, dk::gfx::VertexFlags flags, 
     if ((unsigned)flags & (unsigned)dk::gfx::VertexFlags::TexCoord) {
         reinterpret_cast<glm::vec2&>(result.at(i)) = glm::vec2(mesh->mTextureCoords[0][vertexIndex].x, mesh->mTextureCoords[0][vertexIndex].y);
         i += sizeof(glm::vec2);
+    }
+    // Tangents
+    if ((unsigned)flags & (unsigned)dk::gfx::VertexFlags::Tangent) {
+        reinterpret_cast<glm::vec3&>(result.at(i)) = glm::vec3(mesh->mTangents[vertexIndex].x, mesh->mTangents[vertexIndex].y, mesh->mTangents[vertexIndex].z);
+        i += sizeof(glm::vec3);
+    }
+    // Bitangents
+    if ((unsigned)flags & (unsigned)dk::gfx::VertexFlags::Bitangent) {
+        reinterpret_cast<glm::vec3&>(result.at(i)) = glm::vec3(mesh->mBitangents[vertexIndex].x, mesh->mBitangents[vertexIndex].y, mesh->mBitangents[vertexIndex].z);
+        i += sizeof(glm::vec3);
     }
     return result;
 }
@@ -100,7 +115,7 @@ dk::gfx::Scene dk::gfx::Scene::load(const std::string& path)
     Scene result;
 
     Assimp::Importer import;
-    const aiScene* scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);	
+    const aiScene* scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs/* | aiProcess_CalcTangentSpace*/);	
 
     if(!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) 
     {

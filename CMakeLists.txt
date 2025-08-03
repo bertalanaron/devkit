@@ -7,6 +7,7 @@ CACHE STRING "Vcpkg toolchain file")
 set(VCPKG_TARGET_TRIPLET "x64-windows"
 CACHE STRING "default vcpkg triplet")
 endif ()
+set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/ports")
 
 project(devkit LANGUAGES CXX)
 
@@ -37,7 +38,8 @@ set(COMMON_PUBLIC_SOURCES
     include/devkit/common/properties.h
     include/devkit/common/constants.h
     include/devkit/common/move_only_any.h
-    include/devkit/common/runtime_buffer.h)
+    include/devkit/common/runtime_buffer.h
+    include/devkit/common/performance_monitor.h)
 set(COMMON_PRIVATE_SOURCES
     src/common/utils.cpp)
 # io
@@ -94,12 +96,17 @@ set(ALGO_PUBLIC_SOURCES
     include/devkit/algo/navmesh.h
     include/devkit/algo/navmesh_pathfinding.h
     include/devkit/algo/task_queue.h
-    include/devkit/algo/funnel.h)
+    include/devkit/algo/funnel.h
+    include/devkit/algo/chunk_accessor.h
+    include/devkit/algo/flood_fill.h
+    include/devkit/algo/marching_squares.h)
 set(ALGO_PRIVATE_SOURCES
     src/algo/geometry.cpp
     src/algo/navmesh.cpp
     src/algo/navmesh_pathfinding.cpp
-    src/algo/funnel.cpp)
+    src/algo/funnel.cpp
+    src/algo/polypartition/polypartition.h
+    src/algo/polypartition/polypartition.cpp)
 set(SOURCES 
     ${COMMON_PUBLIC_SOURCES}
     ${COMMON_PRIVATE_SOURCES}
@@ -128,6 +135,9 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
+target_include_directories(${PROJECT_NAME} PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+)
 
 # Find dependencies
 find_package(GLEW CONFIG REQUIRED)
@@ -142,10 +152,13 @@ find_package(yaml-cpp REQUIRED)
 find_package(nfd CONFIG REQUIRED)
 find_package(ftxui CONFIG REQUIRED)
 find_package(Boost REQUIRED COMPONENTS dll)
+find_path(MINI_INCLUDE_DIRS "mini/ini.h")
+find_package(poly2tri REQUIRED)
 
 # Link dependencies
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 GLEW::GLEW assimp::assimp nfd::nfd Boost::dll)
-target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui glm::glm nlohmann_json::nlohmann_json spdlog::spdlog_header_only magic_enum::magic_enum yaml-cpp ftxui::dom ftxui::screen ftxui::component)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 GLEW::GLEW assimp::assimp nfd::nfd Boost::dll poly2tri::poly2tri)
+target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui glm::glm nlohmann_json::nlohmann_json spdlog::spdlog_header_only magic_enum::magic_enum yaml-cpp::yaml-cpp ftxui::dom ftxui::screen ftxui::component)
+target_include_directories(${PROJECT_NAME} PUBLIC ${MINI_INCLUDE_DIRS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${SDL3_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
 
 # Set compile options

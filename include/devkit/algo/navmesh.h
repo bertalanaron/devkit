@@ -6,9 +6,13 @@
 
 namespace dk::algo {
 
+enum class NavmeshDecomposition { CDT, ConvexDecomp };
+
+struct Navmesh;
+
 struct NavmeshChunk {
 public:
-	void pushPolygon(const geom::polygon2& polygon);
+	void pushPolygon(const geom::polygon2& polygon, NavmeshDecomposition decomp);
 
 	void clearPolygons();
 
@@ -18,24 +22,48 @@ public:
 
 	const geom::polygon2* polygonAtPoint(const glm::dvec2& point) const;
 
+	void calculateNodeLevels(Navmesh& navmesh);
+
+	void promoteLevel3Nodes(Navmesh& navmesh);
+
+	int nodeLevelThroughEdge(const geom::edge2& edge) const;
+
 private:
-	std::vector<geom::polygon2>          m_polygons;
-	std::unordered_map<geom::edge2, int> m_polygonLookup{};
+	std::vector<geom::polygon2>                    m_polygons;
+	std::unordered_map<geom::edge2, int>           m_polygonLookup{};
+	std::unordered_map<const geom::polygon2*, int> m_nodeLevels;
 };
 
 struct NavmeshGenerator {
 public:
 	NavmeshGenerator(int threadCount = 0);
  
-	void build(glm::ivec2 sizeInChunks, std::vector<NavmeshChunk>& chunks);
+	void build(glm::ivec2 sizeInChunks, std::vector<NavmeshChunk>& chunks, Navmesh& navmesh);
 
 private:
-	struct ChunkGenerationJob {
+	struct GenerateTask {
 		NavmeshChunk& chunk;
 		glm::ivec2    coord; 
 	};
 
-	using TaskQueue = dk::concurrency::TaskQueue<ChunkGenerationJob>;
+	struct CalcNodeLevelsTask {
+		NavmeshChunk& chunk;
+		Navmesh&      navmesh;
+	};
+
+	struct PromoteLevel3NodesTask {
+		NavmeshChunk& chunk;
+		Navmesh&      navmesh;
+	};
+
+	using Task = std::variant<GenerateTask, CalcNodeLevelsTask, PromoteLevel3NodesTask>;
+
+	//struct ChunkGenerationJob {
+	//	NavmeshChunk& chunk;
+	//	glm::ivec2    coord; 
+	//};
+
+	using TaskQueue = dk::concurrency::TaskQueue<Task>;
 
 	const bool                m_isConcurrent; ///< Indicates whether generation is multi-threaded.
 	const int                 m_threadCount;  ///< Number of worker threads.
@@ -44,10 +72,14 @@ private:
 
 	void runWorker(std::stop_token stopToken);
 
+	void calculateNodeLevels(glm::ivec2 sizeInChunks, std::vector<NavmeshChunk>& chunks, Navmesh& navmesh);
+
+	void promoteLevel3Nodes(glm::ivec2 sizeInChunks, std::vector<NavmeshChunk>& chunks, Navmesh& navmesh);
+
 protected:
 	virtual bool chunkUpdated(const glm::ivec2& chunkCoord) const = 0;
 
-	virtual void generateChunk(NavmeshChunk& chunk, const glm::ivec2& chunkCoord) const = 0;
+	virtual void generateChunk(NavmeshChunk& chunk, const glm::ivec2& chunkCoord) = 0;
 
 	virtual void buildDone() { }
 };
@@ -59,7 +91,7 @@ protected:
 * This class manages a grid-based navigation mesh, allowing efficient lookups of polygons and edges
 * for pathfinding and navigation. It extends NavmeshNavigator to provide higher-level navigation functionalities.
 */
-struct Navmesh : public NavmeshNavigator {
+struct Navmesh : public NavmeshPathfinder {
 public:
 	Navmesh(glm::ivec2 sizeInChunks, glm::ivec2 chunkSize);
 
@@ -101,6 +133,14 @@ public:
 		if (!chunk)
 			return nullptr;
 		return chunk->polygonOfEdge(edge);
+	}
+
+	int nodeLevelThroughEdge(const geom::edge2& edge) const
+	{
+		auto chunk = chunkOfEdge(edge);
+		if (!chunk)
+			return 0;
+		return chunk->nodeLevelThroughEdge(edge);
 	}
 
 	geom::edge2 nearestEdge(const glm::dvec2& point) const {
