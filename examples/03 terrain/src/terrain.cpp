@@ -62,23 +62,41 @@ void Terrain::generateChunk(dk::algo::NavmeshChunk& chunk, const glm::ivec2& chu
 		{
 			if (!m_accessor.isInbounds({ x, y }))
 				return false;
-			//const auto& cell = m_cells[m_accessor.indexOf({ x, y })];
 			return m_cells[m_accessor.indexOf({ x, y })].floodFillIsland == i + 1;
-			//return cell.height == height;
+		};
+		double minOffset = .001;
+		double offsetToHigher = minOffset;
+		double maxOffset = .5;
+		const auto marchingsquaresEdgeOffset = [this, i, height, &minOffset, &maxOffset, &offsetToHigher](int x, int y, int fromX, int fromY) -> double 
+		{
+			if (!m_accessor.isInbounds({ x, y }))
+				return minOffset;
+			if (!m_accessor.isInbounds({ fromX, fromY }))
+				return maxOffset;
+			if (m_cells[m_accessor.indexOf({ x, y })].height > m_cells[m_accessor.indexOf({ fromX, fromY })].height)
+				return maxOffset;
+			if (m_cells[m_accessor.indexOf({ x, y })].height < m_cells[m_accessor.indexOf({ fromX, fromY })].height)
+				return offsetToHigher;
+			return 1;
 		};
 
 		// Construct polygon using marching squares
 		const auto marchingSquaresOffset = chunkCoord * m_chunkSize - glm::ivec2(chunkCoord.x == 0, chunkCoord.y == 0);
 		const auto marchingSquaresSize   = m_chunkSize + glm::ivec2(chunkCoord.x == 0, chunkCoord.y == 0);
 		const auto navmeshPolygon 
-			= dk::algo::marchingSquaresConstructPolygon(marchingsquaresComp, marchingSquaresSize, marchingSquaresOffset, allowDiags, true, 0.5);
+			= dk::algo::marchingSquaresConstructPolygon(marchingsquaresComp, marchingsquaresEdgeOffset, marchingSquaresSize, marchingSquaresOffset, allowDiags, true/*, 0.5*/);
+		minOffset = .25;
+		maxOffset = .75;
+		offsetToHigher = .75;
 		auto terrainPolygon 
-			= dk::algo::marchingSquaresConstructPolygon(marchingsquaresComp, marchingSquaresSize, marchingSquaresOffset, allowDiags, true, dk::dbg::store_or<float, "offset_from_vertex">(0.75));
+			= dk::algo::marchingSquaresConstructPolygon(marchingsquaresComp, marchingsquaresEdgeOffset, marchingSquaresSize, marchingSquaresOffset, allowDiags, true/*, dk::dbg::store_or<float, "offset_from_vertex">(0.75)*/);
 
 		// Draw polygons
 		auto out = dk::dbg::store_or<dk::gfx::VertexSink*, "navmesh_poly_out">(nullptr);
-		*out << dk::gfx::draw(navmeshPolygon, DK_COLOR(0xaaaaaaff), DK_COLOR(0xaaaaaaff), dk::geom::plane::Y() + .001 + height, -dk::geom::axis::X);
+		//*out << dk::gfx::draw(navmeshPolygon, DK_COLOR(0xaaaaaaff), DK_COLOR(0xaaaaaaff), dk::geom::plane::Y() + .001 + height, -dk::geom::axis::X);
 		*out << dk::gfx::draw(terrainPolygon, dk::colors::white, dk::colors::white, dk::geom::plane::Y() + .001 + height, -dk::geom::axis::X);
+
+		dk::dbg::store<int, "current_height">() = height;
 
 		chunk.pushPolygon(navmeshPolygon, dk::algo::NavmeshDecomposition::ConvexDecomp);
 		m_views.at(chunkCoord).pushPolygon(std::move(terrainPolygon), height);
@@ -103,22 +121,43 @@ void Terrain::ChunkView::pushPolygon(dk::geom::polygon2&& polygon, int height)
 		m_mesh.push_back(Vertex(toVec3(triangle.vertices.at(0), height), dk::geom::axis::Y));
 		m_mesh.push_back(Vertex(toVec3(triangle.vertices.at(1), height), dk::geom::axis::Y));
 		m_mesh.push_back(Vertex(toVec3(triangle.vertices.at(2), height), dk::geom::axis::Y));
-
-		for (int i = 0; i <= 3; ++i) 
-		{
-			const auto edgeDirection = toVec3(triangle.vertices.at((i + 1) % 3) - triangle.vertices.at(i % 3), 0);
-			const auto normal = glm::normalize(glm::cross(edgeDirection, (glm::vec3)dk::geom::axis::Y));
-			const auto indexBegin = m_mesh.vertices().size();
-			m_mesh.vertices().push_back(Vertex(toVec3(triangle.vertices.at(i % 3), height), normal));
-			m_mesh.vertices().push_back(Vertex(toVec3(triangle.vertices.at((i + 1) % 3), height), normal));
-			m_mesh.vertices().push_back(Vertex(toVec3(triangle.vertices.at(i % 3), 0), normal));
-			m_mesh.vertices().push_back(Vertex(toVec3(triangle.vertices.at((i + 1) % 3), 0), normal));
-			m_mesh.indices().push(indexBegin + 0);
-			m_mesh.indices().push(indexBegin + 1);
-			m_mesh.indices().push(indexBegin + 2);
-			m_mesh.indices().push(indexBegin + 3);
-			m_mesh.indices().push(indexBegin + 1);
-			m_mesh.indices().push(indexBegin + 2);
-		}
 	}
+
+	const auto drawEdge = [&](const dk::geom::edge3& edge)
+	{
+		const auto direction = edge[1] - edge[0];
+		const auto normal = glm::cross(direction, dk::geom::axis::Y);
+		const auto indexBegin = m_mesh.vertices().size();
+		m_mesh.vertices().push_back(Vertex((glm::vec3)edge[0], (glm::vec3)normal));
+		m_mesh.vertices().push_back(Vertex((glm::vec3)edge[1], (glm::vec3)normal));
+		m_mesh.vertices().push_back(Vertex((glm::vec3)edge[1] + glm::vec3(0, -height, 0), (glm::vec3)normal));
+		m_mesh.vertices().push_back(Vertex((glm::vec3)edge[0] + glm::vec3(0, -height, 0), (glm::vec3)normal));
+		m_mesh.indices().push(indexBegin + 0);
+		m_mesh.indices().push(indexBegin + 1);
+		m_mesh.indices().push(indexBegin + 2);
+		m_mesh.indices().push(indexBegin + 2);
+		m_mesh.indices().push(indexBegin + 3);
+		m_mesh.indices().push(indexBegin + 0);
+	};
+
+	for (int i = 0; i < polygon.vertices.size(); ++i)
+	{
+		const dk::geom::edge3 edge = [&]{ 
+			const auto& v1 = polygon.vertices[i];
+			const auto& v2 = polygon.vertices[(i + 1) % polygon.vertices.size()];
+			return dk::geom::edge3{ glm::dvec3(v1.x, height, v1.y), glm::dvec3(v2.x, height, v2.y) };
+		}();
+		drawEdge(edge);
+	}
+	
+	for (const auto& hole : polygon.holes)
+		for (int i = 0; i < hole.size(); ++i)
+		{
+			const dk::geom::edge3 edge = [&]{ 
+				const auto& v1 = hole[i];
+				const auto& v2 = hole[(i + 1) % hole.size()];
+				return dk::geom::edge3{ glm::dvec3(v1.x, height, v1.y), glm::dvec3(v2.x, height, v2.y) };
+				}();
+			drawEdge(edge);
+		}
 }

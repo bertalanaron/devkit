@@ -71,7 +71,7 @@ public:
 		m_vOut << m_draw2d(cursor, dk::colors::aqua);
 	}
 
-	void render(Terrain& terrain, dk::gfx::FrameBuffer& frameBuffer)
+	void render(Terrain& terrain, dk::gfx::FrameBuffer& frameBuffer, dk::io::AssetManager& assets)
 	{
 		// Bind camera
 		m_shaders["rgba"].uniforms()    << m_ucCamera;
@@ -82,6 +82,8 @@ public:
 		m_vOutNavmeshGeneration.draw(m_shaders["rgba"], frameBuffer);
 
 		// Render terrain
+		m_shaders["terrain"].uniformTexture("u_grassTexture", assets.get<dk::gfx::Texture>("/textures/terrain/grass.png"));
+		m_shaders["terrain"].uniformTexture("u_rockTexture" , assets.get<dk::gfx::Texture>("/textures/terrain/rock.png"));
 		terrain.render(frameBuffer, m_shaders["terrain"]);
 
 		// Render ground
