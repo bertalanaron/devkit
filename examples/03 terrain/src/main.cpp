@@ -68,7 +68,7 @@ public:
 	Application()
 	{
 		// Parse ini file
-		auto ini = [] {
+		m_ini = [] {
 			mINI::INIFile file(dk::common::executable_path().parent_path() / "examples.ini");
 			mINI::INIStructure ini;
 			file.read(ini);
@@ -76,11 +76,10 @@ public:
 		}();
 
 		// Setup asset manager directories
-		m_assets.root(ini["data"]["path"]);
+		m_assets.root(m_ini["data"]["path"]);
 		m_assets.watch("/shaders" , true);
 		m_assets.watch("/textures", true);
 		m_assets.watch("/fonts"   , true);
-		m_assets.stopWatching("/textures");
 		// Setup types
 		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load);
 		m_assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
@@ -102,14 +101,17 @@ public:
 
 	void run()
 	{
-		m_window.open(4);
+		int msaa = (m_ini.has("graphics") && m_ini["graphics"].has("msaa") 
+			? std::stoi(m_ini["graphics"]["msaa"]) 
+			: 1);
+		m_window.open(msaa);
 		dk::gfx::backBuffer().property(dk::gfx::properties::multisampling::enabled);
 
 		m_terrainEditor = std::make_unique<TerrainEditor>(m_assets);
 		dk::dbg::store<float, "offset_from_vertex">() = .75;
 
 		while (m_window.beginFrame()) {
-			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth);
+			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, dk::colors::gray);
 			m_camera.update(m_window, m_inputs);
 			
 			// Sync assets
@@ -117,7 +119,7 @@ public:
 
 			m_terrainEditor->update(m_terrain, m_camera.camera(), m_window);
 			m_terrain.navmesh().build(m_terrain);
-			m_terrainEditor->render(m_terrain, dk::gfx::backBuffer());
+			m_terrainEditor->render(m_terrain, dk::gfx::backBuffer(), m_assets);
 
 			if (m_inputs.activated("quit"))
 				m_window.close();
@@ -130,6 +132,8 @@ public:
 	}
 
 private:
+	mINI::INIStructure             m_ini;
+
 	dk::io::AssetManager           m_assets;
 	dk::io::InputManager           m_inputs;
 	dk::io::Window                 m_window;

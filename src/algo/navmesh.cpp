@@ -13,8 +13,12 @@ void dk::algo::NavmeshChunk::pushPolygon(const dk::geom::polygon2& polygon, Navm
 		}
 	}();
 	auto out = dk::dbg::store_or<dk::gfx::VertexSink*, "navmesh_poly_out">(nullptr);
-	for (const auto& part : convexParts)
-		*out << dk::gfx::draw(part, dk::colors::gray, dk::colors::gray, dk::geom::plane::Y() + 1.001, -dk::geom::axis::X);
+	std::vector<glm::vec4> colors { DK_COLOR(0x5d0203ff), DK_COLOR(0xbc3918ff), DK_COLOR(0xfe9c44ff), DK_COLOR(0xf9f387ff), DK_COLOR(0x765d5dff) };
+	for (const auto& part : convexParts) {
+		int height = dk::dbg::store_or<int, "current_height">(1);
+		const auto& color = colors.at(height % colors.size());
+		*out << dk::gfx::draw(part, color, color, dk::geom::plane::Y() + height + .001, -dk::geom::axis::X);
+	}
 
 	// Move polygons to output and update index
 	m_polygons.reserve(m_polygons.size() + convexParts.size());
