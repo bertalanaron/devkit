@@ -1,5 +1,6 @@
 #include <devkit/io/window.h>
 #include <devkit/io/input_combination.h>
+#include <devkit/gfx/scene.h>
 
 #include <mini/ini.h>
 
@@ -77,14 +78,20 @@ public:
 
 		// Setup asset manager directories
 		m_assets.root(m_ini["data"]["path"]);
-		m_assets.watch("/shaders" , true);
-		m_assets.watch("/textures", true);
-		m_assets.watch("/fonts"   , true);
+		m_assets.watch("/shaders"   , true);
+		m_assets.watch("/textures"  , true);
+		m_assets.watch("/fonts"     , true);
+		m_assets.watch("/models/rts", true);
 		// Setup types
 		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load);
 		m_assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
+		m_assets.type<dk::gfx::Scene>("fbx", dk::gfx::Scene::load);
 		// Preload assets
 		m_assets.synchronize();
+
+		auto& diagonal = m_assets.get<dk::gfx::Scene>("/models/rts/cliff_poc.fbx")["diagonal"];
+		for (const auto& mesh : diagonal.meshes())
+			spdlog::info("{}", mesh.get().vertices().size());
 
 		// Setup window
 		m_window.properties(

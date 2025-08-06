@@ -19,6 +19,7 @@
 #include <expected>
 #include <deque>
 #include <queue>
+#include <numbers>
 
 #include <spdlog/spdlog.h>
 

@@ -17,6 +17,7 @@ private:
 	public:
 		ChunkView()
 			: m_mesh(dk::gfx::Mesh::create<Vertex>())
+			, m_cliffModelTransforms(dk::gfx::VertexBuffer::create<dk::gfx::Vertex<glm::mat4>>())
 		{ }
 
 		auto& mesh()
@@ -25,7 +26,8 @@ private:
 		void pushPolygon(dk::geom::polygon2&& polygon, int height);
 
 	private:
-		dk::gfx::Mesh m_mesh;
+		dk::gfx::Mesh         m_mesh;
+		dk::gfx::VertexBuffer m_cliffModelTransforms;
 	};
 
 public:

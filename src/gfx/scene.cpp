@@ -8,6 +8,15 @@
 
 #define DK_CHECK_MESH_VERTEX_FLAG(aiGetter, name) if (mesh->aiGetter) flags = flags | dk::gfx::VertexFlags::name;
 
+glm::mat4 toGlm(const aiMatrix4x4 & mat)
+{
+    return glm::mat4(
+        mat.a1, mat.b1, mat.c1, mat.d1,
+        mat.a2, mat.b2, mat.c2, mat.d2,
+        mat.a3, mat.b3, mat.c3, mat.d3,
+        mat.a4, mat.b4, mat.c4, mat.d4 );
+}
+
 dk::gfx::VertexFlags getFlags(aiMesh* mesh, const aiScene* scene) 
 {
     dk::gfx::VertexFlags flags = dk::gfx::VertexFlags::Position;
@@ -91,22 +100,35 @@ dk::gfx::Mesh dk::gfx::Scene::processMesh(void* _mesh, const void* _scene)
     return result;
 }
 
-void dk::gfx::Scene::processNode(void* _node, const void* _scene)
+void dk::gfx::Scene::processNode(void* _node, const void* _scene, const glm::mat4& parentTransform)
 {
     auto node  = reinterpret_cast<aiNode*>(_node);
     auto scene = reinterpret_cast<const aiScene*>(_scene);
 
-    // Process meshes
-    for(unsigned int i = 0; i < node->mNumMeshes; i++)
-    {
-        aiMesh *mesh = scene->mMeshes[node->mMeshes[i]]; 
-        m_meshes.push_back(processMesh(mesh, scene));			
+    const auto transform = parentTransform * toGlm(node->mTransformation);
+
+    bool containsMeshes = node->mNumMeshes > 0;
+    if (containsMeshes) {
+        // Create object
+        auto objectIt = m_models.emplace(node->mName.C_Str(), std::move(Model(this, transform)));
+
+        // Process meshes
+        for(unsigned int i = 0; i < node->mNumMeshes; i++)
+        {
+            // Parse mesh
+            aiMesh *mesh = scene->mMeshes[node->mMeshes[i]]; 
+            m_meshes.push_back(processMesh(mesh, scene));
+
+            // Add mesh index to object
+            int index = m_meshes.size() - 1;
+            objectIt.first->second.m_meshIndices.push_back(index);
+        }
     }
 
     // Process child nodes
     for(unsigned int i = 0; i < node->mNumChildren; i++)
     {
-        processNode(node->mChildren[i], scene);
+        processNode(node->mChildren[i], scene, transform);
     }
 }
 
@@ -124,9 +146,9 @@ dk::gfx::Scene dk::gfx::Scene::load(const std::string& path)
         return result;
     }
 
-    result.m_directory = path.substr(0, path.find_last_of('/'));
+    result.m_directory = std::filesystem::path(path).parent_path().string();
 
-    result.processNode(scene->mRootNode, scene);
+    result.processNode(scene->mRootNode, scene, glm::identity<glm::mat4>());
     
     return result;
 }

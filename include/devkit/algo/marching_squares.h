@@ -1,6 +1,5 @@
 #pragma once
 #include <devkit/algo/geometry.h>
-
 #include <devkit/algo/draw.h>
 
 namespace dk::algo {
@@ -202,6 +201,63 @@ geom::polygon2 marchingSquaresConstructPolygon(
 	}
 
 	return polygon;
+}
+
+// 0 -> axis aligned, 1 -> diagonal, 3 -> inner diagonal
+// clockwise rotation
+template <typename GetCell>
+	requires requires(GetCell getCell, int x, int y) {
+		{ getCell(x, y) } -> std::same_as<bool>;
+}
+std::vector<std::pair<glm::mat4, int>> marchingSquaresConstructInstances(
+	GetCell    getCell,
+	glm::ivec2 size, 
+	glm::ivec2 offset         = { 0, 0 },
+	bool       allowDiagonals = false)
+{
+	std::vector<std::pair<glm::mat4, int>> result;
+
+	// Lookup table for the Marching Squares algorithm
+	// { first instance, optional second instance }
+	// { { instance type, rotation }, { } }              // clockwise rotation
+	static constexpr int s_marchingSquaresLookupAllowDiags[16][4] = {
+		{ -1, -1, -1, -1 }, {  1,  0, -1, -1 }, {  1,  3, -1, -1 }, {  0,  0, -1, -1 },
+		{  1,  2, -1, -1 }, {  2,  0,  2,  2 }, {  0,  3, -1, -1 }, {  2,  0, -1, -1 },
+		{  1,  1, -1, -1 }, {  0,  1, -1, -1 }, {  2,  1,  2,  3 }, {  2,  1, -1, -1 },
+		{  0,  2, -1, -1 }, {  1,  2, -1, -1 }, {  1,  3, -1, -1 }, { -1, -1, -1, -1 }
+	};
+	static constexpr int s_marchingSquaresLookupDontAllowDiags[16][4] = {
+		{ -1, -1, -1, -1 }, {  1,  0, -1, -1 }, {  1,  3, -1, -1 }, {  0,  0, -1, -1 },
+		{  1,  2, -1, -1 }, {  1,  0,  1,  2 }, {  0,  3, -1, -1 }, {  2,  0, -1, -1 },
+		{  1,  1, -1, -1 }, {  0,  1, -1, -1 }, {  1,  1,  1,  3 }, {  2,  1, -1, -1 },
+		{  0,  2, -1, -1 }, {  1,  2, -1, -1 }, {  1,  3, -1, -1 }, { -1, -1, -1, -1 }
+	};
+	const auto& lookup = (allowDiagonals) 
+		? s_marchingSquaresLookupAllowDiags
+		: s_marchingSquaresLookupDontAllowDiags;
+
+	// Construct instances and transforms
+	for (int y = offset.y; y < size.y + offset.y; ++y) for (int x = offset.x; x < size.x + offset.x; ++x) {
+		int index = 0;
+		if (getCell(x + 0, y + 0)) index |= 1;
+		if (getCell(x + 1, y + 0)) index |= 2;
+		if (getCell(x + 1, y + 1)) index |= 4;
+		if (getCell(x + 0, y + 1)) index |= 8;
+
+		for (int i = 0; i < 2; ++i) {
+			if (lookup[index][i * 2] == -1) 
+				continue;
+
+			const auto& instanceId = lookup[index][i * 2 + 0];
+			const auto& rotationId = lookup[index][i * 2 + 1];
+
+			result.emplace_back(
+				glm::translate(glm::vec3(x, 0, y)) * glm::rotate(std::numbers::pi * (double)rotationId, geom::axis::Y), 
+				instanceId);
+		}
+	}
+
+	return result;
 }
 
 } // dk::algo
