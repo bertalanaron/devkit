@@ -5,7 +5,9 @@ set(SOURCES
     src/terrain.h
     src/terrain_editor.h
     src/terrain.cpp
-    src/terrain_editor.cpp)
+    src/terrain_editor.cpp
+    src/view.h
+    src/rts_camera_controller.h)
 source_group("src" FILES ${SOURCES})
 	
 create_example(03_terrain ${SOURCES})

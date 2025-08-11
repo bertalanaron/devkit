@@ -11,19 +11,26 @@ public:
 	// Flips y coord
 	glm::vec2 normalize(const glm::ivec2& pixels) const;
 
+	double aspectRatio() const;
+
 	const auto& size() const
 	{ return m_size; }
 
 	const auto& offset() const
 	{ return m_offset; }
 
-	Viewport(const glm::ivec2& size, const glm::ivec2& offset);
+	Viewport() = default;
+	Viewport(const glm::ivec2& size);
+	Viewport(const glm::ivec2& size, const glm::ivec2& offset, int offsetTop);
 
 	bool wrapPoint(glm::ivec2& point, int border = 0) const;
 
+	glm::ivec2 nearEdges(const glm::ivec2& point) const;
+
 private:
-	glm::ivec2 m_size;
-	glm::ivec2 m_offset;
+	glm::ivec2 m_size      = { 0, 0 };
+	glm::ivec2 m_offset    = { 0, 0 };
+	int        m_offsetTop = 0;
 };
 
 }

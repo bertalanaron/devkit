@@ -10,6 +10,9 @@ public:
 	gfx::Viewport& viewport()
 	{ return m_viewport; }
 
+	const gfx::Viewport& viewport() const
+	{ return m_viewport; }
+
 	//@brief Binds input state, activates viewport
 	void makeCurrent() const;
 
@@ -19,18 +22,24 @@ public:
 	glm::ivec2 cursorDeltaP() const;
 	glm::vec2 cursorDeltaN() const;
 
+	double aspectRatio() const;
+
 	template <typename _Rep>
 	const auto dt() const
-	{ return std::chrono::duration_cast<_Rep>(m_dt); }
+	{ return std::chrono::duration<double>(std::chrono::duration_cast<_Rep>(m_dt)).count(); }
 
-	Frame(const Frame&        previous, 
-		const gfx::Viewport&  viewport, 
-		const io::InputState& inputState, 
-		const glm::ivec2&     cursor);
+	void warpCursor(const glm::ivec2& destination) const;
+
+	Frame(const Frame&          previous, 
+		  void*                 producerContext,
+		  const gfx::Viewport&  viewport,
+		  const io::InputState& inputState,
+		  const glm::ivec2&     cursor);
 
 	Frame();
 
 private:
+	void*          m_producerContext = nullptr;
 	gfx::Viewport  m_viewport;
 
 	io::InputState m_inputState;
@@ -39,8 +48,8 @@ private:
 	glm::ivec2     m_cursor;
 	glm::ivec2     m_prevCursor;
 
-	std::chrono::system_clock::time_point       m_t;
-	std::chrono::duration<std::chrono::seconds> m_dt;
+	std::chrono::system_clock::time_point m_t;
+	std::chrono::seconds                  m_dt;
 };
 
 } // dk::io
