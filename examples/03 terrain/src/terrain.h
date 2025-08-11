@@ -33,8 +33,8 @@ private:
 public:
 	Terrain()
 		: NavmeshGenerator(std::thread::hardware_concurrency())
-		, m_gridSize(glm::ivec2(512, 512))
-		, m_chunkSize(glm::ivec2(32, 32))
+		, m_gridSize(glm::ivec2(64, 64))
+		, m_chunkSize(glm::ivec2(16, 16))
 		, m_accessor(&m_chunkSize, &m_gridSize)
 		, m_cells(m_gridSize.x * m_gridSize.y)
 		, m_navmesh(m_accessor.sizeInChunks(), m_chunkSize)

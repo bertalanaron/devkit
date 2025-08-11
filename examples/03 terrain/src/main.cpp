@@ -1,6 +1,7 @@
 #include <devkit/io/window.h>
 #include <devkit/io/input_combination.h>
 #include <devkit/gfx/scene.h>
+#include <devkit/io/frame.h>
 
 #include <mini/ini.h>
 
@@ -8,6 +9,55 @@
 
 #include "terrain.h"
 #include "terrain_editor.h"
+
+// TODO: 
+//class View {
+//public:
+//	void update(auto& cameraController)
+//	{
+//		cameraController(m_camera);
+//		m_uc.set("u_camera.VP"       , m_camera.P() * m_camera.V());
+//		m_uc.set("u_camera.position" , m_camera.position);
+//		m_uc.set("u_camera.direction", m_camera.lookat - m_camera.position);
+//		m_uc.set("u_viewport.size"   , m_viewport.size());
+//		m_uc.set("u_viewport.cursor" , m_viewport.cursorN());
+//	}
+//
+//	glm::dvec3 cursor(const dk::geom::plane& plane)
+//	{
+//		return dk::geom::intersection(m_camera.castRay(m_viewport.cursorN()), plane);
+//	}
+//
+//private:
+//	dk::gfx::Viewport*         m_viewport;
+//	dk::gfx::Camera            m_camera;
+//	dk::gfx::UniformCollection m_uc;
+//};
+
+class UIView {
+public:
+	void update(auto& cameraController)
+	{
+		cameraController(m_camera);
+
+		m_uc.set("u_camera.VP"       , m_camera.P() * m_camera.V());
+		m_uc.set("u_camera.position" , m_camera.position);
+		m_uc.set("u_camera.direction", m_camera.lookat - m_camera.position);
+
+		m_uc.set("u_viewport.size"   , (glm::vec2)m_window.property<dk::io::properties::window::size>());
+		m_uc.set("u_viewport.cursor" , m_window.cursorN());
+	}
+
+	glm::dvec3 cursor(const dk::geom::plane& plane) const
+	{
+		return dk::geom::intersection(m_camera.castRay(m_window.cursorN()), plane);
+	}
+
+private:
+	dk::io::Window&            m_window;
+	dk::gfx::Camera            m_camera;
+	dk::gfx::UniformCollection m_uc;
+};
 
 class RtsCamera {
 public:
@@ -61,7 +111,8 @@ public:
 	{ return m_camera; }
 
 private:
-	dk::gfx::Camera m_camera;
+	dk::gfx::Camera            m_camera;
+	dk::gfx::UniformCollection m_uc;
 };
 
 class Application {
@@ -79,11 +130,12 @@ public:
 		// Setup asset manager directories
 		m_assets.root(m_ini["data"]["path"]);
 		m_assets.watch("/shaders"   , true);
-		m_assets.watch("/textures"  , true);
+		m_assets.watch("/textures"  , false);
+		m_assets.watch("/textures/terrain", false);
 		m_assets.watch("/fonts"     , true);
 		m_assets.watch("/models/rts", true);
 		// Setup types
-		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load);
+		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load, std::nullopt, std::nullopt, dk::io::AssetManager::Async);
 		m_assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
 		m_assets.type<dk::gfx::Scene>("fbx", dk::gfx::Scene::load);
 		// Preload assets
@@ -117,7 +169,8 @@ public:
 		m_terrainEditor = std::make_unique<TerrainEditor>(m_assets);
 		dk::dbg::store<float, "offset_from_vertex">() = .75;
 
-		while (m_window.beginFrame()) {
+		while (m_window.isOpen()) {
+			const auto& frame = m_window.beginFrame();
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, dk::colors::gray);
 			m_camera.update(m_window, m_inputs);
 			
