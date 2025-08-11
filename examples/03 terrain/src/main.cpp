@@ -7,113 +7,12 @@
 
 #include <imgui.h>
 
+#include "view.h"
+#include "rts_camera_controller.h"
 #include "terrain.h"
 #include "terrain_editor.h"
 
 // TODO: 
-//class View {
-//public:
-//	void update(auto& cameraController)
-//	{
-//		cameraController(m_camera);
-//		m_uc.set("u_camera.VP"       , m_camera.P() * m_camera.V());
-//		m_uc.set("u_camera.position" , m_camera.position);
-//		m_uc.set("u_camera.direction", m_camera.lookat - m_camera.position);
-//		m_uc.set("u_viewport.size"   , m_viewport.size());
-//		m_uc.set("u_viewport.cursor" , m_viewport.cursorN());
-//	}
-//
-//	glm::dvec3 cursor(const dk::geom::plane& plane)
-//	{
-//		return dk::geom::intersection(m_camera.castRay(m_viewport.cursorN()), plane);
-//	}
-//
-//private:
-//	dk::gfx::Viewport*         m_viewport;
-//	dk::gfx::Camera            m_camera;
-//	dk::gfx::UniformCollection m_uc;
-//};
-
-class UIView {
-public:
-	void update(auto& cameraController)
-	{
-		cameraController(m_camera);
-
-		m_uc.set("u_camera.VP"       , m_camera.P() * m_camera.V());
-		m_uc.set("u_camera.position" , m_camera.position);
-		m_uc.set("u_camera.direction", m_camera.lookat - m_camera.position);
-
-		m_uc.set("u_viewport.size"   , (glm::vec2)m_window.property<dk::io::properties::window::size>());
-		m_uc.set("u_viewport.cursor" , m_window.cursorN());
-	}
-
-	glm::dvec3 cursor(const dk::geom::plane& plane) const
-	{
-		return dk::geom::intersection(m_camera.castRay(m_window.cursorN()), plane);
-	}
-
-private:
-	dk::io::Window&            m_window;
-	dk::gfx::Camera            m_camera;
-	dk::gfx::UniformCollection m_uc;
-};
-
-class RtsCamera {
-public:
-	RtsCamera()
-	{
-		m_camera.position = glm::vec3(-2, 5, -2);
-	}
-
-	void update(dk::io::Window& window, dk::io::InputManager& inputs) 
-	{
-		// Tilt
-		if (inputs.active("tilt") && !dk::io::button::middle)
-			dk::gfx::Camera::Orbit::tilt(m_camera, window.cursorDeltaP() * glm::vec2(.004, .004));
-	
-		// Shift
-		const double shiftRate = 2.;
-		static int   disableShift = 0;
-		// When the cursor is at the edge of the screen
-		glm::dvec2 edgeDirection(0, 0);
-		if (window.cursorP().x == 0) edgeDirection.x =  1.;
-		if (window.cursorP().y == 0) edgeDirection.y = -1.;
-		if (window.cursorP().x == window.property<dk::io::properties::window::size>().x - 1) edgeDirection.x = -1.;
-		if (window.cursorP().y == window.property<dk::io::properties::window::size>().y - 1) edgeDirection.y =  1.;
-		const glm::dvec3 right   = glm::normalize(glm::cross(dk::geom::axis::Y, glm::dvec3(m_camera.lookat - m_camera.position)));
-		const glm::dvec3 forward = glm::normalize(glm::cross(dk::geom::axis::Y, right));
-		const glm::dvec3 direction = right * (double)edgeDirection.x + forward * (double)edgeDirection.y;
-		glm::dvec3 shift = direction * window.dtSeconds() * shiftRate * (double)glm::length(m_camera.lookat - m_camera.position);
-		// With the middle mouse button
-		if (dk::io::button::middle) {
-			auto cursorProjection = dk::geom::intersection(m_camera.castRay(window.cursorN()), dk::geom::plane::Y());
-			auto prevCursorProjection = dk::geom::intersection(m_camera.castRay(window.cursorN() - window.cursorDeltaN()), dk::geom::plane::Y());
-			shift = prevCursorProjection - cursorProjection;
-			// Wrap cursor
-			disableShift = window.wrapOutOfBoundsCursor(true) ? 3 : disableShift;
-		}
-		// Apply shift
-		if (disableShift = std::max(0, disableShift - 1); !disableShift)
-			dk::gfx::Camera::Orbit::shift(m_camera, shift);
-	
-		// Zoom
-		if (dk::io::wheel::up && !dk::io::button::middle)
-			dk::gfx::Camera::Orbit::zoom(m_camera, 0.9);
-		if (dk::io::wheel::down && !dk::io::button::middle)
-			dk::gfx::Camera::Orbit::zoom(m_camera, 1.1);
-	
-		// Set camera aspect ratio
-		m_camera.asp = dk::gfx::backBuffer().aspectRatio();
-	}
-
-	const auto& camera() const
-	{ return m_camera; }
-
-private:
-	dk::gfx::Camera            m_camera;
-	dk::gfx::UniformCollection m_uc;
-};
 
 class Application {
 public:
@@ -153,7 +52,8 @@ public:
 			dk::io::properties::window::size(1280, 720));
 
 		// Setup inputs
-		m_inputs.define("tilt", dk::io::modkey::alt);
+		m_cameraController.inputs.define("tilt", dk::io::modkey::alt);
+		m_cameraController.inputs.define("shift", dk::io::key::x);
 		m_inputs.define("quit", dk::io::key::esc);
 		m_inputs.define("toggle_fullscreen", dk::io::key::f);
 	}
@@ -172,14 +72,23 @@ public:
 		while (m_window.isOpen()) {
 			const auto& frame = m_window.beginFrame();
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, dk::colors::gray);
-			m_camera.update(m_window, m_inputs);
+			m_mainView.update(frame, m_cameraController);
 			
 			// Sync assets
 			m_assets.synchronize();
 
-			m_terrainEditor->update(m_terrain, m_camera.camera(), m_window);
+			ImGui::ShowDemoWindow();
+
+			if (ImGui::Begin("viewport"))
+			{
+				const auto text = std::format("offset.x={} offset.y={}", frame.viewport().offset().x, frame.viewport().offset().y);
+				ImGui::Text(text.c_str());
+				ImGui::End();
+			}
+
+			m_terrainEditor->update(m_terrain, m_mainView);
 			m_terrain.navmesh().build(m_terrain);
-			m_terrainEditor->render(m_terrain, dk::gfx::backBuffer(), m_assets);
+			m_terrainEditor->render(m_terrain, dk::gfx::backBuffer(), m_assets, m_mainView);
 
 			if (m_inputs.activated("quit"))
 				m_window.close();
@@ -197,13 +106,16 @@ private:
 	dk::io::AssetManager           m_assets;
 	dk::io::InputManager           m_inputs;
 	dk::io::Window                 m_window;
-	RtsCamera                      m_camera;
+	View                           m_mainView;
+	RTSCameraController            m_cameraController;
 
 	Terrain                        m_terrain;
 	std::unique_ptr<TerrainEditor> m_terrainEditor;
 };
 
 int main(void) {
+	spdlog::set_level(spdlog::level::trace);
+
 	Application application;
 	application.run();
 

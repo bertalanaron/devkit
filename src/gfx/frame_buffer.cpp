@@ -80,12 +80,6 @@ void dk::gfx::FrameBuffer::attachDepth(AttachmentBase& target)
 	m_depthAttachment = &target;
 }
 
-void dk::gfx::FrameBuffer::resize(const glm::ivec2& size, int colorAttachment)
-{
-	auto& color = m_colorAttachments.at(colorAttachment);
-	color->resize(size);
-}
-
 void dk::gfx::FrameBuffer::clear(ClearMask mask, const glm::vec4& color)
 {
 	makeActive();
@@ -112,9 +106,14 @@ void dk::gfx::FrameBuffer::render(Shader& shader, ElementBuffer& elementBuffer, 
 		: glDrawElementsInstanced(details::gfx::toUnderlying(primitive), elementBuffer.count(), GL_UNSIGNED_INT, 0, count);
 }
 
+void dk::gfx::FrameBuffer::setViewport(const gfx::Viewport& viewport)
+{
+	m_viewport = viewport;
+}
+
 float dk::gfx::FrameBuffer::aspectRatio() const
 {
-	return m_colorAttachments[0]->aspectRatio();
+	return m_viewport.value_or(Viewport(m_colorAttachments[0]->size())).aspectRatio();
 }
 
 void dk::gfx::FrameBuffer::initializeOrUpdate()
@@ -129,7 +128,8 @@ void dk::gfx::FrameBuffer::makeActive()
 	initializeOrUpdate();
 	glBindFramebuffer(GL_FRAMEBUFFER, (m_handle == -1) ? 0 : m_handle);
 
-	glViewport(0, 0, m_colorAttachments[0]->size().x, m_colorAttachments[0]->size().y);
+	const Viewport viewport = m_viewport.value_or(Viewport(m_colorAttachments[0]->size()));
+	viewport.makeActive();
 	callPropertySetters(true);
 	
 	// Set color attachments
@@ -167,11 +167,6 @@ dk::gfx::FrameBuffer& dk::gfx::backBuffer()
 {
 	static FrameBuffer c_backBuffer(FrameBuffer::backbuffer_t{});
 	return c_backBuffer;
-}
-
-void details::gfx::setBackbufferViewport(const glm::ivec2& size)
-{
-	dk::gfx::backBuffer().resize(size);
 }
 
 template <>

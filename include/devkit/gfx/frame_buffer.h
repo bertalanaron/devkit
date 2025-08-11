@@ -6,6 +6,7 @@
 #include <devkit/gfx/element_buffer.h>
 #include <devkit/gfx/mesh.h>
 #include <devkit/gfx/texture.h>
+#include <devkit/gfx/viewport.h>
 
 namespace dk::gfx::properties {
 enum class multisampling { disabled, enabled };
@@ -19,8 +20,6 @@ using FrameBufferProperties = dk::common::DeferredPropertyCollection<D,
 	dk::gfx::properties::depth_test,
 	dk::gfx::properties::depth_func,
 	dk::gfx::properties::multisampling>;
-
-void setBackbufferViewport(const glm::ivec2& size); 
 
 }
 
@@ -41,6 +40,7 @@ public:
 	FrameBuffer();
 	FrameBuffer(FrameBuffer&&) = default;
 
+	// @brief When attaching to 0, viewport is automatically set to texture size
 	void attachColor(AttachmentBase& target, int attachmentIndex = 0);
 
 	opt_texture_ref_t color(int attachmentIndex = 0);
@@ -50,9 +50,12 @@ public:
 
 	opt_texture_ref_t depth();
 
-	// @brief Resizes the color and depth buffers (only resizes depth buffer when colorAttachmentIndex is 0)
-	void resize(const glm::ivec2& size, int colorAttachment = 0);
+	// @brief Set size and offset of viewport. 
+	// When not set, viewport size is the size of the first attachment. 
+	void setViewport(const gfx::Viewport& viewport);
 
+	float aspectRatio() const;
+	
 	// Has to be run on the render thread.
 	void clear(ClearMask mask, const glm::vec4& color = dk::colors::black);
 
@@ -64,10 +67,6 @@ public:
 	// Has to be run on the render thread.
 	void render(Shader& shader, ElementBuffer& elementBuffer, Primitive primitive, unsigned count = 1);
 
-	float aspectRatio() const;
-
-	void makeActive();
-
 private:
 	unsigned m_handle = 0;
 
@@ -75,12 +74,15 @@ private:
 	std::vector<AttachmentBase*> m_colorAttachments;
 	AttachmentBase*              m_depthAttachment;
 
+	std::optional<Viewport>      m_viewport;
+
 	FrameBuffer(backbuffer_t);
 
 	void initializeOrUpdate();
 
+	void makeActive();
+
 	friend FrameBuffer& backBuffer();
-	friend void details::gfx::setBackbufferViewport(const glm::ivec2& size); 
 };
 
 FrameBuffer& backBuffer();

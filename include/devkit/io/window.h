@@ -60,8 +60,7 @@ public:
 	const Frame& beginFrame();
 	void endFrame();
 
-	// @brief Activates the windows context for graphics (gl context) 
-	void useContext();
+	void makeCurrent();
 
 	~Window();
 
@@ -70,6 +69,11 @@ private:
 
 private:
 	std::unique_ptr<Context> m_context;
+
+	// @brief Activates the windows context for graphics (gl context) 
+	void useContext();
+	// backbuffer, properties, etc
+	void updateState();
 
 	template <typename D, typename E>
 	friend void details::common::setProperty(D&, const E&);

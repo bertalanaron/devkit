@@ -4,12 +4,20 @@
 
 void dk::gfx::Viewport::makeActive() const
 {
+	//spdlog::trace("[gfx] glViewport({},{},{},{})", 
+	//	m_offset.x, m_offset.y, m_size.x, m_size.y);
 	glViewport(m_offset.x, m_offset.y, m_size.x, m_size.y);
 }
 
-dk::gfx::Viewport::Viewport(const glm::ivec2& size, const glm::ivec2& offset)
+dk::gfx::Viewport::Viewport(const glm::ivec2& size)
+	: m_size(size)
+	, m_offset(0, 0)
+{ }
+
+dk::gfx::Viewport::Viewport(const glm::ivec2& size, const glm::ivec2& offset, int offsetTop)
 	: m_size(size)
 	, m_offset(offset)
+	, m_offsetTop(offsetTop)
 { }
 
 bool dk::gfx::Viewport::wrapPoint(glm::ivec2& point, int border) const
@@ -26,8 +34,19 @@ bool dk::gfx::Viewport::wrapPoint(glm::ivec2& point, int border) const
 	return tmp != point;
 }
 
+glm::ivec2 dk::gfx::Viewport::nearEdges(const glm::ivec2& point) const
+{
+	DK_ASSERT((false, "implement this"));
+	return glm::ivec2();
+}
+
 glm::vec2 dk::gfx::Viewport::normalize(const glm::ivec2& pixels) const
 {
-	return glm::vec2((float)pixels.x / (float)m_size.x, 
-		             1 - (float)pixels.y / (float)m_size.y);
+	return glm::vec2((float)(pixels.x - m_offset.x) / (float)m_size.x,
+		             1 - (float)(pixels.y - m_offsetTop) / (float)m_size.y);
+}
+
+double dk::gfx::Viewport::aspectRatio() const
+{
+	return (double)m_size.x / (double)m_size.y;
 }

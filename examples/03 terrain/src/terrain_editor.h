@@ -10,6 +10,7 @@
 #include <imgui.h>
 
 #include "terrain.h"
+#include "view.h"
 
 class TerrainEditor {
 public:
@@ -36,13 +37,9 @@ public:
 		m_inputs.define("load"          , dk::io::modkey::ctrl + dk::io::key::l);
 	}
 
-	void update(Terrain& terrain, const dk::gfx::Camera& camera, const dk::io::Window& window)
+	void update(Terrain& terrain, View& view)
 	{
-		m_ucCamera.bind("u_camera.position" , [&] { return camera.position; });
-		m_ucCamera.bind("u_camera.direction", [&] { return camera.lookat - camera.position; });
-		m_ucCamera.bind("u_camera.VP"       , [&] { return camera.P() * camera.V(); });
-
-		const auto cursor = dk::geom::xz(dk::geom::intersection(camera.castRay(window.cursorN()), dk::geom::plane::Y()));
+		const auto cursor = dk::geom::xz(dk::geom::intersection(view.cursorRay(), dk::geom::plane::Y()));
 		
 		m_vOut << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::X}, dk::colors::red)
 			   << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::Y}, dk::colors::lime)
@@ -71,11 +68,11 @@ public:
 		m_vOut << m_draw2d(cursor, dk::colors::aqua);
 	}
 
-	void render(Terrain& terrain, dk::gfx::FrameBuffer& frameBuffer, dk::io::AssetManager& assets)
+	void render(Terrain& terrain, dk::gfx::FrameBuffer& frameBuffer, dk::io::AssetManager& assets, View& view)
 	{
 		// Bind camera
-		m_shaders["rgba"].uniforms()    << m_ucCamera;
-		m_shaders["terrain"].uniforms() << m_ucCamera;
+		m_shaders["rgba"].uniforms()    << view.uniforms();
+		m_shaders["terrain"].uniforms() << view.uniforms();
 
 		// Render debug data
 		m_vOut.flush(m_shaders["rgba"], frameBuffer);
@@ -108,7 +105,6 @@ private:
 	dk::gfx::VertexSink        m_vOutNavmeshGeneration;
 	dk::gfx::drawer2d          m_draw2d;
 	dk::gfx::ShaderCollection  m_shaders;
-	dk::gfx::UniformCollection m_ucCamera;
 	dk::io::InputManager       m_inputs;
 
 	int m_hightAtCursor = 0;

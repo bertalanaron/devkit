@@ -28,6 +28,18 @@
 using WindowHandle = HWND;
 #endif
 
+struct FrameBuilder {
+	SDL_Window*        window;
+	dk::gfx::Viewport  viewport;
+	dk::io::InputState inputState;
+	glm::vec2          cursor;
+	
+	dk::io::Frame operator()(const dk::io::Frame& previous) const
+	{
+		return dk::io::Frame(previous, window, viewport, inputState, cursor);
+	}
+};
+
 struct dk::io::Window::Context {
 	Window*            m_owner;
 	SDL_Window*        m_window;
@@ -42,19 +54,7 @@ struct dk::io::Window::Context {
 #endif
 
 	io::Frame          m_currentFrame;
-
-	struct CursorWrapContext {
-		bool wrappedLeft   = false;
-		bool wrappedRight  = false;
-		bool wrappedTop    = false;
-		bool wrappedBottom = false;
-	};
-
-	gfx::Viewport     m_viewport;
-
-	glm::vec2         m_cursorCurrentPos;
-	glm::vec2         m_cursorPreviousPos;
-	CursorWrapContext m_cursorWrapContext;
+	FrameBuilder       m_frameBuilder;
 
 	details::io::SDL_StaticContext* _m_staticContext;
 
@@ -239,6 +239,7 @@ void dk::io::Window::Context::initialize(const std::string& title, const glm::iv
 	// Create window
 	m_window = SDL_CreateWindow(title.c_str(), /*SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,*/
 		size.x, size.y, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL /*| SDL_RENDERER_ACCELERATED*/);
+	m_frameBuilder.window = m_window;
 	m_isOpen = true;
 	// Get window id and insert window to global collection
 	m_id = SDL_GetWindowID(m_window);
@@ -307,9 +308,12 @@ void dk::io::Window::Context::handleEvents()
 		details::io::SDL_StaticContext::instance().handleEvents();
 	m_lastTick = details::io::SDL_StaticContext::instance().ticks();
 
+	// Get input state
+	m_frameBuilder.inputState = details::io::SDL_StaticContext::instance().inputState();
 	// Update cursor state
-	m_cursorPreviousPos = m_cursorCurrentPos;
-	SDL_GetMouseState(&m_cursorCurrentPos.x, &m_cursorCurrentPos.y);
+	SDL_GetMouseState(&m_frameBuilder.cursor.x, &m_frameBuilder.cursor.y);
+	// Prepare viewport
+	prepareViewport();
 }
 
 void dk::io::Window::Context::handleEvent(SDL_WindowEvent event)
@@ -340,16 +344,50 @@ void dk::io::Window::Context::close()
 	spdlog::trace("Closed window: {}", (int)m_id); 
 }
 
+ImRect GetCentralNodeRect(ImGuiDockNode* node)
+{
+	// If this is a leaf node
+	if (node->IsLeafNode())
+	{
+		// Central node: no window docked in it
+		if ((node->LocalFlags & ImGuiDockNodeFlags_CentralNode) != 0)
+			return ImRect(node->Pos, ImVec2(node->Pos.x + node->Size.x, node->Pos.y + node->Size.y));
+		else
+			return ImRect(FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX); // Invalid rect
+	}
+
+	ImRect rect(FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX);
+	for (int i = 0; i < IM_ARRAYSIZE(node->ChildNodes); i++)
+	{
+		if (node->ChildNodes[i])
+		{
+			ImRect childRect = GetCentralNodeRect(node->ChildNodes[i]);
+			if (childRect.Min.x < rect.Min.x) rect.Min.x = childRect.Min.x;
+			if (childRect.Min.y < rect.Min.y) rect.Min.y = childRect.Min.y;
+			if (childRect.Max.x > rect.Max.x) rect.Max.x = childRect.Max.x;
+			if (childRect.Max.y > rect.Max.y) rect.Max.y = childRect.Max.y;
+		}
+	}
+	return rect;
+}
+
 void dk::io::Window::Context::prepareViewport()
 {
-	
 	ImGuiDockNode* node = ImGui::DockBuilderGetNode(m_imguiDockspaceId);
 	if (!node)
 		return;
 
-	ImVec2 size = node->Size;  // Width/Height in pixels
-	ImVec2 pos  = node->Pos;   // Top-left in screen space
-	m_viewport = dk::gfx::Viewport(glm::ivec2(size.x, size.y), glm::ivec2(pos.x, pos.y));
+	ImRect centralRect = GetCentralNodeRect(node);
+	if (centralRect.Min.x > centralRect.Max.x) // Invalid rect
+		return;
+
+	const ImVec2 size = ImVec2(centralRect.GetWidth(), centralRect.GetHeight());  // Width/Height in pixels
+	const ImVec2 pos  = ImVec2(centralRect.Min.x - node->Pos.x, centralRect.Min.y - node->Pos.y);   // Top-left in screen space
+	const auto windowSizeY = m_owner->property<dk::io::properties::window::size>().y;
+
+	m_frameBuilder.viewport = dk::gfx::Viewport(
+		glm::ivec2(size.x, size.y), 
+		glm::ivec2(pos.x, windowSizeY - (pos.y + size.y)), pos.y);
 }
 
 void dk::io::Window::open(int msaa)
@@ -374,12 +412,6 @@ const dk::io::Frame& dk::io::Window::beginFrame()
 	// Use window's SDL, OpenGL and ImGUI context
 	useContext();
 
-	// Update properties
-	callPropertySetters();
-
-	// Handle events
-	m_context->handleEvents();
-
 #ifdef DK_USE_IMGUI
 	// Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
@@ -388,11 +420,16 @@ const dk::io::Frame& dk::io::Window::beginFrame()
 	m_context->m_imguiDockspaceId = ImGui::DockSpaceOverViewport(0, (const ImGuiViewport*)0, ImGuiDockNodeFlags_PassthruCentralNode);
 #endif
 
-	m_context->m_currentFrame = dk::io::Frame(m_context->m_currentFrame, 
-		                                      m_context->m_viewport, 
-		                                      m_context->_m_staticContext->inputState(),
-		                                      m_context->m_cursorCurrentPos);
+	// Handle events
+	m_context->handleEvents();
+	
+	// Create and bind frame
+	m_context->m_currentFrame = m_context->m_frameBuilder(m_context->m_currentFrame);
 	m_context->m_currentFrame.makeCurrent();
+
+	updateState();
+
+	// Return frame
 	return m_context->m_currentFrame;
 }
 
@@ -404,7 +441,7 @@ void dk::io::Window::endFrame()
 	useContext();
 
 #ifdef DK_USE_IMGUI
-	dk::gfx::backBuffer().makeActive();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	// Render ImGui draw data
 	ImGui::Render();
@@ -425,6 +462,12 @@ void dk::io::Window::endFrame()
 	SDL_GL_SwapWindow(m_context->m_window);
 }
 
+void dk::io::Window::makeCurrent()
+{
+	useContext();
+	updateState();
+}
+
 dk::io::Window::Window()
 	: m_context(std::make_unique<Context>())
 {
@@ -438,50 +481,15 @@ void dk::io::Window::useContext()
 #ifdef DK_USE_IMGUI
 	ImGui::SetCurrentContext(m_context->m_imguiContext);
 #endif
-	details::gfx::setBackbufferViewport(property<dk::io::properties::window::size>());
 }
 
-bool dk::io::Window::wrapOutOfBoundsCursor(bool allowInnerBorder) const
+void dk::io::Window::updateState()
 {
-	glm::ivec2 windowSize = property<dk::io::properties::window::size>();
-	glm::ivec2 cursorPos  = cursorP();
-	bool wrapped = false;
+	// Update properties
+	callPropertySetters();
 
-	// Horizontal
-	if (cursorPos.x < allowInnerBorder && !m_context->m_cursorWrapContext.wrappedRight) {
-		cursorPos.x = windowSize.x - 1 - allowInnerBorder;
-		m_context->m_cursorWrapContext.wrappedLeft = true;
-		wrapped = true;
-	} 
-	else if (cursorPos.x >= windowSize.x - allowInnerBorder && !m_context->m_cursorWrapContext.wrappedLeft) {
-		cursorPos.x = allowInnerBorder;
-		m_context->m_cursorWrapContext.wrappedRight = true;
-		wrapped = true;
-	}
-	else {
-		m_context->m_cursorWrapContext.wrappedLeft  = false;
-		m_context->m_cursorWrapContext.wrappedRight = false;
-	}
-
-	// Vertical
-	if (cursorPos.y < allowInnerBorder && !m_context->m_cursorWrapContext.wrappedBottom) {
-		cursorPos.y = windowSize.y - 1 - allowInnerBorder;
-		m_context->m_cursorWrapContext.wrappedTop = true;
-		wrapped = true;
-	} 
-	else if (cursorPos.y >= windowSize.y - allowInnerBorder && !m_context->m_cursorWrapContext.wrappedTop) {
-		cursorPos.y = allowInnerBorder;
-		m_context->m_cursorWrapContext.wrappedBottom = true;
-		wrapped = true;
-	} 
-	else {
-		m_context->m_cursorWrapContext.wrappedTop    = false;
-		m_context->m_cursorWrapContext.wrappedBottom = false;
-	}
-
-	if (wrapped)
-		SDL_WarpMouseInWindow(m_context->m_window, cursorPos.x, cursorPos.y);
-	return wrapped;
+	// Set backbuffer viewport
+	gfx::backBuffer().setViewport(m_context->m_currentFrame.viewport());
 }
 
 dk::io::Window::~Window()
