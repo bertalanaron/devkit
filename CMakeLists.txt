@@ -48,12 +48,14 @@ set(IO_PUBLIC_SOURCES
     include/devkit/io/asset_manager.h
     include/devkit/io/input_combination.h
     include/devkit/io/window.h
-    include/devkit/io/file_dialog.h)
+    include/devkit/io/file_dialog.h
+    include/devkit/io/frame.h)
 set(IO_PRIVATE_SOURCES
     src/io/asset_manager.cpp
     src/io/window.cpp
     src/io/input_combination.cpp
-    src/io/file_dialog.cpp)
+    src/io/file_dialog.cpp
+    src/io/frame.cpp)
 # gfx
 set(GFX_PUBLIC_SOURCES
     include/devkit/gfx.h
@@ -71,7 +73,8 @@ set(GFX_PUBLIC_SOURCES
     include/devkit/gfx/element_buffer.h
     include/devkit/gfx/font.h
     include/devkit/gfx/vertex_sink.h
-    include/devkit/gfx/attachment_base.h)
+    include/devkit/gfx/attachment_base.h
+    include/devkit/gfx/viewport.h)
 set(GFX_PRIVATE_SOURCES
     src/gfx/common.cpp
     src/gfx/vertex.cpp
@@ -87,7 +90,8 @@ set(GFX_PRIVATE_SOURCES
     src/gfx/texture.cpp
     src/gfx/font.cpp
     src/gfx/vertex_sink.cpp
-    src/gfx/attachment_base.cpp)
+    src/gfx/attachment_base.cpp
+    src/gfx/viewport.cpp)
 # algo
 set(ALGO_PUBLIC_SOURCES
     include/devkit/algo.h

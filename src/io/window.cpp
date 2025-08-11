@@ -1,5 +1,6 @@
 #include <devkit/io/window.h>
 #include <devkit/io/input_combination.h>
+#include <devkit/io/frame.h>
 
 #include <devkit/gfx/frame_buffer.h>
 
@@ -16,6 +17,7 @@
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_opengl3.h>
+#include <imgui_internal.h> // Needed for dock node access
 #endif
 
 #pragma comment (lib, "Dwmapi")
@@ -36,7 +38,10 @@ struct dk::io::Window::Context {
 	bool               m_isOpen;
 #ifdef DK_USE_IMGUI
 	ImGuiContext*      m_imguiContext;
+	ImGuiID            m_imguiDockspaceId;
 #endif
+
+	io::Frame          m_currentFrame;
 
 	struct CursorWrapContext {
 		bool wrappedLeft   = false;
@@ -44,6 +49,8 @@ struct dk::io::Window::Context {
 		bool wrappedTop    = false;
 		bool wrappedBottom = false;
 	};
+
+	gfx::Viewport     m_viewport;
 
 	glm::vec2         m_cursorCurrentPos;
 	glm::vec2         m_cursorPreviousPos;
@@ -60,6 +67,7 @@ struct dk::io::Window::Context {
 	void handleEvent(SDL_WindowEvent event);
 	void useContext();
 	void close();
+	void prepareViewport();
 };
 
 struct details::io::SDL_StaticContext : dk::common::SingletonBase<SDL_StaticContext> {
@@ -70,12 +78,17 @@ struct details::io::SDL_StaticContext : dk::common::SingletonBase<SDL_StaticCont
 	void insertWindow(Uint32 id, dk::io::Window::Context* windowContext);
 	void eraseWindow(Uint32 id);
 
+	const auto& inputState() const
+	{ return m_currentInputState; }
+
 private:
 	using IdToWindowMap = std::unordered_map<Uint32, dk::io::Window::Context*>;
 
 	bool               m_initialized;
 	long long unsigned m_ticks = 0;
 	IdToWindowMap      m_windows;
+
+	dk::io::InputState m_currentInputState;
 };
 
 void details::io::SDL_StaticContext::initialize()
@@ -97,7 +110,7 @@ void details::io::SDL_StaticContext::initialize()
 	m_initialized = true;
 }
 
-void updateInputState(float wheelDirection) 
+dk::io::InputState prepareInputState(float wheelDirection) 
 {
 	bool mouseCaptured = false;
 	bool keyboardCaptured = false;
@@ -152,7 +165,7 @@ void updateInputState(float wheelDirection)
 		if (keystate[SDL_SCANCODE_BACKSLASH]) state.keys |= (dk::io::key_t)dk::io::key_mask::backslash;
 	}
 
-	details::io::commitInputState(state);
+	return state;
 }
 
 bool isWindowEvent(SDL_Event const& e) 
@@ -195,7 +208,7 @@ void details::io::SDL_StaticContext::handleEvents()
 	}
 
 	// Update mouse and keyboard state
-	updateInputState(mouseWheelY);
+	m_currentInputState = prepareInputState(mouseWheelY);
 }
 
 bool details::io::SDL_StaticContext::isFirstContextInTick(long long unsigned contextLastHandledTick) const
@@ -327,6 +340,18 @@ void dk::io::Window::Context::close()
 	spdlog::trace("Closed window: {}", (int)m_id); 
 }
 
+void dk::io::Window::Context::prepareViewport()
+{
+	
+	ImGuiDockNode* node = ImGui::DockBuilderGetNode(m_imguiDockspaceId);
+	if (!node)
+		return;
+
+	ImVec2 size = node->Size;  // Width/Height in pixels
+	ImVec2 pos  = node->Pos;   // Top-left in screen space
+	m_viewport = dk::gfx::Viewport(glm::ivec2(size.x, size.y), glm::ivec2(pos.x, pos.y));
+}
+
 void dk::io::Window::open(int msaa)
 {
 	m_context->initialize(property<dk::io::properties::window::title>(), property<dk::io::properties::window::size>(), msaa);
@@ -337,18 +362,14 @@ void dk::io::Window::close()
 	m_context->close();
 }
 
-bool dk::io::Window::beginFrame()
+bool dk::io::Window::isOpen() const
 {
-	if (!m_context->m_isOpen)
-		return false;
+	return m_context->m_isOpen;
+}
 
-	// Update delta time
-	auto now = std::chrono::system_clock::now();
-	if (m_frameStart == std::chrono::system_clock::time_point())
-		m_timeSinceLastFrame = std::chrono::duration_cast<std::chrono::system_clock::duration>(std::chrono::nanoseconds(0));
-	else
-		m_timeSinceLastFrame = (now - m_frameStart);
-	m_frameStart = now;
+const dk::io::Frame& dk::io::Window::beginFrame()
+{
+	DK_ASSERT((m_context->m_isOpen, "beginFrame requires the window to be open"));
 
 	// Use window's SDL, OpenGL and ImGUI context
 	useContext();
@@ -364,10 +385,15 @@ bool dk::io::Window::beginFrame()
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
-	ImGui::DockSpaceOverViewport(0, (const ImGuiViewport*)0, ImGuiDockNodeFlags_PassthruCentralNode);
+	m_context->m_imguiDockspaceId = ImGui::DockSpaceOverViewport(0, (const ImGuiViewport*)0, ImGuiDockNodeFlags_PassthruCentralNode);
 #endif
 
-	return true;
+	m_context->m_currentFrame = dk::io::Frame(m_context->m_currentFrame, 
+		                                      m_context->m_viewport, 
+		                                      m_context->_m_staticContext->inputState(),
+		                                      m_context->m_cursorCurrentPos);
+	m_context->m_currentFrame.makeCurrent();
+	return m_context->m_currentFrame;
 }
 
 void dk::io::Window::endFrame()
@@ -413,31 +439,6 @@ void dk::io::Window::useContext()
 	ImGui::SetCurrentContext(m_context->m_imguiContext);
 #endif
 	details::gfx::setBackbufferViewport(property<dk::io::properties::window::size>());
-}
-
-std::chrono::nanoseconds dk::io::Window::dt() const
-{
-	return std::chrono::duration_cast<std::chrono::nanoseconds>(m_timeSinceLastFrame);
-}
-
-glm::vec2 dk::io::Window::cursorP() const
-{
-	return m_context->m_cursorCurrentPos;
-}
-
-glm::vec2 dk::io::Window::cursorDeltaP() const
-{
-	return m_context->m_cursorCurrentPos - m_context->m_cursorPreviousPos;
-}
-
-glm::vec2 dk::io::Window::cursorN() const
-{
-	return glm::vec2(0, 1) + glm::vec2(1, -1) * (cursorP() / (glm::vec2)property<dk::io::properties::window::size>());
-}
-
-glm::vec2 dk::io::Window::cursorDeltaN() const
-{
-	return (cursorDeltaP() * glm::vec2(1, -1)) / (glm::vec2)property<dk::io::properties::window::size>();
 }
 
 bool dk::io::Window::wrapOutOfBoundsCursor(bool allowInnerBorder) const
