@@ -238,6 +238,11 @@ struct storage {
 	inline static std::optional<T> value;
 };
 
+template <typename T, dk::common::string_literal Label>
+struct threadlocal_storage {
+	inline static std::unordered_map<std::thread::id, T> values;
+};
+
 } // details::dbg
 
 namespace dk::dbg {
@@ -261,6 +266,22 @@ const T& store_or(const T& fallback) {
 	if (!details::dbg::storage<T, Label>::value.has_value())
 		return fallback;
 	return details::dbg::storage<T, Label>::value.value(); 
+}
+
+template <typename T, common::string_literal Label>
+	requires(std::is_default_constructible_v<T>)
+T& store_threadlocal()
+{
+	return details::dbg::threadlocal_storage<T, Label>::values[std::this_thread::get_id()];
+}
+
+template <typename T, common::string_literal Label>
+const T& store_threadlocal_or(const T& fallback)
+{
+	auto it = details::dbg::threadlocal_storage<T, Label>::values.find(std::this_thread::get_id());
+	if (it == details::dbg::threadlocal_storage<T, Label>::values.end())
+		return fallback;
+	return it->second;
 }
 
 } // dk::dbg

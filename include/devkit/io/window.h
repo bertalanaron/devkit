@@ -1,6 +1,7 @@
 #pragma once
 #include <devkit/common/utils.h>
 #include <devkit/common/properties.h>
+#include <devkit/gfx/viewport.h>
 
 namespace dk::io::properties {
 namespace window {
@@ -40,7 +41,12 @@ using WindowProperties = dk::common::DeferredPropertyCollection<D,
 
 namespace dk::io {
 
+using TickCounter = long long unsigned;
+
+class WindowContext;
+
 class Frame;
+
 
 class Window 
 	: public details::io::WindowProperties<Window>
@@ -51,29 +57,32 @@ public:
 	// @brief Opens a window and activates it's context
 	// @param msaa - Multisample Anti Aliasing sample count (msaa is disabled when set to 1)
 	void open(int msaa = 1);
-	void close();
-
 	bool isOpen() const;
+	void close();
 
 	// @brief Begin new frame
 	// @returns True when window is open and context switching was successful
 	const Frame& beginFrame();
 	void endFrame();
-
+	
 	void makeCurrent();
+
+	void warpCursor(const glm::ivec2& destination) const;
 
 	~Window();
 
 private:
-	struct Context;
+	class WindowEventHandler;
 
 private:
-	std::unique_ptr<Context> m_context;
+	std::unique_ptr<const WindowContext> m_context;
+	std::unique_ptr<WindowEventHandler>  m_eventHandler;
 
-	// @brief Activates the windows context for graphics (gl context) 
-	void useContext();
-	// backbuffer, properties, etc
-	void updateState();
+	bool                         m_isOpen = false;
+	bool                         m_closeRequested = false;
+	std::unique_ptr<const Frame> m_frame;
+ 
+	gfx::Viewport buildViewport() const;
 
 	template <typename D, typename E>
 	friend void details::common::setProperty(D&, const E&);

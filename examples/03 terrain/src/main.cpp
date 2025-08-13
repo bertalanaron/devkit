@@ -2,6 +2,7 @@
 #include <devkit/io/input_combination.h>
 #include <devkit/gfx/scene.h>
 #include <devkit/io/frame.h>
+#include <devkit/io/file_dialog.h>
 
 #include <mini/ini.h>
 
@@ -12,7 +13,123 @@
 #include "terrain.h"
 #include "terrain_editor.h"
 
-// TODO: 
+//
+//class GameState {
+//public:
+//	Terrain terrain;
+//
+//	GameState();
+//
+//	std::unique_ptr<GameState> clone();
+//
+//	static GameState load(const std::filesystem::path& path);
+//	void save(const std::filesystem::path& path);
+//};
+//
+//
+//class ClientBase {
+//public:
+//	ClientBase(dk::io::AssetManager& assets, std::unique_ptr<GameState>&& state)
+//		: m_assets(assets)
+//		, m_state(std::move(state))
+//	{ 
+//		setup();
+//	}
+//
+//	virtual void update(const dk::io::Frame& frame) = 0;
+//	virtual void render(const dk::io::Frame& frame) = 0;
+//
+//	virtual ~ClientBase()
+//	{
+//		teardown();
+//	}
+//
+//protected:
+//	dk::io::AssetManager&      m_assets;
+//	dk::io::InputManager       m_inputs;
+//	dk::io::Window             m_window;
+//	View                       m_view;
+//	std::unique_ptr<GameState> m_state;
+//
+//	virtual void setup()    = 0;
+//	virtual void teardown() = 0;
+//};
+//
+//class ClientManager
+//	: private dk::common::SingletonBase<ClientManager>
+//{
+//public:
+//	static void addClient(std::unique_ptr<ClientBase>&& client)
+//	{
+//		instance().m_clients.emplace(client.get(), std::move(client));
+//	}
+//
+//	static void removeClient(const ClientBase* clientPtr)
+//	{
+//		instance().m_clients.erase(clientPtr);
+//	}
+//
+//private:
+//	std::unordered_map<const ClientBase*, std::unique_ptr<ClientBase>> m_clients;
+//};
+//
+//class GameClient 
+//	: public ClientBase
+//{
+//public:
+//	using ClientBase::ClientBase;
+//
+//};
+//
+//class EditorClient 
+//	: public ClientBase
+//{
+//public:
+//	using ClientBase::ClientBase;
+//
+//	void update(const dk::io::Frame& frame) override
+//	{
+//		if (m_inputs.activated("close")
+//			|| !m_window.isOpen())
+//		{
+//			ClientManager::removeClient(this);
+//			return;
+//		}
+//
+//		if (m_inputs.activated("load"))
+//		{
+//			auto optPath = openFile();
+//			if (optPath)
+//			{
+//				auto newState    = GameState::load(openFile().value());
+//				auto newStatePtr = std::make_unique<GameState>(std::move(newState));
+//				m_state.swap(newStatePtr);
+//			}
+//		}
+//
+//		if (m_inputs.activated("save"))
+//		{
+//			auto optPath = openFile();
+//			if (optPath)
+//			{
+//				m_state->save(saveFile().value());
+//			}
+//		}
+//
+//		if (m_inputs.activated("run"))
+//		{
+//			auto gameClient = std::make_unique<GameClient>(m_assets, std::move(m_state->clone()));
+//			ClientManager::addClient(std::move(gameClient));
+//		}
+//	}
+//
+//private:
+//	GameClient createGameClient();
+//
+//	std::optional<std::filesystem::path> openFile();
+//	std::optional<std::filesystem::path> saveFile();
+//};
+
 
 class Application {
 public:
@@ -48,12 +165,12 @@ public:
 		m_window.properties(
 			dk::io::properties::window::title("Terrain"), 
 			dk::io::properties::window::theme::dark, 
-			dk::io::properties::window::mouse_grab::enabled,
+			//dk::io::properties::window::mouse_grab::enabled,
 			dk::io::properties::window::size(1280, 720));
 
 		// Setup inputs
 		m_cameraController.inputs.define("tilt", dk::io::modkey::alt);
-		m_cameraController.inputs.define("shift", dk::io::key::x);
+		m_cameraController.inputs.define("shift", dk::io::modkey::none + dk::io::button::right);
 		m_inputs.define("quit", dk::io::key::esc);
 		m_inputs.define("toggle_fullscreen", dk::io::key::f);
 	}

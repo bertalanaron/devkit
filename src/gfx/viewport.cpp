@@ -22,7 +22,7 @@ dk::gfx::Viewport::Viewport(const glm::ivec2& size, const glm::ivec2& offset, in
 
 bool dk::gfx::Viewport::wrapPoint(glm::ivec2& point, int border) const
 {
-	const auto offset = m_offset + glm::ivec2(border, border);
+	const auto offset = glm::ivec2(m_offset.x, m_offsetTop) + glm::ivec2(border, border);
 	const auto size   = m_size - 2 * glm::ivec2(border, border);
 	glm::ivec2 remainder((point - offset) % size);
 	if (remainder.x < 0)

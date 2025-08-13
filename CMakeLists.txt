@@ -91,7 +91,9 @@ set(GFX_PRIVATE_SOURCES
     src/gfx/font.cpp
     src/gfx/vertex_sink.cpp
     src/gfx/attachment_base.cpp
-    src/gfx/viewport.cpp)
+    src/gfx/viewport.cpp
+    src/gfx/context.h
+    src/gfx/context.cpp)
 # algo
 set(ALGO_PUBLIC_SOURCES
     include/devkit/algo.h

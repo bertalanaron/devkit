@@ -1,4 +1,5 @@
 #include <devkit/io/frame.h>
+#include "../gfx/context.h"
 
 #include <SDL3/SDL.h>
 
@@ -30,12 +31,12 @@ glm::vec2 dk::io::Frame::cursorDeltaN() const
 
 void dk::io::Frame::warpCursor(const glm::ivec2& destination) const
 {
-	SDL_WarpMouseInWindow((SDL_Window*)m_producerContext, destination.x, destination.y);
+	GlobalState::warpCursorInWindow(m_producerContext, destination);
 }
 
 dk::io::Frame::Frame(
 	const Frame&          previous, 
-	void*                 producerContext,
+	const WindowContext*  producerContext,
 	const gfx::Viewport&  viewport, 
 	const io::InputState& inputState, 
 	const glm::ivec2&     cursor)
@@ -47,7 +48,10 @@ dk::io::Frame::Frame(
 	, m_prevCursor(previous.m_cursor)
 	, m_t(std::chrono::system_clock::now())
 	, m_dt(std::chrono::duration_cast<std::chrono::seconds>(m_t - previous.m_t))
-{ }
+{
+	if (GlobalState::state().cursorWarped)
+		m_prevCursor = m_cursor;
+}
 
 dk::io::Frame::Frame()
 	: m_viewport({ 0, 0 }, { 0, 0 }, 0)
