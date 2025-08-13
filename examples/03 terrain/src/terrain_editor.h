@@ -6,6 +6,7 @@
 #include <devkit/io/asset_manager.h>
 #include <devkit/algo/draw.h>
 #include <devkit/io/input_combination.h>
+#include <devkit/gfx/scene.h>
 
 #include <imgui.h>
 
@@ -65,7 +66,8 @@ public:
 		if (m_inputs.activated("load"))
 			loadHeightMap(terrain);
 
-		m_vOut << m_draw2d(cursor, dk::colors::aqua);
+		m_vOut << m_draw2d(cursor, dk::colors::aqua)
+			   << m_draw2d(dk::geom::circle2(cursor, 1.5), dk::colors::white);
 	}
 
 	void render(Terrain& terrain, dk::gfx::FrameBuffer& frameBuffer, dk::io::AssetManager& assets, View& view)

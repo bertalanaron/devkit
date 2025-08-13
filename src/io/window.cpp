@@ -1,6 +1,7 @@
 #include <devkit/io/window.h>
 #include <devkit/io/input_combination.h>
 #include <devkit/io/frame.h>
+#include "../gfx/context.h"
 
 #include <devkit/gfx/frame_buffer.h>
 
@@ -28,321 +29,150 @@
 using WindowHandle = HWND;
 #endif
 
-struct FrameBuilder {
-	SDL_Window*        window;
-	dk::gfx::Viewport  viewport;
-	dk::io::InputState inputState;
-	glm::vec2          cursor;
-	
-	dk::io::Frame operator()(const dk::io::Frame& previous) const
+class dk::io::Window::WindowEventHandler
+	: public dk::io::WindowEventHandlerBase
+{
+public:
+	WindowEventHandler(Window& window)
+		: m_window(window)
+	{ }
+
+	void handle(const SDL_WindowEvent& event) override
 	{
-		return dk::io::Frame(previous, window, viewport, inputState, cursor);
-	}
-};
-
-struct dk::io::Window::Context {
-	Window*            m_owner;
-	SDL_Window*        m_window;
-	Uint32             m_id;
-	WindowHandle       m_windowHandle;
-	SDL_GLContext      m_glContext = nullptr;
-	long long unsigned m_lastTick = 0;
-	bool               m_isOpen;
-#ifdef DK_USE_IMGUI
-	ImGuiContext*      m_imguiContext;
-	ImGuiID            m_imguiDockspaceId;
-#endif
-
-	io::Frame          m_currentFrame;
-	FrameBuilder       m_frameBuilder;
-
-	details::io::SDL_StaticContext* _m_staticContext;
-
-	void initialize(const std::string& title, const glm::ivec2& size, int msaa);
-#ifdef DK_USE_IMGUI
-	void initializeImGui();
-#endif
-	void handleEvents();
-	// Handle window specific events
-	void handleEvent(SDL_WindowEvent event);
-	void useContext();
-	void close();
-	void prepareViewport();
-};
-
-struct details::io::SDL_StaticContext : dk::common::SingletonBase<SDL_StaticContext> {
-	void initialize();
-	void handleEvents();
-	bool isFirstContextInTick(long long unsigned contextLastHandledTick) const;
-	auto ticks() { return m_ticks; }
-	void insertWindow(Uint32 id, dk::io::Window::Context* windowContext);
-	void eraseWindow(Uint32 id);
-
-	const auto& inputState() const
-	{ return m_currentInputState; }
-
-private:
-	using IdToWindowMap = std::unordered_map<Uint32, dk::io::Window::Context*>;
-
-	bool               m_initialized;
-	long long unsigned m_ticks = 0;
-	IdToWindowMap      m_windows;
-
-	dk::io::InputState m_currentInputState;
-};
-
-void details::io::SDL_StaticContext::initialize()
-{
-	if (m_initialized)
-		return;
-
-	// Init SDL
-	SDL_Init(SDL_INIT_VIDEO);
-	spdlog::trace("Initialized SDL");
-
-	// Use OpenGL 3.3
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-
-	m_initialized = true;
-}
-
-dk::io::InputState prepareInputState(float wheelDirection) 
-{
-	bool mouseCaptured = false;
-	bool keyboardCaptured = false;
-#ifdef DK_USE_IMGUI
-	// Allow ImGui to capture mouse and keyboard
-	auto& imguiIO = ImGui::GetIO();
-	if (details::io::imguiDoCaptureMouse() && imguiIO.WantCaptureMouse)
-		mouseCaptured = true;
-	if (details::io::imguiDoCaptureKeyboard() && imguiIO.WantCaptureKeyboard)
-		keyboardCaptured = true;
-#endif
-
-	dk::io::InputState state;
-
-	if (!mouseCaptured) {
-		// Button
-		state.buttons = SDL_GetMouseState(nullptr, nullptr);
-
-		// Wheel
-		state.wheelDirection = wheelDirection;
-		if (wheelDirection > 0) state.wheel |= (dk::io::wheel_t)dk::io::wheel_mask::up;
-		if (wheelDirection < 0) state.wheel |= (dk::io::wheel_t)dk::io::wheel_mask::down;
-	}
-
-	if (!keyboardCaptured) {
-		// Modkey
-		SDL_Keymod mod = SDL_GetModState();
-		if (mod & SDL_KMOD_SHIFT) state.modkeys |= (dk::io::modkey_t)dk::io::modkey_mask::shift;
-		if (mod & SDL_KMOD_CTRL)  state.modkeys |= (dk::io::modkey_t)dk::io::modkey_mask::ctrl;
-		if (mod & SDL_KMOD_ALT)   state.modkeys |= (dk::io::modkey_t)dk::io::modkey_mask::alt;
-		if (mod & SDL_KMOD_CAPS)  state.modkeys |= (dk::io::modkey_t)dk::io::modkey_mask::caps;
-
-		// Key
-		const bool* keystate = SDL_GetKeyboardState(nullptr);
-		// Numbers
-		for (auto i = 0ull; i < 10; ++i) {
-			if (keystate[SDL_SCANCODE_1 + i]) 
-				state.keys |= ((dk::io::key_t)dk::io::key_mask::_0 << ((i + 1) % 10));
-		}
-		// Letters
-		for (auto i = 0ull; i < 26; ++i) {
-			if (keystate[SDL_SCANCODE_A + i])
-				state.keys |= ((dk::io::key_t)dk::io::key_mask::a << i);
-		}
-		// Special
-		if (keystate[SDL_SCANCODE_GRAVE])     state.keys |= (dk::io::key_t)dk::io::key_mask::grave;
-		if (keystate[SDL_SCANCODE_ESCAPE])    state.keys |= (dk::io::key_t)dk::io::key_mask::esc;
-		if (keystate[SDL_SCANCODE_TAB])       state.keys |= (dk::io::key_t)dk::io::key_mask::tab;
-		if (keystate[SDL_SCANCODE_DELETE])    state.keys |= (dk::io::key_t)dk::io::key_mask::del;
-		if (keystate[SDL_SCANCODE_EXECUTE])   state.keys |= (dk::io::key_t)dk::io::key_mask::enter;
-		if (keystate[SDL_SCANCODE_BACKSPACE]) state.keys |= (dk::io::key_t)dk::io::key_mask::backspace;
-		if (keystate[SDL_SCANCODE_BACKSLASH]) state.keys |= (dk::io::key_t)dk::io::key_mask::backslash;
-	}
-
-	return state;
-}
-
-bool isWindowEvent(SDL_Event const& e) 
-{
-	return e.type >= SDL_EVENT_WINDOW_FIRST && e.type <= SDL_EVENT_WINDOW_LAST;
-}
-
-void details::io::SDL_StaticContext::handleEvents()
-{
-	++m_ticks;
-
-	float mouseWheelY = 0;
-
-	// Poll events
-	SDL_Event event;
-	while (SDL_PollEvent(&event)) {
 		switch (event.type)
 		{
-		case SDL_EVENT_MOUSE_WHEEL: {
-			SDL_MouseWheelEvent& wheenEvent = event.wheel;
-			mouseWheelY = wheenEvent.y;
+		case SDL_EVENT_WINDOW_CLOSE_REQUESTED: 
+			m_window.m_closeRequested = true;
 			break;
-		}
+		case SDL_EVENT_WINDOW_RESIZED:
+			using size_t = dk::io::properties::window::size;
+			m_window.propertyChanged(size_t(event.data1, event.data2));
+			break;
 		default:
 			break;
 		}
-
-		if (isWindowEvent(event)) {
-			// Pass event to affected window
-			auto it = m_windows.find(event.window.windowID);
-			if (it != m_windows.end())
-				it->second->handleEvent(event.window);
-		}
-
-#ifdef DK_USE_IMGUI
-		// Pass event to ImGui
-		ImGui_ImplSDL3_ProcessEvent(&event);
-#endif
-		// TODO: handle multiple windows
 	}
 
-	// Update mouse and keyboard state
-	m_currentInputState = prepareInputState(mouseWheelY);
-}
+private:
+	Window& m_window;
+};
 
-bool details::io::SDL_StaticContext::isFirstContextInTick(long long unsigned contextLastHandledTick) const
+void dk::io::Window::open(int msaa)
 {
-	return contextLastHandledTick == m_ticks;
-}
-
-void details::io::SDL_StaticContext::insertWindow(Uint32 id, dk::io::Window::Context* windowContext)
-{
-	m_windows.insert({ id, windowContext });
-}
-
-void details::io::SDL_StaticContext::eraseWindow(Uint32 id)
-{
-	m_windows.erase(id);
-}
-
-void dk::io::Window::Context::initialize(const std::string& title, const glm::ivec2& size, int msaa)
-{
-	details::io::SDL_StaticContext::instance().initialize();
-
-	// Set up MSAA
-	if (msaa > 1) {
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-		SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, msaa);
-	}
-
-	// Create window
-	m_window = SDL_CreateWindow(title.c_str(), /*SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,*/
-		size.x, size.y, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL /*| SDL_RENDERER_ACCELERATED*/);
-	m_frameBuilder.window = m_window;
-	m_isOpen = true;
-	// Get window id and insert window to global collection
-	m_id = SDL_GetWindowID(m_window);
-	details::io::SDL_StaticContext::instance().insertWindow(m_id, this);
-	spdlog::trace("Created window: {}", (int)m_id);
-
-	// Create opengl context
-	m_glContext = SDL_GL_CreateContext(m_window);
-	if (!m_glContext) {
-		spdlog::error("OpenGL context could not be created! SDL Error: {}", SDL_GetError());
-		std::terminate();
-	}
-	useContext();
-	spdlog::trace("Created OpenGL context");
-	
-	// Disable V-Sync
-	SDL_GL_SetSwapInterval(details::io::toUnderlying(m_owner->property<dk::io::properties::window::vsync>()));
-
-	// Initialize GLEW after creating OpenGL context
-	glewExperimental = GL_TRUE;
-	GLenum glewError = glewInit();
-	if (glewError != GLEW_OK) {
-		spdlog::error("Error initializing GLEW!");
-		std::terminate();
-	}
-	// Remove error caused by glewExperimental
-	glGetError();
-	spdlog::trace("Initialized GLEW");
-
-	// Enable point size
+	// Setup context and event handling
+	m_context = GlobalState::createWindowContext(msaa, property<properties::window::size>());
+	GlobalState::addListener(m_context->sdlWindowID, m_eventHandler.get());
+	m_isOpen  = true;
+	// Configure OpenGL
 	glEnable(GL_PROGRAM_POINT_SIZE);  
 
-	// Get window handle
-#if defined(SDL_PLATFORM_WIN32)
-	m_windowHandle = (HWND)SDL_GetPointerProperty(SDL_GetWindowProperties(m_window), SDL_PROP_WINDOW_WIN32_HWND_POINTER, NULL);
-#endif
-
-#ifdef DK_USE_IMGUI
-	// Initialize imgui context
-	initializeImGui();
-#endif
-}
-
-#ifdef DK_USE_IMGUI
-void dk::io::Window::Context::initializeImGui()
-{
-	m_imguiContext = ImGui::CreateContext();
-	ImGui::SetCurrentContext(m_imguiContext);
-
-	ImGui_ImplSDL3_InitForOpenGL(m_window, m_glContext);
-	ImGui_ImplOpenGL3_Init("#version 330");
-
-	ImGuiIO& io = ImGui::GetIO(); (void)io;
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-	io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
-
+	// Configure ImGui
+	//m_context->imguiIO->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	ImGui::StyleColorsDark();
-}
-#endif
 
-void dk::io::Window::Context::handleEvents()
-{
-	// Handle events once per tick (no need to handle events per each window)
-	if (details::io::SDL_StaticContext::instance().isFirstContextInTick(m_lastTick))
-		details::io::SDL_StaticContext::instance().handleEvents();
-	m_lastTick = details::io::SDL_StaticContext::instance().ticks();
-
-	// Get input state
-	m_frameBuilder.inputState = details::io::SDL_StaticContext::instance().inputState();
-	// Update cursor state
-	SDL_GetMouseState(&m_frameBuilder.cursor.x, &m_frameBuilder.cursor.y);
-	// Prepare viewport
-	prepareViewport();
+	callPropertySetters();
 }
 
-void dk::io::Window::Context::handleEvent(SDL_WindowEvent event)
+void dk::io::Window::close()
 {
-	switch (event.type)
-	{
-	case SDL_EVENT_WINDOW_CLOSE_REQUESTED: 
-		close(); 
-		break;
-	case SDL_EVENT_WINDOW_RESIZED:
-		m_owner->propertyChanged(dk::io::properties::window::size(event.data1, event.data2));
-		break;
-	default:
-		break;
-	}
-}
-
-void dk::io::Window::Context::useContext()
-{
-	SDL_GL_MakeCurrent(m_window, m_glContext);
-}
-
-void dk::io::Window::Context::close()
-{
+	// Tear down context and stop event handling
+	GlobalState::removeListener(m_context->sdlWindowID);
+	m_context.reset();
 	m_isOpen = false;
-	SDL_DestroyWindow(m_window);
-	SDL_GL_DestroyContext(m_glContext);
-	spdlog::trace("Closed window: {}", (int)m_id); 
 }
+
+bool dk::io::Window::isOpen() const
+{
+	return m_isOpen;
+}
+
+const dk::io::Frame& dk::io::Window::beginFrame()
+{
+	DK_ASSERT((m_isOpen, "beginFrame requires the window to be open"));
+
+	// Use context
+	m_context->makeCurrent();
+	// Handle events
+	GlobalState::tryHandleAndDispatchEvents(m_eventHandler.get());
+	// Update properties
+	callPropertySetters();
+
+	// Start the Dear ImGui frame
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplSDL3_NewFrame();
+	ImGui::NewFrame();
+	// Setup dockspace
+	ImGui::DockSpaceOverViewport(m_context->imguiDockspaceId, (const ImGuiViewport*)0, 
+		ImGuiDockNodeFlags_PassthruCentralNode);
+
+	// Build viewport using imgui dockspace 
+	// and apply to backbuffer
+	const auto viewport = buildViewport();
+	gfx::backBuffer().setViewport(viewport);
+
+	// Create and bind frame
+	auto nextFrame = std::make_unique<const Frame>(
+		*m_frame, 
+		m_context.get(), 
+		viewport, 
+		GlobalState::getInputStateOfWindow(m_context.get()),
+		(glm::ivec2)GlobalState::state().cursor);
+	m_frame.swap(nextFrame);
+
+	GlobalState::showDebugWindow();
+
+	// Return frame
+	return *m_frame;
+}
+
+void dk::io::Window::endFrame()
+{
+	if (!m_isOpen)
+		return;
+
+	// Use context
+	m_context->makeCurrent();
+
+	// Render ImGui draw data
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	// ImGui multi viewports support
+	if (m_context->imguiIO->ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+	{
+		SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
+		SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+		SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
+	}
+	ImGui::EndFrame();
+
+	// Swap buffers
+	SDL_GL_SwapWindow(m_context->sdlWindowContext);
+
+	// Close if requested
+	if (m_closeRequested)
+		close();
+}
+
+void dk::io::Window::makeCurrent()
+{
+	m_context->makeCurrent();
+}
+
+void dk::io::Window::warpCursor(const glm::ivec2& destination) const
+{
+	GlobalState::warpCursorInWindow(m_context.get(), destination);
+}
+
+dk::io::Window::Window()
+	: m_eventHandler(std::make_unique<WindowEventHandler>(*this))
+	, m_frame(std::make_unique<const Frame>())
+{ }
+
+dk::io::Window::~Window()
+{ }
 
 ImRect GetCentralNodeRect(ImGuiDockNode* node)
 {
@@ -371,150 +201,48 @@ ImRect GetCentralNodeRect(ImGuiDockNode* node)
 	return rect;
 }
 
-void dk::io::Window::Context::prepareViewport()
+dk::gfx::Viewport dk::io::Window::buildViewport() const
 {
-	ImGuiDockNode* node = ImGui::DockBuilderGetNode(m_imguiDockspaceId);
+	// Get dockspace node from context
+	ImGuiDockNode* node = ImGui::DockBuilderGetNode(m_context->imguiDockspaceId);
 	if (!node)
-		return;
+		std::terminate();
 
+	// Calculate central rect (remaining space after docking)
 	ImRect centralRect = GetCentralNodeRect(node);
 	if (centralRect.Min.x > centralRect.Max.x) // Invalid rect
-		return;
+		return {};
 
+	// Parse values (convert y coords)
 	const ImVec2 size = ImVec2(centralRect.GetWidth(), centralRect.GetHeight());  // Width/Height in pixels
 	const ImVec2 pos  = ImVec2(centralRect.Min.x - node->Pos.x, centralRect.Min.y - node->Pos.y);   // Top-left in screen space
-	const auto windowSizeY = m_owner->property<dk::io::properties::window::size>().y;
+	const auto windowSizeY = property<dk::io::properties::window::size>().y;
 
-	m_frameBuilder.viewport = dk::gfx::Viewport(
+	return dk::gfx::Viewport(
 		glm::ivec2(size.x, size.y), 
 		glm::ivec2(pos.x, windowSizeY - (pos.y + size.y)), pos.y);
 }
 
-void dk::io::Window::open(int msaa)
-{
-	m_context->initialize(property<dk::io::properties::window::title>(), property<dk::io::properties::window::size>(), msaa);
-}
-
-void dk::io::Window::close()
-{
-	m_context->close();
-}
-
-bool dk::io::Window::isOpen() const
-{
-	return m_context->m_isOpen;
-}
-
-const dk::io::Frame& dk::io::Window::beginFrame()
-{
-	DK_ASSERT((m_context->m_isOpen, "beginFrame requires the window to be open"));
-
-	// Use window's SDL, OpenGL and ImGUI context
-	useContext();
-
-#ifdef DK_USE_IMGUI
-	// Start the Dear ImGui frame
-	ImGui_ImplOpenGL3_NewFrame();
-	ImGui_ImplSDL3_NewFrame();
-	ImGui::NewFrame();
-	m_context->m_imguiDockspaceId = ImGui::DockSpaceOverViewport(0, (const ImGuiViewport*)0, ImGuiDockNodeFlags_PassthruCentralNode);
-#endif
-
-	// Handle events
-	m_context->handleEvents();
-	
-	// Create and bind frame
-	m_context->m_currentFrame = m_context->m_frameBuilder(m_context->m_currentFrame);
-	m_context->m_currentFrame.makeCurrent();
-
-	updateState();
-
-	// Return frame
-	return m_context->m_currentFrame;
-}
-
-void dk::io::Window::endFrame()
-{
-	if (!m_context->m_isOpen)
-		return;
-
-	useContext();
-
-#ifdef DK_USE_IMGUI
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	// Render ImGui draw data
-	ImGui::Render();
-	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-	// ImGui multi viewports support
-	if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-	{
-		SDL_Window* backup_current_window = SDL_GL_GetCurrentWindow();
-		SDL_GLContext backup_current_context = SDL_GL_GetCurrentContext();
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
-		SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
-	}
-#endif
-	ImGui::EndFrame();
-
-	// Swap buffers
-	SDL_GL_SwapWindow(m_context->m_window);
-}
-
-void dk::io::Window::makeCurrent()
-{
-	useContext();
-	updateState();
-}
-
-dk::io::Window::Window()
-	: m_context(std::make_unique<Context>())
-{
-	m_context->_m_staticContext = &details::io::SDL_StaticContext::instance();
-	m_context->m_owner = this;
-}
-
-void dk::io::Window::useContext()
-{
-	m_context->useContext();
-#ifdef DK_USE_IMGUI
-	ImGui::SetCurrentContext(m_context->m_imguiContext);
-#endif
-}
-
-void dk::io::Window::updateState()
-{
-	// Update properties
-	callPropertySetters();
-
-	// Set backbuffer viewport
-	gfx::backBuffer().setViewport(m_context->m_currentFrame.viewport());
-}
-
-dk::io::Window::~Window()
-{ }
-
 template <>
 void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::size& size) 
 {
-	SDL_SetWindowSize(window.m_context->m_window, size.x, size.y);
-	spdlog::trace("Set size for window: {}", window.m_context->m_id);
+	SDL_SetWindowSize(window.m_context->sdlWindowContext, size.x, size.y);
+	spdlog::trace("Set size for window: {}", window.m_context->sdlWindowID);
 }
 
 template <>
 void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::title& title)
 {
-	SDL_SetWindowTitle(window.m_context->m_window, title.c_str());
-	spdlog::trace("Set title as \"{}\" for window: {}", title, window.m_context->m_id);
+	SDL_SetWindowTitle(window.m_context->sdlWindowContext, title.c_str());
+	spdlog::trace("Set title as \"{}\" for window: {}", title, window.m_context->sdlWindowID);
 }
 
 template <>
 void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::border& border)
 {
 	bool isEnabled = border == dk::io::properties::window::border::enabled;
-	SDL_SetWindowBordered(window.m_context->m_window, isEnabled);
-	spdlog::trace("Set border {} for window: {}", (isEnabled ? "enabled" : "disabled"), window.m_context->m_id);
+	SDL_SetWindowBordered(window.m_context->sdlWindowContext, isEnabled);
+	spdlog::trace("Set border {} for window: {}", (isEnabled ? "enabled" : "disabled"), window.m_context->sdlWindowID);
 }
 
 template <>
@@ -522,14 +250,14 @@ void details::common::setProperty(dk::io::Window& window, const dk::io::properti
 {
 	BOOL USE_DARK_MODE = theme == dk::io::properties::window::theme::dark;
 	BOOL SET_IMMERSIVE_DARK_MODE_SUCCESS = SUCCEEDED(DwmSetWindowAttribute(
-		window.m_context->m_windowHandle, DWMWINDOWATTRIBUTE::DWMWA_USE_IMMERSIVE_DARK_MODE,
+		window.m_context->nativeWindowHandle, DWMWINDOWATTRIBUTE::DWMWA_USE_IMMERSIVE_DARK_MODE,
 		&USE_DARK_MODE, sizeof(USE_DARK_MODE)));
-	spdlog::trace("Set {} theme for window: {}", (USE_DARK_MODE ? "dark" : "light"), window.m_context->m_id);
+	spdlog::trace("Set {} theme for window: {}", (USE_DARK_MODE ? "dark" : "light"), window.m_context->sdlWindowID);
 
 	// hack: Have to hide and show the window to apply color change
 	bool border = window.property<dk::io::properties::window::border>() == dk::io::properties::window::border::enabled;
-	SDL_SetWindowBordered(window.m_context->m_window, !border);
-	SDL_SetWindowBordered(window.m_context->m_window, border);
+	SDL_SetWindowBordered(window.m_context->sdlWindowContext, !border);
+	SDL_SetWindowBordered(window.m_context->sdlWindowContext, border);
 }
 
 template <>
@@ -541,13 +269,13 @@ void details::common::setProperty(dk::io::Window& window, const dk::io::properti
 template <>
 void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::mode& mode)
 {
-	SDL_SetWindowFullscreen(window.m_context->m_window, details::io::toUnderlying(mode));
+	SDL_SetWindowFullscreen(window.m_context->sdlWindowContext, details::io::toUnderlying(mode));
 }
 
 template <>
 void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::mouse_grab& mode)
 {
-	SDL_SetWindowMouseGrab(window.m_context->m_window, (bool)mode);
+	SDL_SetWindowMouseGrab(window.m_context->sdlWindowContext, (bool)mode);
 }
 
 int details::io::toUnderlying(dk::io::properties::window::vsync vsync)

@@ -2,6 +2,7 @@
 #include <devkit/common/utils.h>
 #include <devkit/io/input_combination.h>
 #include <devkit/gfx/viewport.h>
+#include <devkit/io/window.h>
 
 namespace dk::io {
 
@@ -12,6 +13,9 @@ public:
 
 	const gfx::Viewport& viewport() const
 	{ return m_viewport; }
+
+	const auto& inputState() const
+	{ return m_inputState; }
 
 	//@brief Binds input state, activates viewport
 	void makeCurrent() const;
@@ -31,22 +35,22 @@ public:
 	void warpCursor(const glm::ivec2& destination) const;
 
 	Frame(const Frame&          previous, 
-		  void*                 producerContext,
+		  const WindowContext*  producerContext,
 		  const gfx::Viewport&  viewport,
 		  const io::InputState& inputState,
 		  const glm::ivec2&     cursor);
 
 	Frame();
 
-private:
-	void*          m_producerContext = nullptr;
-	gfx::Viewport  m_viewport;
+protected:
+	const WindowContext* m_producerContext = nullptr;
+	gfx::Viewport        m_viewport;
 
-	io::InputState m_inputState;
-	io::InputState m_prevInputState;
+	io::InputState       m_inputState;
+	io::InputState       m_prevInputState;
 
-	glm::ivec2     m_cursor;
-	glm::ivec2     m_prevCursor;
+	glm::ivec2           m_cursor;
+	glm::ivec2           m_prevCursor;
 
 	std::chrono::system_clock::time_point m_t;
 	std::chrono::seconds                  m_dt;

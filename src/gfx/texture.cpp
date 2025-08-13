@@ -23,9 +23,6 @@ dk::gfx::Texture dk::gfx::Texture::load(const std::string& path)
     // Save buffer
     size_t buffSize = texture.m_size.x * texture.m_size.y * texture.m_channels;
     texture.m_opt_pixels = std::vector<uint8_t>(pixels, pixels + buffSize);
-    std::visit([](auto& v) {
-        spdlog::info(v.size());
-        }, texture.m_opt_pixels.value());
     stbi_image_free(pixels);
     
     spdlog::trace("Loaded texture from {}", path);

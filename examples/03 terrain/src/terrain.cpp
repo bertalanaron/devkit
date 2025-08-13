@@ -96,7 +96,7 @@ void Terrain::generateChunk(dk::algo::NavmeshChunk& chunk, const glm::ivec2& chu
 		//*out << dk::gfx::draw(navmeshPolygon, DK_COLOR(0xaaaaaaff), DK_COLOR(0xaaaaaaff), dk::geom::plane::Y() + .001 + height, -dk::geom::axis::X);
 		*out << dk::gfx::draw(terrainPolygon, dk::colors::white, dk::colors::white, dk::geom::plane::Y() + .001 + height, -dk::geom::axis::X);
 
-		dk::dbg::store<int, "current_height">() = height;
+		dk::dbg::store_threadlocal<int, "current_height">() = height;
 
 		chunk.pushPolygon(navmeshPolygon, dk::algo::NavmeshDecomposition::ConvexDecomp);
 		m_views.at(chunkCoord).pushPolygon(std::move(terrainPolygon), height);
