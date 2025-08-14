@@ -1,4 +1,5 @@
 #include <devkit/gfx/frame_buffer.h>
+#include "context.h"
 
 #include <GL/glew.h>
 
@@ -165,8 +166,14 @@ dk::gfx::FrameBuffer::FrameBuffer(backbuffer_t)
 
 dk::gfx::FrameBuffer& dk::gfx::backBuffer() 
 {
-	static FrameBuffer c_backBuffer(FrameBuffer::backbuffer_t{});
-	return c_backBuffer;
+	static std::mutex s_backbufferMut;
+	static std::unordered_map<const io::WindowContext*, std::unique_ptr<FrameBuffer>> s_frameBuffers;
+
+	std::lock_guard lock(s_backbufferMut);
+	auto& fb_ptr = s_frameBuffers[io::GlobalState::currentWindowContext()];
+	if (!fb_ptr)
+		fb_ptr.reset(new FrameBuffer(FrameBuffer::backbuffer_t{}));
+	return *fb_ptr;
 }
 
 template <>

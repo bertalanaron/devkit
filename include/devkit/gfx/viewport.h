@@ -19,6 +19,9 @@ public:
 	const auto& offset() const
 	{ return m_offset; }
 
+	const auto& offsetFromTop() const
+	{ return m_offsetTop; }
+
 	Viewport() = default;
 	Viewport(const glm::ivec2& size);
 	Viewport(const glm::ivec2& size, const glm::ivec2& offset, int offsetTop);

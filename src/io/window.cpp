@@ -67,7 +67,8 @@ void dk::io::Window::open(int msaa)
 	glEnable(GL_PROGRAM_POINT_SIZE);  
 
 	// Configure ImGui
-	//m_context->imguiIO->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	m_context->imguiIO->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	m_context->imguiIO->ConfigFlags |= ImGuiConfigFlags_NavNoCaptureKeyboard;
 	ImGui::StyleColorsDark();
 
 	callPropertySetters();
@@ -118,8 +119,7 @@ const dk::io::Frame& dk::io::Window::beginFrame()
 		GlobalState::getInputStateOfWindow(m_context.get()),
 		(glm::ivec2)GlobalState::state().cursor);
 	m_frame.swap(nextFrame);
-
-	GlobalState::showDebugWindow();
+	m_frame->makeCurrent();
 
 	// Return frame
 	return *m_frame;
