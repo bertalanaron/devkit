@@ -5,6 +5,7 @@
 
 void dk::io::Frame::makeCurrent() const
 {
+	m_producerContext->makeCurrent();
 	details::io::commitInputState(m_prevInputState);
 	details::io::commitInputState(m_inputState);
 }

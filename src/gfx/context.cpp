@@ -54,6 +54,7 @@ std::unique_ptr<const dk::io::WindowContext> dk::io::GlobalState::createWindowCo
 	tryInitialize();
 
 	auto ctx = std::unique_ptr<WindowContext>(new WindowContext());
+	instance().m_activeContexts.insert(ctx.get());
 
 	// Set up MSAA
 	if (msaa > 1) {
@@ -111,7 +112,18 @@ std::unique_ptr<const dk::io::WindowContext> dk::io::GlobalState::createWindowCo
 	const auto imguiDockspaceIDString = std::format("central_dockspace{}", ctx->sdlWindowID);
 	ctx->imguiDockspaceId = ImHashStr(imguiDockspaceIDString.c_str());
 
+	WindowContext::s_currentContext = ctx.get();
 	return std::move(ctx);
+}
+
+void dk::io::GlobalState::removeWindowContext(const WindowContext* context)
+{
+	instance().m_activeContexts.erase(context);
+}
+
+const dk::io::WindowContext* dk::io::GlobalState::currentWindowContext()
+{
+	return WindowContext::s_currentContext;
 }
 
 dk::io::InputState dk::io::GlobalState::getInputStateOfWindow(const WindowContext* context)
@@ -159,7 +171,15 @@ void dk::io::GlobalState::pollEvents()
 		else
 			handleGlobalEvent(event);
 
-		ImGui_ImplSDL3_ProcessEvent(&event);
+		// Pass event to all imgui contexts
+		const auto currentImGuiContext = ImGui::GetCurrentContext();
+		for (const auto ctx : instance().m_activeContexts)
+		{
+			ImGui::SetCurrentContext(ctx->imguiContext);
+			ImGui_ImplSDL3_ProcessEvent(&event);
+		}
+		ImGui::SetCurrentContext(currentImGuiContext);
+
 		// TODO: handle multiple windows
 	}
 }
@@ -302,6 +322,8 @@ dk::io::WindowContext::~WindowContext()
 	SDL_GL_DestroyContext(sdlGlContext);
 	spdlog::trace("[io] Destroyed OpenGL context of window: {}", (int)sdlWindowID);
 
+	GlobalState::removeWindowContext(this);
+
 	// TODO: destroy all contexts
 }
 
@@ -309,4 +331,5 @@ void dk::io::WindowContext::makeCurrent() const
 {
 	SDL_GL_MakeCurrent(sdlWindowContext, sdlGlContext);
 	ImGui::SetCurrentContext(imguiContext);
+	s_currentContext = this;
 }

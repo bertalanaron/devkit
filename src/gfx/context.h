@@ -51,6 +51,8 @@ public:
 	static const HardwareVariantState& hardware();
 
 	static std::unique_ptr<const WindowContext> createWindowContext(int msaa, const glm::ivec2& size);
+	static void removeWindowContext(const WindowContext* context);
+	static const WindowContext* currentWindowContext();
 
 	static InputState getInputStateOfWindow(const WindowContext*);
 
@@ -68,6 +70,7 @@ private:
 	State                                                     m_state;
 	HardwareVariantState                                      m_harwareVariantState;
 	std::unordered_map<SDL_WindowID, WindowEventHandlerBase*> m_eventHandlers;
+	std::unordered_set<const WindowContext*>                  m_activeContexts;
 
 	static State& mutState();
 	static HardwareVariantState& mutHardware();
@@ -99,6 +102,8 @@ public:
 
 private:
 	WindowContext() = default;
+
+	inline static const WindowContext* s_currentContext = nullptr;
 
 	friend class GlobalState;
 };
