@@ -92,6 +92,18 @@ InputState previousInputState();
 	F( __VA_ARGS__ __VA_OPT__(,) enter     , BIT(42) ) \
 	F( __VA_ARGS__ __VA_OPT__(,) backspace , BIT(43) ) \
 	F( __VA_ARGS__ __VA_OPT__(,) backslash , BIT(44) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    f1     , BIT(45) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    f2     , BIT(46) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    f3     , BIT(47) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    f4     , BIT(48) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    f5     , BIT(49) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    f6     , BIT(50) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    f7     , BIT(51) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    f8     , BIT(52) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)    f9     , BIT(53) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)   f10     , BIT(54) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)   f11     , BIT(55) ) \
+	F( __VA_ARGS__ __VA_OPT__(,)   f12     , BIT(56) ) \
 	/* end of macro */
 #define DK_IO_WHEELS_TABLE(F, ...)               \
 	F( __VA_ARGS__ __VA_OPT__(,) up   , BIT(1) ) \
