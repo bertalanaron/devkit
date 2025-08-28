@@ -297,6 +297,11 @@ void dk::io::GlobalState::buildInputState()
 			if (keystate[SDL_SCANCODE_A + i])
 				iState.keys |= ((key_t)key_mask::a << i);
 		}
+		// F-Keys
+		for (auto i = 0ull; i < 11; ++i)
+			if (keystate[SDL_SCANCODE_F1 + i])
+				iState.keys |= ((key_t)key_mask::f1 << i);
+
 		// Special
 		if (keystate[SDL_SCANCODE_GRAVE])     iState.keys |= (key_t)key_mask::grave;
 		if (keystate[SDL_SCANCODE_ESCAPE])    iState.keys |= (key_t)key_mask::esc;

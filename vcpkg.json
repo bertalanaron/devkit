@@ -21,6 +21,7 @@
 	"ftxui",
 	"boost-dll",
 	"mini",
-	"poly2tri"
+	"poly2tri",
+	"cereal"
   ]
 }
