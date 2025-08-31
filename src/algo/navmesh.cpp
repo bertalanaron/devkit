@@ -128,16 +128,18 @@ int dk::algo::NavmeshChunk::nodeLevelThroughEdge(const geom::edge2& edge) const
 	return m_nodeLevels.at(node);
 }
 
+dk::algo::NavmeshGenerator::NavmeshGenerator(const NavmeshGenerator& other)
+	: m_isConcurrent(other.m_isConcurrent)
+	, m_threadCount(other.m_threadCount)
+{
+	initializeWorkers();
+}
+
 dk::algo::NavmeshGenerator::NavmeshGenerator(int threadCount)
 	: m_isConcurrent(threadCount > 0)
 	, m_threadCount(threadCount)
 {
-	// Start worker threads
-	if (m_isConcurrent) {
-		for (int i = 0; i < threadCount; ++i) {
-			m_workers.push_back(std::jthread([this, i](std::stop_token stopToken) { runWorker(stopToken); }));
-		}
-	}
+	initializeWorkers();
 }
 
 void dk::algo::NavmeshGenerator::build(glm::ivec2 sizeInChunks, std::vector<NavmeshChunk>& chunks, Navmesh& navmesh) {
@@ -236,6 +238,16 @@ void dk::algo::NavmeshGenerator::promoteLevel3Nodes(glm::ivec2 sizeInChunks, std
 	}
 }
 
+void dk::algo::NavmeshGenerator::initializeWorkers()
+{
+	// Start worker threads
+	if (m_isConcurrent) {
+		for (int i = 0; i < m_threadCount; ++i) {
+			m_workers.push_back(std::jthread([this, i](std::stop_token stopToken) { runWorker(stopToken); }));
+		}
+	}
+}
+
 void dk::algo::NavmeshGenerator::runWorker(std::stop_token stopToken) {
 	while (true) {
 		auto maybeJob = m_jobs.pop(stopToken);
@@ -266,7 +278,8 @@ dk::algo::Navmesh::Navmesh(glm::ivec2 sizeInChunks, glm::ivec2 chunkSize)
 	m_chunks.resize(m_sizeInChunks.x * m_sizeInChunks.y);
 }
 
-void dk::algo::Navmesh::build(NavmeshGenerator& generator) {
+void dk::algo::Navmesh::build(NavmeshGenerator& generator) 
+{
 	generator.build(m_sizeInChunks, m_chunks, *this);
 }
 

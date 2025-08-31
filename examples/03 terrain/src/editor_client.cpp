@@ -6,21 +6,42 @@
 void EditorClient::setup()
 {
 	setupAssetManager(m_assets, ini());
+	m_assets.synchronize();
 
 	// Setup hotkeys
 	m_inputs.define("close", dk::io::key::esc);
 	m_inputs.define("run"  , dk::io::key::f5);
+	m_cameraController.inputs.define("tilt" , dk::io::modkey::alt);
+	m_cameraController.inputs.define("shift", dk::io::modkey::none + dk::io::button::middle);
 
 	// Setup window
 	m_window.property(dk::io::properties::window::theme::dark);
 	m_window.property(dk::io::properties::window::size(1280, 720));
-	m_window.property(dk::io::properties::window::default_dockspace::disabled);
 
 	// Create edit strategies
 	m_editStrategies.emplace_back(std::make_unique<TerrainEditStrategy>(this));
 	m_editStrategies.emplace_back(std::make_unique<ObjectsEditStrategy>(this));
 	for (auto& strategy : m_editStrategies)
 		strategy->setup();
+
+	// Set up shaders
+	// Debug
+	m_shaders.insert("rgba", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rgba_vs.glsl", "/shaders/rgba_fs.glsl"));
+	// Terrain
+	m_shaders.insert("terrain", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rts/terrain_vs.glsl", "/shaders/rts/terrain_fs.glsl"));
+	m_shaders["terrain"].property(dk::gfx::properties::depth_test::enabled);
+
+	// Set texture filtering
+	for (auto [path, texture] : m_assets.each<dk::gfx::Texture>("/textures/terrain"))
+	{
+		texture.property(dk::gfx::properties::min_filter::nearest_mipmap_linear);
+		texture.property(dk::gfx::properties::mag_filter::linear);
+	}
+
+	// Setup global debug output
+	dk::dbg::store<dk::gfx::VertexSink*, "navmesh_poly_out">() = &m_navmeshGenerationDebugOut;
+
+	m_state->terrain->regenerate();
 }
 
 void EditorClient::showUI(const dk::io::Frame& frame)
@@ -28,52 +49,6 @@ void EditorClient::showUI(const dk::io::Frame& frame)
 	ImGui::GetStyle().WindowMenuButtonPosition = ImGuiDir_None;
 	ImGui::GetStyle().TabRounding = 0.f;
 	ImGui::PushStyleColor(ImGuiCol_WindowBg, 0xff1f1f1f);
-
-	// Draw menu bar
-	if (auto menuBar = ImGuiCustomMainMenuBar("MainMenuBar"); menuBar)
-	{
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
-		ImGui::PushStyleColor(ImGuiCol_Button        , 0x00);
-		ImGui::PushStyleColor(ImGuiCol_ButtonHovered , 0xff4f4f4f);
-		ImGui::PushStyleColor(ImGuiCol_ButtonActive  , 0x00);
-
-		ImGui::Button("File", ImVec2(48, 26)); ImGui::SameLine();
-		ImGui::Button("Edit", ImVec2(48, 26)); ImGui::SameLine();
-		ImGui::Button("View", ImVec2(48, 26)); ImGui::SameLine();
-
-		// Draw game client controller floater
-		const float gameClientControllFloaterWidth = 
-			m_execution == Execution::Editing ? 22.f : 74.f;
-		ImGui::SetCursorPosX(ImGui::GetMainViewport()->Size.x / 2.f - gameClientControllFloaterWidth / 2.f);
-		if (m_execution == Execution::Editing)
-		{
-			// Draw run button
-			ImGui::ImageButton("##run_game_client_button", 
-				m_assets.get<dk::gfx::Texture>("/textures/ui/editor/run_btn.png").imguiTextureId(), 
-				ImVec2(22, 22)); ImGui::SameLine();
-		}
-		else
-		{
-			// Draw stop button
-			ImGui::ImageButton("##stop_game_client_button", 
-				m_assets.get<dk::gfx::Texture>("/textures/ui/editor/stop_btn.png").imguiTextureId(), 
-				ImVec2(22, 22)); ImGui::SameLine();
-			// Draw restart button
-			ImGui::ImageButton("##restart_game_client_button", 
-				m_assets.get<dk::gfx::Texture>("/textures/ui/editor/restart_btn.png").imguiTextureId(), 
-				ImVec2(22, 22)); ImGui::SameLine();
-			// Draw pause button
-			ImGui::ImageButton("##pause_game_client_button", 
-				m_assets.get<dk::gfx::Texture>("/textures/ui/editor/pause_btn.png").imguiTextureId(), 
-				ImVec2(22, 22)); ImGui::SameLine();
-		}
-
-		ImGui::PopStyleColor(3);
-		ImGui::PopStyleVar();
-	}
-
-	ImGui::DockSpaceOverViewport(m_window.imguiDockspaceID(), (const ImGuiViewport*)0,
-		ImGuiDockNodeFlags_PassthruCentralNode);
 
 	if (ImBeginClearInWindow("editor_strategy_options_window", 
 		ImVec2(frame.viewport().offset().x, frame.viewport().offsetFromTop())))
@@ -98,8 +73,14 @@ void EditorClient::showUI(const dk::io::Frame& frame)
 
 void EditorClient::updateWhileEditing(const dk::io::Frame& frame)
 {
+	// Update edit strategy
+	m_editStrategies[m_selectedEditStrategyIndex]->update(frame);
+
+	// Rebuild navmesh
+	m_state->terrain->navmesh().build(*m_state->terrain);
 }
 
 void EditorClient::updateWhileTesting(const dk::io::Frame& frame)
 {
+
 }

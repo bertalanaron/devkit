@@ -288,13 +288,16 @@ private:
 		// @brief Register asset type and provide handlers
 		template <typename T>
 		void type(
-			const path_t&              extension, 
+			const std::vector<path_t>& extensions, 
 			LoadFn<T>                  load, 
 			std::optional<UpdateFn<T>> opt_update = std::nullopt, 
 			std::optional<SaveFn<T>>   opt_save   = std::nullopt, 
 			ExecutionPolicy            policy = Sync) 
 		{
-			m_extensionToType[tryAddDotToExtension(extension)] = typeid(T);
+			// Create LUT of extensions
+			for (const auto& extension : extensions)
+				m_extensionToType[tryAddDotToExtension(extension)] = typeid(T);
+			
 			m_assetTypes[typeid(T)] = std::make_unique<AssetType<T>>(load, opt_update, opt_save, policy);
 			m_typeNames[typeid(T)]  = typeid(T).name();
 		}
@@ -605,7 +608,19 @@ public:
 		std::optional<GenericHandler::SaveFn<T>>   opt_save   = std::nullopt, 
 		ExecutionPolicy                            policy = Sync) 
 	{
-		m_handler.type(extension, load, opt_update, opt_save, policy);
+		m_handler.type({ extension }, load, opt_update, opt_save, policy);
+	}
+
+	// @brief Register asset type and provide handlers
+	template <typename T>
+	void type(
+		std::initializer_list<path_t>         extensions,
+		GenericHandler::LoadFn<T>                  load, 
+		std::optional<GenericHandler::UpdateFn<T>> opt_update = std::nullopt, 
+		std::optional<GenericHandler::SaveFn<T>>   opt_save   = std::nullopt, 
+		ExecutionPolicy                            policy = Sync) 
+	{
+		m_handler.type(extensions, load, opt_update, opt_save, policy);
 	}
 
 	template <typename T>
@@ -688,8 +703,28 @@ public:
 	{ return m_handler.each<T>(); }
 
 	template <typename T>
+	auto each(const path_t& directory)
+	{ 
+		return each<T>()
+			| std::ranges::views::filter([&,dir=directory](const auto& pair) {
+				const path_t absolutePath = m_rootdir->path() / dir.relative_path();
+				return dk::common::fs::is_parent(pair.first, absolutePath);
+			}); 
+	}
+
+	template <typename T>
 	auto ceach() const
 	{ return m_handler.ceach<T>(); }
+
+	template <typename T>
+	auto ceach(const path_t& directory) const
+	{ 
+		return ceach<T>()
+			| std::ranges::views::filter([&](const auto& pair) {
+				const auto relativePath = relativeToRoot(pair.first).lexically_normal().string();
+				return relativePath.contains(directory.string());
+			}); 
+	}
 
 	template <typename T>
 	void create(const path_t& path, T&& object)

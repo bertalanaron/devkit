@@ -3,66 +3,103 @@
 
 namespace dk::gfx {
 
+enum class TextureClass { Diffuse, Normal, Specular, Height, Emissive, Metalness, Roughness };
+
 class Scene {
 private:
-	struct Model {
+	using path_t = std::filesystem::path;
+	template <typename T>
+	using opt_t  = std::optional<T>;
+	template <typename K, typename T>
+	using umap_t = std::unordered_map<K, T>;
+
+public:
+	class Node;
+
+	class Object {
 	public:
-		Model(Scene* scene, const glm::mat4& transform)
-			: m_scene(scene)
-			, m_transfrom(transform)
-		{ }
+		using ObjectTextureCollection = std::unordered_map<TextureClass, std::vector<path_t>>;
 
-		auto meshes()
-		{
-			using namespace std::ranges;
+		Node*                   parentNode = nullptr; 
+		ObjectTextureCollection texturePaths;
+		glm::mat4               transform  = glm::identity<glm::mat4>();
 
-			return m_meshIndices 
-				| views::transform([this](const auto& index) {
-					return std::ref(m_scene->m_meshes.at(index));
-				});
-		}
+		const Mesh& mesh() const;
 
-		const glm::mat4& transform() const
-		{ return m_transfrom; }
+		Object() = default;
+		Object(Node* _parentNode, void* aiNode, int index);
 
 	private:
-		Scene*           m_scene;
-		glm::mat4        m_transfrom;
-		std::vector<int> m_meshIndices;
+		int m_index;
+		int m_meshIndex;
+	};
+	
+	class Node {
+	public:
+		using ChildNodeCollection = std::unordered_map<path_t, std::optional<Node>>;
 
-		friend class Scene;
+		Scene*              parentScene = nullptr;
+		Node*               parentNode  = nullptr;
+		ChildNodeCollection childNodes;
+		path_t              path;
+		path_t              name;
+		std::vector<Object> objects;
+		glm::mat4           transform   = glm::identity<glm::mat4>();
+
+		Node() = default;
+		Node(Scene* scene, const void* aiScene, void* aiNode, Node* parentNode = nullptr);
 	};
 
 public:
-	static Scene load(const std::string& path);
+	path_t              path;
+	std::optional<Node> rootNode;
 
-	std::vector<Mesh>& meshes()
-	{ return m_meshes; }
-
-	Model& operator[](const std::string& name)
-	{ return m_models.at(name); }
-
-	const Model& operator[](const std::string& name) const
-	{ return m_models.at(name); }
-
-	Scene(Scene&& other)
-		: m_directory(std::move(other.m_directory))
-		, m_meshes(std::move(other.m_meshes))
-		, m_models(std::move(other.m_models))
-	{ 
-		for (auto& model : m_models)
-			model.second.m_scene = this;
+	Node& operator[](const std::filesystem::path& path)
+	{
+		Node* node = findNode(path);
+		if (!node)
+			throw std::runtime_error("Invalid object path");
+		return *node;
 	}
 
-private:
-	std::string                            m_directory;
-	std::vector<Mesh>                      m_meshes;
-	std::unordered_map<std::string, Model> m_models;
+	const Node& operator[](const path_t& path) const
+	{
+		const Node* node = findNode(path);
+		if (!node)
+			throw std::runtime_error("Invalid object path");
+		return *node;
+	}
 
-	void processNode(void* node, const void* scene, const glm::mat4& parentTransform);
-	Mesh processMesh(void* mesh, const void* scene);
+	static Scene load(const std::string& path);
 
 	Scene() = default;
+	Scene(const Scene&);
+	Scene(const path_t& path);
+
+private:
+	struct MeshStorage {
+		VertexFlags                      originalFlags;
+		umap_t<VertexFlags, opt_t<Mesh>> instances;
+	};
+
+	using MeshCollection = std::unordered_map<int, MeshStorage>;
+
+	MeshCollection m_meshStorages;
+
+	auto findNode(auto this&& self, const path_t& path)
+		-> decltype(&self.rootNode.value())
+	{
+		if (!self.rootNode.has_value())
+			return nullptr;
+		decltype(auto) currNode = &self.rootNode.value();
+		for (auto& name : path) {
+			auto nodeIt = currNode->childNodes.find(name);
+			if (nodeIt == currNode->childNodes.end())
+				return nullptr;
+			currNode = nodeIt->second;
+		}
+		return currNode;
+	}
 };
 
 } // dk::gfx

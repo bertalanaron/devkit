@@ -17,6 +17,11 @@ glm::mat4 toGlm(const aiMatrix4x4 & mat)
         mat.a4, mat.b4, mat.c4, mat.d4 );
 }
 
+std::string toStd(const aiString& string)
+{
+    return string.C_Str();
+}
+
 dk::gfx::VertexFlags getFlags(aiMesh* mesh, const aiScene* scene) 
 {
     dk::gfx::VertexFlags flags = dk::gfx::VertexFlags::Position;
@@ -125,6 +130,8 @@ void dk::gfx::Scene::processNode(void* _node, const void* _scene, const glm::mat
         }
     }
 
+    node->
+
     // Process child nodes
     for(unsigned int i = 0; i < node->mNumChildren; i++)
     {
@@ -132,23 +139,96 @@ void dk::gfx::Scene::processNode(void* _node, const void* _scene, const glm::mat
     }
 }
 
-dk::gfx::Scene dk::gfx::Scene::load(const std::string& path)
+//Scene*              parentScene = nullptr;
+//Node*               parentNode  = nullptr;
+//ChildNodeCollection childNodes;
+//path_t              path;
+//path_t              name;
+//std::vector<Object> objects;
+//glm::mat4           transform   = glm::identity<glm::mat4>();
+
+dk::gfx::Mesh parseMesh(const aiScene* scene, aiMesh* mesh, dk::gfx::VertexFlags vertexFlags)
 {
-    Scene result;
+    dk::gfx::Mesh result = dk::gfx::Mesh::create(vertexFlags);
 
-    Assimp::Importer import;
-    const aiScene* scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs/* | aiProcess_CalcTangentSpace*/);	
-
-    if(!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) 
+    // Push vertices
+    for (unsigned int i = 0; i < mesh->mNumVertices; i++)
     {
-        spdlog::error("Failed to load scene from {}", path);
-        spdlog::error("Assimp error: {}", import.GetErrorString());
-        return result;
+        const auto vertex = getVertex(result.vertices().vertexAttributes()->size(), vertexFlags, mesh, i);
+        result.vertices().push_back(vertex);
     }
 
-    result.m_directory = std::filesystem::path(path).parent_path().string();
+    // Push indices
+    for(unsigned int i = 0; i < mesh->mNumFaces; i++)
+    {
+        aiFace face = mesh->mFaces[i];
+        for(unsigned int j = 0; j < face.mNumIndices; j++)
+            result.indices().push(face.mIndices[j]);
+    }
 
-    result.processNode(scene->mRootNode, scene, glm::identity<glm::mat4>());
-    
     return result;
+}
+
+dk::gfx::Scene::Node::Node(Scene* parentScene, const void* _scene, void* _node, Node* parentNode)
+    : parentScene(parentScene)
+    , parentNode(parentNode)
+{
+    const aiScene* scene = reinterpret_cast<const aiScene*>(_scene);
+    const aiNode*  node  = reinterpret_cast<const aiNode*>(_node);
+
+    // Calculate transform based on parent
+    const auto parentTransform = (parentNode ? parentNode->transform : glm::identity<glm::mat4>());
+    transform = parentTransform * toGlm(node->mTransformation);
+    // Get node name
+    name = toStd(node->mName);
+
+    // Parse contained meshes
+    for (int i = 0; i < (int)node->mNumMeshes; ++i)
+    {
+        int        meshIdx     = node->mMeshes[i];
+        aiMesh*    mesh        = scene->mMeshes[meshIdx];
+        auto&      meshStorage = parentScene->m_meshStorages[meshIdx];
+        const auto vertexFlags = getFlags(mesh, scene);
+
+        // Parse mesh if it isn't parsed yet
+        if (auto instanceIt = meshStorage.instances.find(vertexFlags); 
+            instanceIt != meshStorage.instances.end())
+        {
+            meshStorage.originalFlags = vertexFlags;
+            instanceIt->second.emplace(std::move(parseMesh(scene, mesh, vertexFlags)));
+        }
+    }
+
+    // Parse child nodes
+    for(int i = 0; i < (int)node->mNumChildren; ++i)
+    {
+        auto childNode = node->mChildren[i];
+        childNodes.emplace(toStd(childNode->mName), std::move(Node(parentScene, scene, childNode, this)));
+    }
+}
+
+dk::gfx::Scene::Scene(const Scene& other)
+    : path(other.path)
+{
+    throw std::runtime_error("Not implemented");
+}
+
+dk::gfx::Scene::Scene(const path_t& _path)
+    : path(std::filesystem::path(_path).parent_path())
+{
+    // Try load scene from file
+    Assimp::Importer import;
+    const auto       sceneFlags = aiProcess_Triangulate | aiProcess_FlipUVs/* | aiProcess_CalcTangentSpace*/;
+    const aiScene*   scene      = import.ReadFile(path.string(), sceneFlags);
+
+    // Verify scene
+    if(!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) 
+    {
+        spdlog::error("Failed to load scene from {}", path.string());
+        spdlog::error("Assimp error: {}", import.GetErrorString());
+        return;
+    }
+
+    // Parse nodes
+    rootNode = Node(this, scene, scene->mRootNode);
 }

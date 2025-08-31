@@ -289,8 +289,11 @@ void dk::gfx::Shader::uniformTexture(const std::string& uniform, Texture& textur
 
     auto opt_slot = textures().emptySlot();
     if (!opt_slot.has_value())
+    {
         // No empty slot is available
+        spdlog::warn("[gfx] Shaders's texture unit has no available slot");
         return;
+    }
 
     textures()[opt_slot.value()] = texture;
     uniforms().set(uniform, opt_slot.value());

@@ -28,6 +28,9 @@ public:
 	const auto& frame() const
 	{ return *m_currentFrame; }
 
+	auto& camera()
+	{ return m_camera; }
+
 private:
 	const dk::io::Frame*       m_currentFrame = nullptr;
 	dk::gfx::Camera            m_camera;

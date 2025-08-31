@@ -31,6 +31,7 @@ private:
 	};
 
 public:
+	Terrain(const Terrain&) = default;
 	Terrain()
 		: NavmeshGenerator(std::thread::hardware_concurrency())
 		, m_gridSize(glm::ivec2(64, 64))
@@ -43,6 +44,11 @@ public:
 		for (int x = 0; x < m_accessor.sizeInChunks().x; ++x)
 			for (int y = 0; y < m_accessor.sizeInChunks().y; ++y)
 				m_views.emplace(glm::ivec2(x, y), ChunkView());
+
+		// Mark chunks as changed
+		for (int x = 0; x < m_accessor.sizeInChunks().x; ++x)
+			for (int y = 0; y < m_accessor.sizeInChunks().y; ++y)
+				m_changedChunks.insert(glm::ivec2(x, y));
 	}
 
 	struct Cell {
@@ -98,6 +104,13 @@ public:
 		m_changedChunks.insert(m_accessor.chunkCoordsOf(coords));
 	}
 
+	void regenerate()
+	{
+		for (int x = 0; x < m_accessor.sizeInChunks().x; ++x)
+			for (int y = 0; y < m_accessor.sizeInChunks().y; ++y)
+				m_changedChunks.insert(glm::ivec2(x, y));
+	}
+
 	void render(dk::gfx::FrameBuffer& frameBuffer, dk::gfx::Shader& shader)
 	{
 		for (auto& [coords, view] : m_views) {
@@ -108,6 +121,12 @@ public:
 
 	dk::algo::Navmesh& navmesh()
 	{ return m_navmesh; }
+
+	const auto& accessor() const
+	{ return m_accessor; }
+
+	auto& operator[](const glm::ivec2& coords)
+	{ return m_cells[m_accessor.indexOf(coords)]; }
 
 private:
 	glm::ivec2        m_gridSize;
@@ -120,10 +139,6 @@ private:
 	std::unordered_map<glm::ivec2, ChunkView> m_views;
 
 	std::unordered_set<glm::ivec2> m_changedChunks;
-
-	//dk::geom::chunked_grid2<Cell>  m_cells;
-
-private:
 
 
 private:
