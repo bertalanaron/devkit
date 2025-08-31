@@ -1,6 +1,8 @@
 #include <devkit/gfx/texture.h>
 #include <devkit/gfx/frame_buffer.h>
 
+#include "context.h"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include <GL/glew.h>
@@ -196,7 +198,7 @@ void dk::gfx::TextureUnit::SlotRef::operator=(Texture & texture)
 
 dk::gfx::TextureUnit::TextureUnit()
 {
-    glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &m_slotCount);
+    m_slotCount = dk::io::GlobalState::hardware().glMaxTextureImageUnits;
     m_textures.resize(m_slotCount);
 }
 

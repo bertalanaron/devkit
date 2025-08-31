@@ -2,6 +2,9 @@
 #include "game_state.h"
 #include "game_client.h"
 #include "ui_utils.h"
+#include "rts_camera_controller.h"
+
+#include <devkit/algo/draw.h>
 
 class EditorClient 
 	: public ClientBase
@@ -37,7 +40,12 @@ public:
 	class ObjectsEditStrategy;
 
 public:
-	using ClientBase::ClientBase;
+	EditorClient(
+		const mINI::INIStructure&    ini,
+		std::unique_ptr<GameState>&& state = std::make_unique<GameState>())
+		: ClientBase(ini, std::move(state))
+		, m_navmeshGenerationDebugOut(std::move(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>()))
+	{ }
 
 	void update(const dk::io::Frame& frame) override
 	{
@@ -47,19 +55,11 @@ public:
 
 		m_assets.synchronize();
 
-		// Disable ui when testing
-		ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 0.2);
-		ImGui::BeginDisabled(m_execution == Execution::Testing);
-
 		// Execution in editing or testing state
-		showUI(frame);
 		if (m_execution == Execution::Editing)
 			updateWhileEditing(frame);
 		if (m_execution == Execution::Testing)
 			updateWhileTesting(frame);
-
-		ImGui::EndDisabled();
-		ImGui::PopStyleVar();
 
 		// Handle game instance creation and update
 		if (m_inputs.activated("run"))
@@ -80,12 +80,49 @@ public:
 		}
 	}
 
+	void render(const dk::io::Frame& frame) override
+	{
+		dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, dk::colors::black);
+
+		// Update camera
+		m_view.update(frame, m_cameraController);
+
+		// Set uniforms
+		m_shaders["rgba"].uniforms()    << m_view.uniforms();
+		m_shaders["terrain"].uniforms() << m_view.uniforms();
+
+		m_navmeshGenerationDebugOut << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::X}, dk::colors::red)
+			                        << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::Y}, dk::colors::lime)
+			                        << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::Z}, dk::colors::blue);
+		m_navmeshGenerationDebugOut.draw(m_shaders["rgba"], dk::gfx::backBuffer());
+		
+		// Render terrain
+		m_shaders["terrain"].uniformTexture("u_grassTexture1", m_assets.get<dk::gfx::Texture>("/textures/terrain/grass1.png"));
+		m_shaders["terrain"].uniformTexture("u_grassTexture2", m_assets.get<dk::gfx::Texture>("/textures/terrain/grass2.png"));
+		m_shaders["terrain"].uniformTexture("u_rockTexture" , m_assets.get<dk::gfx::Texture>("/textures/terrain/rock.png"));
+		m_state->terrain->render(dk::gfx::backBuffer(), m_shaders["terrain"]);
+
+		// Disable ui when testing
+		dk::common::ScopeGuard disableUiGuard(
+			[&]{
+				ImGui::PushStyleVar(ImGuiStyleVar_DisabledAlpha, 0.2);
+				ImGui::BeginDisabled(m_execution == Execution::Testing);
+			}, [&] {
+				ImGui::EndDisabled();
+				ImGui::PopStyleVar();
+				});
+		showUI(frame);
+	}
+
 private:
 	std::optional<GameClient> m_gameClient;
 	Execution                 m_execution = Execution::Editing;
 
 	int                                   m_selectedEditStrategyIndex = 0;
 	std::vector<uptr_t<EditStrategyBase>> m_editStrategies;
+
+	RTSCameraController m_cameraController;
+	dk::gfx::VertexSink m_navmeshGenerationDebugOut;
 
 	void updateWhileEditing(const dk::io::Frame& frame);
 

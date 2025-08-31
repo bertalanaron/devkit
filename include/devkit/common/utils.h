@@ -132,6 +132,38 @@ public:
 	}
 };
 
+class ScopeGuard
+{
+public:
+	ScopeGuard(const auto& engageFunc, const auto& releaseFunc)
+		: m_releaseFunc(releaseFunc)
+	{
+		engageFunc();
+		m_engaged = true;
+	}
+
+	ScopeGuard(const auto& releaseFunc)
+		: m_engaged(true)
+		, m_releaseFunc(releaseFunc)
+	{ }
+
+	// @brief Stop release callback from executing
+	void release()
+	{
+		m_engaged = false;
+	}
+
+	~ScopeGuard()
+	{
+		if (m_engaged)
+			m_releaseFunc();
+	}
+
+private:
+	bool                  m_engaged = false;
+	std::function<void()> m_releaseFunc;
+};
+
 template <typename T>
 struct function_traits
 	: public function_traits<decltype(&T::operator())>

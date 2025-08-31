@@ -103,7 +103,6 @@ const dk::io::Frame& dk::io::Window::beginFrame()
 	ImGui_ImplSDL3_NewFrame();
 	ImGui::NewFrame();
 	// Setup dockspace
-	if ((bool)property<properties::window::default_dockspace>())
 	ImGui::DockSpaceOverViewport(m_context->imguiDockspaceId, (const ImGuiViewport*)0, 
 		ImGuiDockNodeFlags_PassthruCentralNode);
 
@@ -155,11 +154,6 @@ void dk::io::Window::endFrame()
 	// Close if requested
 	if (m_closeRequested)
 		close();
-}
-
-unsigned int dk::io::Window::imguiDockspaceID() const
-{
-	return m_context->imguiDockspaceId;
 }
 
 void dk::io::Window::makeCurrent()
@@ -265,10 +259,6 @@ void details::common::setProperty(dk::io::Window& window, const dk::io::properti
 	SDL_SetWindowBordered(window.m_context->sdlWindowContext, !border);
 	SDL_SetWindowBordered(window.m_context->sdlWindowContext, border);
 }
-
-template <>
-void details::common::setProperty(dk::io::Window&, const dk::io::properties::window::default_dockspace&)
-{ }
 
 template <>
 void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::vsync& vsync)

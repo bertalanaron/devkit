@@ -64,6 +64,7 @@ public:
 protected:
 	dk::io::AssetManager       m_assets;
 	dk::io::InputManager       m_inputs;
+	dk::gfx::ShaderCollection  m_shaders;
 	View                       m_view;
 	std::unique_ptr<GameState> m_state;
 	dk::io::Window             m_window;
@@ -155,47 +156,6 @@ private:
 
 	int& m_selected;
 	int  m_index = 0;
-};
-
-class ImGuiCustomMainMenuBar
-{
-public:
-	ImGuiCustomMainMenuBar(const char* id)
-	{
-		const ImGuiWindowFlags menuBarFlags = 
-			ImGuiWindowFlags_NoTitleBar | 
-			ImGuiWindowFlags_NoCollapse |
-			ImGuiWindowFlags_NoResize   | 
-			ImGuiWindowFlags_NoMove     |
-			ImGuiWindowFlags_NoBringToFrontOnFocus | 
-			ImGuiWindowFlags_NoNavFocus | 
-			ImGuiWindowFlags_NoDocking  | 
-			ImGuiWindowFlags_NoSavedSettings | 
-			ImGuiWindowFlags_NoScrollbar;
-
-		ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos);
-		ImGui::SetNextWindowSize(ImVec2(ImGui::GetMainViewport()->Size.x, 0.f));
-		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
-		float menuBarHeight = 0;
-		m_isOpen = ImGui::Begin(id, nullptr, menuBarFlags);
-	}
-
-	operator bool() const
-	{ return m_isOpen; }
-
-	~ImGuiCustomMainMenuBar()
-	{
-		m_height = ImGui::GetWindowSize().y;
-		ImGui::End();
-		ImGui::PopStyleVar();
-
-		ImGui::GetMainViewport()->WorkPos.y  += m_height;
-		ImGui::GetMainViewport()->WorkSize.y -= m_height;
-	}
-
-private:
-	float m_height = 0.f;
-	bool  m_isOpen = false;
 };
 
 inline bool ImBeginClearInWindow(const char* windowName, const ImVec2& relativePos)

@@ -4,13 +4,19 @@
 
 void setupAssetManager(dk::io::AssetManager& assets, mINI::INIStructure& ini)
 {
+	// Define root folder
 	assets.root(ini["data"]["path"]);
 
-	assets.type<dk::gfx::Texture>("png", 
+	// Register types
+	assets.type<dk::gfx::Texture>({ "png", "jpg" },
 		dk::gfx::Texture::load, std::nullopt, std::nullopt, dk::io::AssetManager::Async);
-	assets.watch("/textures", false);
-	assets.watch("/textures/terrain", false);
-	assets.watch("/textures/ui"     , true);
+	assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
+
+	// Setup directories to watch
+	assets.watch("/textures", true);
+	//assets.watch("/textures/terrain", false);
+	//assets.watch("/textures/ui"     , true);
+	assets.watch("/shaders" , true);
 }
 
 int main()

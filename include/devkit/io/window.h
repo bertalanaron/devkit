@@ -12,7 +12,6 @@ namespace window {
 	enum class theme { light, dark };
 	enum class vsync { disabled, retrace, adaptive };
 	enum class mouse_grab { disabled, enabled };
-	enum class default_dockspace : bool { enabled = 1, disabled = 0 };
 }
 } // dk::io::properties
 
@@ -36,8 +35,7 @@ using WindowProperties = dk::common::DeferredPropertyCollection<D,
 	dk::io::properties::window::mode,
 	dk::io::properties::window::theme,
 	dk::io::properties::window::vsync,
-	dk::io::properties::window::mouse_grab,
-	dk::io::properties::window::default_dockspace>;
+	dk::io::properties::window::mouse_grab>;
 
 } // details::io
 
@@ -67,8 +65,6 @@ public:
 	const Frame& beginFrame();
 	void endFrame();
 
-	unsigned int imguiDockspaceID() const;
-	
 	void makeCurrent();
 
 	void warpCursor(const glm::ivec2& destination) const;

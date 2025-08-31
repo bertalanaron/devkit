@@ -36,6 +36,7 @@ private:
 
 struct NavmeshGenerator {
 public:
+	NavmeshGenerator(const NavmeshGenerator& other);
 	NavmeshGenerator(int threadCount = 0);
  
 	void build(glm::ivec2 sizeInChunks, std::vector<NavmeshChunk>& chunks, Navmesh& navmesh);
@@ -76,12 +77,15 @@ private:
 
 	void promoteLevel3Nodes(glm::ivec2 sizeInChunks, std::vector<NavmeshChunk>& chunks, Navmesh& navmesh);
 
+	void initializeWorkers();
+
 protected:
 	virtual bool chunkUpdated(const glm::ivec2& chunkCoord) const = 0;
 
 	virtual void generateChunk(NavmeshChunk& chunk, const glm::ivec2& chunkCoord) = 0;
 
 	virtual void buildDone() { }
+
 };
 
 /**

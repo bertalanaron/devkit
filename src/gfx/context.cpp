@@ -41,8 +41,23 @@ void dk::io::GlobalState::tryInitialize()
 	spdlog::trace("[io] Using OpenGL {}.{}. ", state().glVersionMajor, state().glVersionMinor);
 
 	// Get hardware info
+	// Setup dummy context
+	SDL_Window* dummyWin = SDL_CreateWindow("Dummy",1,1,SDL_WINDOW_OPENGL | SDL_WINDOW_HIDDEN);
+	if (!dummyWin)
+		std::terminate();
+	SDL_GLContext dummyCtx = SDL_GL_CreateContext(dummyWin);
+	if (!dummyCtx)
+	{
+		SDL_DestroyWindow(dummyWin);
+		std::terminate();
+	}
+	SDL_GL_MakeCurrent(dummyWin, dummyCtx);
+	// Get info
 	glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &mutHardware().glMaxTextureImageUnits);
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE       , &mutHardware().glMaxTextureSize);
+	// Destroy dummy context
+	SDL_GL_DestroyContext(dummyCtx);
+	SDL_DestroyWindow(dummyWin);
 
 	mutState().initialized = true;
 }
