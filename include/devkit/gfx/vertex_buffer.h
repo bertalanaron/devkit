@@ -3,91 +3,56 @@
 #include <devkit/gfx/element_buffer.h>
 #include <devkit/gfx/draw_data.h>
 #include <devkit/common/runtime_buffer.h>
+#include <devkit/common/typeless.h>
+#include <devkit/gfx/api_resources.h>
+#include <devkit/gfx/shader.h>
 
 namespace dk::gfx {
 
 class VertexBuffer {
 public:
 	template <typename Vertex>
-	static VertexBuffer create() 
-	{
-		return VertexBuffer(Vertex::attributes(), std::move(common::TypelessBuffer(common::id_t<Vertex>{})));
-	}
+	VertexBuffer(common::id_t<Vertex> vertexTypeId)
+		: m_attributes(Vertex::attributes())
+		, m_buffer(vertexTypeId)
+	{ }
 
-	static VertexBuffer create(VertexFlags flags);
+	VertexBuffer(VertexFlags flags)
+		: m_attributes(VertexAttributes::get(flags))
+		, m_buffer(m_attributes->size())
+	{ }
+	
+	auto vertexAttributes() const { return m_attributes; }
 
-	static VertexBuffer create(const VertexAttributes* vertexAttributes);
+	// @brief Get a immutable reference to the underlying buffer
+	const auto& get() const { return m_buffer.get(); }
+
+	// @brief Get a mutable reference to the underlying buffer and mark it as dirty
+	auto& modify() { return m_buffer.modify(); }
+
+	// @brief Get size of underlying buffer
+	size_t size() const
+	{ return get().size(); }
 
 	void makeActive();
-
-	void clear();
-
-	template <typename Vertex>
-	const Vertex& get(size_t index) const
-	{
-		DK_ASSERT(("Vertex layout mismatch", Vertex::attributes() == m_vertexAttributes));
-		return m_vertices.at<Vertex>(index);
-	}
-
-	template <typename Vertex>
-	void set(int index, const Vertex& vertex)
-	{
-		DK_ASSERT(("Vertex layout mismatch", Vertex::attributes() == m_vertexAttributes));
-		m_vertices.at<Vertex>(index) = vertex;
-		if (index < m_changedMin)
-			m_changedMin = index;
-		if (index > m_changedMax)
-			m_changedMax = index;
-	}
-
-	template <typename Vertex>
-	void push_back(const Vertex& vertex)
-	{
-		DK_ASSERT(("Vertex layout mismatch", Vertex::attributes() == m_vertexAttributes));
-		m_vertices.push_back(vertex);
-		m_resized = true;
-	}
-
-	void push_back(const std::vector<uint8_t>& vertex);
-
-	template <typename Vertex>
-	void insert(std::vector<Vertex>::const_iterator begin, std::vector<Vertex>::const_iterator end)
-	{
-		DK_ASSERT(("Vertex layout mismatch", Vertex::attributes() == m_vertexAttributes));
-		m_vertices.insert(m_vertices.end(), begin, end);
-		m_resized = true;
-	}
-
-	size_t size() const
-	{ return m_vertices.size(); }
-
-	const auto vertexAttributes() const
-	{ return m_vertexAttributes; }
 
 	template <typename Vertex>
 	VertexBuffer& operator<<(const DrawData<Vertex>& dd)
 	{
-		push<Vertex>(dd.vertices.cbegin(), dd.vertices.cend());
+		if (Vertex::attributes() != m_attributes)
+			throw std::runtime_error("vertex layout mismatch");
+		modify().insert(get().cend(), dd.vertices.begin(), dd.vertices.end());
 		return *this;
 	}
 
+	operator Shader::LayoutElement();
+
 private:
-	const VertexAttributes* m_vertexAttributes;
-	common::TypelessBuffer  m_vertices;
+	using WatchedBuffer = common::watched_object<common::typeless_vector>;
 
-	unsigned m_vao = 0;
-	unsigned m_vbo = 0;
-	bool     m_resized = true;
-	int      m_changedMin = std::numeric_limits<int>::max();
-	int      m_changedMax = std::numeric_limits<int>::min();
-
-	VertexBuffer(const dk::gfx::VertexAttributes* vertexAttributes, common::TypelessBuffer&& vertices) 
-		: m_vertexAttributes(vertexAttributes)
-		, m_vertices(std::move(vertices))
-	{ }
-
-	void init();
-	void update();
+	const VertexAttributes* m_attributes;
+	WatchedBuffer           m_buffer;
+	api::VertexBufferObject m_apiHandle;
 };
 
 }

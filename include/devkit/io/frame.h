@@ -28,9 +28,15 @@ public:
 
 	double aspectRatio() const;
 
-	template <typename _Rep>
-	const auto dt() const
-	{ return std::chrono::duration<double>(std::chrono::duration_cast<_Rep>(m_dt)).count(); }
+	template <typename T>
+	double dt() const
+	{
+		using Rep    = typename decltype(m_dt)::rep;
+		using Period = typename decltype(m_dt)::period;
+		using DblTo  = std::chrono::duration<double, typename T::period>;
+
+		return std::chrono::duration_cast<DblTo>(m_dt).count();
+	}
 
 	void warpCursor(const glm::ivec2& destination) const;
 
@@ -53,7 +59,7 @@ protected:
 	glm::ivec2           m_prevCursor;
 
 	std::chrono::system_clock::time_point m_t;
-	std::chrono::seconds                  m_dt;
+	std::chrono::nanoseconds              m_dt;
 };
 
 } // dk::io

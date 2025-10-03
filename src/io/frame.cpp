@@ -48,7 +48,7 @@ dk::io::Frame::Frame(
 	, m_cursor(cursor)
 	, m_prevCursor(previous.m_cursor)
 	, m_t(std::chrono::system_clock::now())
-	, m_dt(std::chrono::duration_cast<std::chrono::seconds>(m_t - previous.m_t))
+	, m_dt(std::chrono::duration_cast<std::chrono::nanoseconds>(m_t - previous.m_t))
 {
 	if (GlobalState::state().cursorWarped)
 		m_prevCursor = m_cursor;

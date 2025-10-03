@@ -44,7 +44,7 @@ public:
 		const mINI::INIStructure&    ini,
 		std::unique_ptr<GameState>&& state = std::make_unique<GameState>())
 		: ClientBase(ini, std::move(state))
-		, m_navmeshGenerationDebugOut(std::move(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>()))
+		, m_navmeshGenerationDebugOut(dk::common::id<dk::gfx::RGBAVertex>)
 	{ }
 
 	void update(const dk::io::Frame& frame) override
@@ -91,9 +91,9 @@ public:
 		m_shaders["rgba"].uniforms()    << m_view.uniforms();
 		m_shaders["terrain"].uniforms() << m_view.uniforms();
 
-		m_navmeshGenerationDebugOut << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::X}, dk::colors::red)
-			                        << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::Y}, dk::colors::lime)
-			                        << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::Z}, dk::colors::blue);
+		m_navmeshGenerationDebugOut << dk::gfx::draw(dk::geom::edge3{dk::geom::Origin3, dk::geom::axis::X}, dk::colors::red)
+			                        << dk::gfx::draw(dk::geom::edge3{dk::geom::Origin3, dk::geom::axis::Y}, dk::colors::lime)
+			                        << dk::gfx::draw(dk::geom::edge3{dk::geom::Origin3, dk::geom::axis::Z}, dk::colors::blue);
 		m_navmeshGenerationDebugOut.draw(m_shaders["rgba"], dk::gfx::backBuffer());
 		
 		// Render terrain

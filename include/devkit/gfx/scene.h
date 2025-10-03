@@ -1,105 +1,126 @@
 #pragma once
 #include <devkit/gfx/mesh.h>
+#include <devkit/common/filesystem_hierarchy_node.h>
 
 namespace dk::gfx {
 
-enum class TextureClass { Diffuse, Normal, Specular, Height, Emissive, Metalness, Roughness };
-
 class Scene {
-private:
-	using path_t = std::filesystem::path;
-	template <typename T>
-	using opt_t  = std::optional<T>;
-	template <typename K, typename T>
-	using umap_t = std::unordered_map<K, T>;
-
 public:
-	class Node;
+	struct SceneNode 
+		: public common::FSHierarchyNode<SceneNode> 
+	{
+		SceneNode(Scene& scene, std::vector<unsigned>&& meshIndices)
+			: m_scene(scene)
+			, m_meshIndices(std::move(meshIndices))
+		{ }
 
-	class Object {
-	public:
-		using ObjectTextureCollection = std::unordered_map<TextureClass, std::vector<path_t>>;
+		std::filesystem::path     name;
+		glm::mat4                 transform = glm::identity<glm::mat4>();
 
-		Node*                   parentNode = nullptr; 
-		ObjectTextureCollection texturePaths;
-		glm::mat4               transform  = glm::identity<glm::mat4>();
+		auto& operator[](unsigned index)
+		{ return m_scene.m_meshFactories.at(index); }
 
-		const Mesh& mesh() const;
+		auto meshes()
+		{
+			return m_meshIndices 
+				| std::ranges::views::transform([&](unsigned index) {
+					return m_scene.m_meshFactories.at(index)();
+				});
+		}
 
-		Object() = default;
-		Object(Node* _parentNode, void* aiNode, int index);
+		auto meshes(VertexFlags flags)
+		{
+			return m_meshIndices 
+				| std::ranges::views::transform([&](unsigned index) {
+					return m_scene.m_meshFactories.at(index)(flags);
+				});
+		}
 
 	private:
-		int m_index;
-		int m_meshIndex;
-	};
-	
-	class Node {
-	public:
-		using ChildNodeCollection = std::unordered_map<path_t, std::optional<Node>>;
+		Scene&                m_scene;
+		std::vector<unsigned> m_meshIndices;
 
-		Scene*              parentScene = nullptr;
-		Node*               parentNode  = nullptr;
-		ChildNodeCollection childNodes;
-		path_t              path;
-		path_t              name;
-		std::vector<Object> objects;
-		glm::mat4           transform   = glm::identity<glm::mat4>();
-
-		Node() = default;
-		Node(Scene* scene, const void* aiScene, void* aiNode, Node* parentNode = nullptr);
+		friend class common::FSHierarchyNode<SceneNode>;
 	};
 
 public:
-	path_t              path;
-	std::optional<Node> rootNode;
-
-	Node& operator[](const std::filesystem::path& path)
+	auto meshes()
 	{
-		Node* node = findNode(path);
+		return m_meshFactories
+			| std::ranges::views::transform([](auto& factory) -> MeshMask& { 
+				return factory(); 
+			});
+	}
+
+	auto meshes(VertexFlags flags)
+	{
+		return m_meshFactories
+			| std::ranges::views::transform([flags](auto& factory) -> MeshMask& { 
+				return factory(flags); 
+			});
+	}
+
+	auto& operator[](const std::filesystem::path& path)
+	{
+		auto node = m_root->resolveRelativeNode(path);
 		if (!node)
 			throw std::runtime_error("Invalid object path");
 		return *node;
 	}
 
-	const Node& operator[](const path_t& path) const
-	{
-		const Node* node = findNode(path);
-		if (!node)
-			throw std::runtime_error("Invalid object path");
-		return *node;
-	}
-
-	static Scene load(const std::string& path);
+	//const auto& operator[](const std::filesystem::path& path) const
+	//{
+	//	auto node = m_root->resolveRelativeNode(path);
+	//	if (!node)
+	//		throw std::runtime_error("Invalid object path");
+	//	return *node;
+	//}
 
 	Scene() = default;
 	Scene(const Scene&);
-	Scene(const path_t& path);
+	Scene(Scene&&) = default;
+	Scene(const std::filesystem::path& path);
 
-private:
-	struct MeshStorage {
-		VertexFlags                      originalFlags;
-		umap_t<VertexFlags, opt_t<Mesh>> instances;
+	static Scene loadFromFile(const std::string& path)
+	{ return Scene(path); }
+
+public:
+	class MeshFactory {
+	public:
+		MeshFactory(MeshFactory&&) = default;
+		MeshFactory(const MeshFactory&) = delete;
+		MeshFactory(Mesh&& original, VertexFlags flags)
+			: m_originalFlags(flags)
+			, m_originalMesh(std::make_unique<Mesh>(original))
+		{ 
+			m_instances.emplace(flags, std::make_unique<MeshMask>(*m_originalMesh, flags, flags));
+		}
+
+		// @brief Get original mesh as a MeshMask
+		MeshMask& operator()()
+		{ return *m_instances.at(m_originalFlags); }
+
+		MeshMask& operator()(VertexFlags target)
+		{
+			auto it = m_instances.find(target);
+			if (it == m_instances.end())
+				it = m_instances.emplace(target, std::make_unique<MeshMask>(*m_originalMesh, target, m_originalFlags)).first;
+			return *it->second;
+		}
+
+	private:
+		using MeshMaskLUT = std::unordered_map<VertexFlags, std::unique_ptr<MeshMask>>;
+
+		const VertexFlags     m_originalFlags;
+		std::unique_ptr<Mesh> m_originalMesh;
+		MeshMaskLUT           m_instances;
 	};
 
-	using MeshCollection = std::unordered_map<int, MeshStorage>;
+private:
+	std::optional<SceneNode> m_root;
+	std::vector<MeshFactory> m_meshFactories;
 
-	MeshCollection m_meshStorages;
-
-	auto findNode(auto this&& self, const path_t& path)
-		-> decltype(&self.rootNode.value())
-	{
-		if (!self.rootNode.has_value())
-			return nullptr;
-		decltype(auto) currNode = &self.rootNode.value();
-		for (auto& name : path) {
-			auto nodeIt = currNode->childNodes.find(name);
-			if (nodeIt == currNode->childNodes.end())
-				return nullptr;
-			currNode = nodeIt->second;
-		}
-		return currNode;
-	}
+	friend class SceneNode;
 };
 
 } // dk::gfx

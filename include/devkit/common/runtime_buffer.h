@@ -92,302 +92,331 @@ private:
 	{ }
 };
 
-
-
-
-// Won't call constructors unless type is provided and will never call destructors. 
-class TypelessBuffer {
-private:
-	class Iterator {
-	private:
-		class Access {
-		public:
-			template <typename T>
-			operator T&()
-			{ 
-				DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
-				return *reinterpret_cast<T*>(m_ptr);
-			}
-
-			template <typename T>
-			operator const T&() const
-			{ 
-				DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
-				return *reinterpret_cast<const T*>(m_ptr);
-			}
-
-		private:
-			size_t   m_size;
-			uint8_t* m_ptr;
-		};
-
-	public:
-		Iterator(size_t size, uint8_t* data)
-			: m_size(size)
-			, m_data(data)
-		{ }
-
-		size_t size() const
-		{ return m_size; }
-
-		uint8_t* get()
-		{ return m_data; }
-
-		const uint8_t* get() const
-		{ return m_data; }
-
-		template <typename T>
-		T* get() 
-		{
-			DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
-			return reinterpret_cast<T*>(m_data);
-		}
-
-		template <typename T>
-		const T* get() const
-		{
-			DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
-			return reinterpret_cast<const T*>(m_data);
-		}
-
-		Iterator& operator=(const Iterator& other)
-		{
-			DK_ASSERT((other.m_size == m_size, "Invalid type"));
-			std::memcpy(m_data, other.m_data, m_size);
-			return *this;
-		}
-
-		template <typename T>
-		Iterator& operator=(const T& other)
-		{
-			DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
-			*get<T>() = other;
-			return *this;
-		}
-
-		Iterator operator+(size_t offset) const
-		{ return Iterator(m_size, m_data + m_size * offset); }
-
-		void operator+=(size_t offset)
-		{ m_data += m_size * offset; }
-
-		Iterator& operator++()
-		{ *this += 1ull; return *this; }
-
-		Iterator operator++(int)
-		{ Iterator it = *this; ++(*this); return it; }
-
-		Access& operator*()
-		{ return *reinterpret_cast<Access*>(this); }
-
-		const Access& operator*() const
-		{ return *reinterpret_cast<const Access*>(this); }
-
-		bool operator!=(const Iterator& other) const 
-		{ return m_data != other.m_data; }
-
-	private:
-		const size_t m_size;
-		uint8_t*     m_data;
-	};
-
-public:
-	template <typename T>
-	TypelessBuffer(id_t<T>, size_t capacity = 2)
-		: m_elemSize(sizeof(T))
-		, m_data()
-	{
-		m_data.reserve(capacity * sizeof(T));
-	}
-
-	TypelessBuffer(size_t elem_size, size_t capacity = 2)
-		: m_elemSize(elem_size)
-		, m_data()
-	{
-		m_data.reserve(capacity * m_elemSize);
-	}
-
-	size_t elem_size() const
-	{ return m_elemSize; }
-
-	size_t size() const
-	{ return m_data.size() / m_elemSize; }
-
-	size_t capacity() const
-	{ return m_data.capacity() / m_elemSize; }
-
-	bool empty() const
-	{ return m_data.empty(); }
-
-	uint8_t* data()
-	{ return m_data.data(); }
-
-	const uint8_t* data() const
-	{ return m_data.data(); }
-
-	template <typename T>
-	T* data() 
-	{ 
-		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
-		return reinterpret_cast<T*>(m_data.data()); 
-	}
-
-	template <typename T>
-	const T* data() const
-	{ 
-		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
-		return reinterpret_cast<const T*>(m_data.data()); 
-	}
-
-	Iterator at(size_t index)
-	{
-		return Iterator(m_elemSize, &m_data.at(index * m_elemSize));
-	}
-
-	const Iterator at(size_t index) const
-	{
-		return Iterator(m_elemSize, const_cast<uint8_t*>(&m_data.at(index * m_elemSize)));
-	}
-
-	template <typename T>
-	T& at(size_t index)
-	{
-		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
-		return *reinterpret_cast<T*>(&m_data.at(index * m_elemSize));
-	}
-
-	template <typename T>
-	const T& at(size_t index) const
-	{
-		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
-		return *reinterpret_cast<const T*>(&m_data.at(index * m_elemSize));
-	}
-
-	template <typename T>
-		requires(!std::is_pointer_v<T>)
-	void push_back(const T& elem)
-	{
-		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
-		m_data.resize(m_data.size() + m_elemSize);
-		auto ptr = m_data.data() + (m_data.size() - m_elemSize);
-		new (ptr) T(elem);
-	}
-
-	void push_back(const uint8_t* elem)
-	{
-		m_data.resize(m_data.size() + m_elemSize);
-		auto ptr = m_data.data() + (m_data.size() - m_elemSize);
-		std::memcpy(ptr, elem, m_elemSize);
-	}
-
-	template <typename T>
-		requires(!std::is_pointer_v<T>)
-	void emplace_back(T&& elem)
-	{
-		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
-		m_data.resize(m_data.size() + m_elemSize);
-		auto ptr = m_data.data() + (m_data.size() - m_elemSize);
-		new (ptr) T(std::move(elem));
-	}
-
-	void clear()
-	{ m_data.clear(); }
-
-	void resize(size_t size)
-	{ m_data.resize(size * m_elemSize); }
-
-	void reserve(size_t capacity)
-	{ m_data.reserve(capacity * m_elemSize); }
-
-	Iterator begin() 
-	{ return at(0); }
-
-	Iterator back()
-	{ return at(size() - 1); }
-
-	Iterator end()
-	{ return Iterator(elem_size(), data() + size() * elem_size()); }
-
-	const Iterator cbegin() const
-	{ return at(0); }
-
-	Iterator cback() const
-	{ return at(size() - 1); }
-
-	void insert(Iterator where, const Iterator _begin, const Iterator _end)
-	{
-		DK_ASSERT((where.size() == m_elemSize, "Mismatched element size"));
-		DK_ASSERT((_begin.size() == m_elemSize && _end.size() == m_elemSize, "Mismatched element size"));
-		DK_ASSERT((_begin.get() <= _end.get(), "Invalid range"));
-
-		size_t insertPos = (where.get() - m_data.data()) / m_elemSize;
-		size_t count = (_end.get() - _begin.get()) / m_elemSize;
-		if (count == 0)
-			return;
-
-		// Resize buffer to fit new elements
-		size_t oldSize = size();
-		m_data.resize(m_data.size() + count * m_elemSize);
-
-		// Move existing data after insert position
-		uint8_t* dest = m_data.data() + (insertPos + count) * m_elemSize;
-		uint8_t* src  = m_data.data() + insertPos * m_elemSize;
-		std::memmove(dest, src, (oldSize - insertPos) * m_elemSize);
-
-		// Copy new data
-		std::memcpy(m_data.data() + insertPos * m_elemSize, _begin.get(), count * m_elemSize);
-	}
-
-	template <std::contiguous_iterator It>
-	void insert(Iterator where, const It _begin, const It _end)
-	{
-		using T = std::decay_t<decltype(*_begin)>;
-
-		DK_ASSERT((where.size() == m_elemSize, "Mismatched element size"));
-		DK_ASSERT((sizeof(T)    == m_elemSize, "Mismatched element size"));
-
-		size_t insertPos = (where.get() - m_data.data()) / m_elemSize;
-		size_t count = (std::to_address(_end) - std::to_address(_begin));
-		if (count == 0)
-			return;
-
-		// Resize buffer to fit new elements
-		size_t oldSize = size();
-		m_data.resize(m_data.size() + count * m_elemSize);
-
-		// Move existing data after insert position
-		uint8_t* dest = m_data.data() + (insertPos + count) * m_elemSize;
-		uint8_t* src  = m_data.data() + insertPos * m_elemSize;
-		std::memmove(dest, src, (oldSize - insertPos) * m_elemSize);
-
-		// Copy new data
-		std::memcpy(m_data.data() + insertPos * m_elemSize, std::to_address(_begin), count * m_elemSize);
-	}
-
-private:
-	const size_t         m_elemSize;
-	std::vector<uint8_t> m_data;
-};
+//// Won't call constructors unless type is provided and will never call destructors. 
+//class TypelessBuffer {
+//private:
+//	template <bool Const = false>
+//	class Iterator {
+//	private:
+//		template <typename T>
+//		using opt_const = std::conditional_t<Const, const T, T>;
+//
+//		class Access {
+//		public:
+//			template <typename T>
+//			operator T&()
+//			{ 
+//				DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
+//				return *reinterpret_cast<T*>(m_ptr);
+//			}
+//
+//			template <typename T>
+//			operator const T&() const
+//			{ 
+//				DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
+//				return *reinterpret_cast<const T*>(m_ptr);
+//			}
+//
+//		private:
+//			size_t   m_size;
+//			uint8_t* m_ptr;
+//		};
+//
+//		using value_type      = Access;
+//		using difference_type = std::ptrdiff_t;
+//
+//	public:
+//		Iterator(size_t size, opt_const<uint8_t>* data)
+//			: m_size(size)
+//			, m_data(data)
+//		{ }
+//
+//		size_t size() const
+//		{ return m_size; }
+//
+//		template <typename = std::enable_if_t<Const>>
+//		uint8_t* get()
+//		{ return m_data; }
+//
+//		template <typename = std::enable_if_t<!Const>>
+//		const uint8_t* get() const
+//		{ return m_data; }
+//
+//		template <typename T>
+//			requires(!Const)
+//		T* get() 
+//		{
+//			DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
+//			return reinterpret_cast<T*>(m_data);
+//		}
+//
+//		template <typename T>
+//			requires(Const)
+//		const T* get() const
+//		{
+//			DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
+//			return reinterpret_cast<const T*>(m_data);
+//		}
+//
+//		template <typename = std::enable_if_t<Const>>
+//		Iterator& operator=(const Iterator<true>& other)
+//		{
+//			DK_ASSERT((other.m_size == m_size, "Invalid type"));
+//			std::memcpy(m_data, other.m_data, m_size);
+//			return *this;
+//		}
+//
+//		template <typename T>
+//		Iterator& operator=(const T& other)
+//		{
+//			DK_ASSERT((sizeof(T) == m_size, "Invalid type"));
+//			*get<T>() = other;
+//			return *this;
+//		}
+//
+//		Iterator operator+(size_t offset) const
+//		{ return Iterator(m_size, m_data + m_size * offset); }
+//
+//		void operator+=(size_t offset)
+//		{ m_data += m_size * offset; }
+//
+//		Iterator& operator++()
+//		{ *this += 1ull; return *this; }
+//
+//		Iterator operator++(int)
+//		{ Iterator it = *this; ++(*this); return it; }
+//
+//		template <typename = std::enable_if_t<!Const>>
+//		Access& operator*() const
+//		{ return *reinterpret_cast<Access*>(const_cast<Iterator*>(this)); }
+//
+//		template <typename = std::enable_if_t<Const>>
+//		const Access& operator*() const
+//		{ return *reinterpret_cast<const Access*>(this); }
+//
+//		bool operator!=(const Iterator& other) const 
+//		{ return m_data != other.m_data; }
+//
+//		bool operator==(const Iterator& other) const 
+//		{ return m_data == other.m_data; }
+//
+//	private:
+//		const size_t        m_size;
+//		opt_const<uint8_t>* m_data;
+//	};
+//
+//public:
+//	template <typename T>
+//	TypelessBuffer(id_t<T>, size_t capacity = 2)
+//		: m_elemSize(sizeof(T))
+//		, m_data()
+//	{
+//		m_data.reserve(capacity * sizeof(T));
+//	}
+//
+//	TypelessBuffer(size_t elem_size, size_t capacity = 2)
+//		: m_elemSize(elem_size)
+//		, m_data()
+//	{
+//		m_data.reserve(capacity * m_elemSize);
+//	}
+//
+//	size_t elem_size() const
+//	{ return m_elemSize; }
+//
+//	size_t size() const
+//	{ return m_data.size() / m_elemSize; }
+//
+//	size_t capacity() const
+//	{ return m_data.capacity() / m_elemSize; }
+//
+//	bool empty() const
+//	{ return m_data.empty(); }
+//
+//	uint8_t* data()
+//	{ return m_data.data(); }
+//
+//	const uint8_t* data() const
+//	{ return m_data.data(); }
+//
+//	template <typename T>
+//	T* data() 
+//	{ 
+//		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
+//		return reinterpret_cast<T*>(m_data.data()); 
+//	}
+//
+//	template <typename T>
+//	const T* data() const
+//	{ 
+//		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
+//		return reinterpret_cast<const T*>(m_data.data()); 
+//	}
+//
+//	Iterator<> at(size_t index)
+//	{
+//		return Iterator<>(m_elemSize, &m_data.at(index * m_elemSize));
+//	}
+//
+//	Iterator<true> at(size_t index) const
+//	{
+//		return Iterator<true>(m_elemSize, const_cast<uint8_t*>(&m_data.at(index * m_elemSize)));
+//	}
+//
+//	template <typename T>
+//	T& at(size_t index)
+//	{
+//		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
+//		return *reinterpret_cast<T*>(&m_data.at(index * m_elemSize));
+//	}
+//
+//	template <typename T>
+//	const T& at(size_t index) const
+//	{
+//		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
+//		return *reinterpret_cast<const T*>(&m_data.at(index * m_elemSize));
+//	}
+//
+//	template <typename T>
+//		requires(!std::is_pointer_v<T>)
+//	void push_back(const T& elem)
+//	{
+//		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
+//		m_data.resize(m_data.size() + m_elemSize);
+//		auto ptr = m_data.data() + (m_data.size() - m_elemSize);
+//		new (ptr) T(elem);
+//	}
+//
+//	void push_back(const uint8_t* elem)
+//	{
+//		m_data.resize(m_data.size() + m_elemSize);
+//		auto ptr = m_data.data() + (m_data.size() - m_elemSize);
+//		std::memcpy(ptr, elem, m_elemSize);
+//	}
+//
+//	template <typename T>
+//		requires(!std::is_pointer_v<T>)
+//	void emplace_back(T&& elem)
+//	{
+//		DK_ASSERT((sizeof(T) == m_elemSize, "Invalid type"));
+//		m_data.resize(m_data.size() + m_elemSize);
+//		auto ptr = m_data.data() + (m_data.size() - m_elemSize);
+//		new (ptr) T(std::move(elem));
+//	}
+//
+//	void clear()
+//	{ m_data.clear(); }
+//
+//	void resize(size_t size)
+//	{ m_data.resize(size * m_elemSize); }
+//
+//	void reserve(size_t capacity)
+//	{ m_data.reserve(capacity * m_elemSize); }
+//
+//	Iterator<> begin() 
+//	{ return at(0); }
+//
+//	Iterator<> back()
+//	{ return at(size() - 1); }
+//
+//	Iterator<> end()
+//	{ return Iterator(elem_size(), data() + size() * elem_size()); }
+//
+//	const Iterator<true> begin() const
+//	{ return at(0); }
+//
+//	Iterator<true> back() const
+//	{ return at(size() - 1); }
+//
+//	Iterator<true> end() const
+//	{ return Iterator<true>(elem_size(), data() + size() * elem_size()); }
+//
+//	void insert(Iterator<> where, Iterator<true> _begin, const Iterator<true> _end)
+//	{
+//		DK_ASSERT((where.size() == m_elemSize, "Mismatched element size"));
+//		DK_ASSERT((_begin.size() == m_elemSize && _end.size() == m_elemSize, "Mismatched element size"));
+//		DK_ASSERT((_begin.get() <= _end.get(), "Invalid range"));
+//
+//		size_t insertPos = (where.get() - m_data.data()) / m_elemSize;
+//		size_t count = (_end.get() - _begin.get()) / m_elemSize;
+//		if (count == 0)
+//			return;
+//
+//		// Resize buffer to fit new elements
+//		size_t oldSize = size();
+//		m_data.resize(m_data.size() + count * m_elemSize);
+//
+//		// Move existing data after insert position
+//		uint8_t* dest = m_data.data() + (insertPos + count) * m_elemSize;
+//		uint8_t* src  = m_data.data() + insertPos * m_elemSize;
+//		std::memmove(dest, src, (oldSize - insertPos) * m_elemSize);
+//
+//		// Copy new data
+//		std::memcpy(m_data.data() + insertPos * m_elemSize, _begin.get(), count * m_elemSize);
+//	}
+//
+//	template <std::contiguous_iterator It>
+//	void insert(Iterator<> where, const It _begin, const It _end)
+//	{
+//		using T = std::decay_t<decltype(*_begin)>;
+//
+//		DK_ASSERT((where.size() == m_elemSize, "Mismatched element size"));
+//		DK_ASSERT((sizeof(T)    == m_elemSize, "Mismatched element size"));
+//
+//		size_t insertPos = (where.get() - m_data.data()) / m_elemSize;
+//		size_t count = (std::to_address(_end) - std::to_address(_begin));
+//		if (count == 0)
+//			return;
+//
+//		// Resize buffer to fit new elements
+//		size_t oldSize = size();
+//		m_data.resize(m_data.size() + count * m_elemSize);
+//
+//		// Move existing data after insert position
+//		uint8_t* dest = m_data.data() + (insertPos + count) * m_elemSize;
+//		uint8_t* src  = m_data.data() + insertPos * m_elemSize;
+//		std::memmove(dest, src, (oldSize - insertPos) * m_elemSize);
+//
+//		// Copy new data
+//		std::memcpy(m_data.data() + insertPos * m_elemSize, std::to_address(_begin), count * m_elemSize);
+//	}
+//
+//private:
+//	const size_t         m_elemSize;
+//	std::vector<uint8_t> m_data;
+//};
 
 template <typename T>
-class PointerGuard {
+struct ptr_guard {
 public:
-	PointerGuard(T& ref, std::mutex& mut)
+	ptr_guard(T& ref, std::mutex& mut)
 		: m_ref(ref)
 		, m_guard(mut)
 	{ }
 
-	T* operator->() 
-	{ return &m_ref; }
-
-	T* get() 
-	{ return &m_ref; }
-
-	T& operator*()
-	{ return m_ref; }
+	T* get() { return &m_ref; }
+	T& operator*() { return m_ref; }
+	T* operator->() { return &m_ref; }
 
 private:
 	T&                          m_ref;
+	std::lock_guard<std::mutex> m_guard;
+};
+
+template <typename T>
+struct cptr_guard {
+public:
+	cptr_guard(const T& ref, std::mutex& mut)
+		: m_ref(ref)
+		, m_guard(mut)
+	{ }
+
+	const T* get() { return &m_ref; }
+	const T& operator*() { return m_ref; }
+	const T* operator->() { return &m_ref; }
+
+private:
+	const T&                    m_ref;
 	std::lock_guard<std::mutex> m_guard;
 };
 
@@ -438,11 +467,11 @@ public:
 	const Container& clocal() const
 	{ return m_containers.at(std::this_thread::get_id()); }
 
-	PointerGuard<Global> global()
-	{ return PointerGuard<Global>(m_global, m_mut); }
+	ptr_guard<Global> global()
+	{ return ptr_guard<Global>(m_global, m_mut); }
 
-	PointerGuard<const Global> cglobal() const
-	{ return PointerGuard<const Global>(m_global, m_mut); }
+	cptr_guard<Global> cglobal()
+	{ return cptr_guard<Global>(m_global, m_mut); }
 
 private:
 	std::function<Container()>                     m_factory;
