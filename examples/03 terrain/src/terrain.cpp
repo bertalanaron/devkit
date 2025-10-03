@@ -21,8 +21,8 @@ bool Terrain::chunkUpdated(const glm::ivec2& chunkCoords) const
 void Terrain::generateChunk(dk::algo::NavmeshChunk& chunk, const glm::ivec2& chunkCoord)
 {
 	chunk.clearPolygons();
-	m_views.at(chunkCoord).mesh().vertices().clear();
-	m_views.at(chunkCoord).mesh().indices().clear();
+	m_views.at(chunkCoord).mesh().vertices.modify().clear();
+	m_views.at(chunkCoord).mesh().indices.clear();
 	const bool allowDiags = true;
 
 	// Getter and setter used by flud fill
@@ -118,26 +118,29 @@ void Terrain::ChunkView::pushPolygon(dk::geom::polygon2&& polygon, int height)
 			return glm::vec3(v.x, hight, v.y);
 		};
 
-		m_mesh.push_back(Vertex(toVec3(triangle.vertices.at(0), height), dk::geom::axis::Y));
-		m_mesh.push_back(Vertex(toVec3(triangle.vertices.at(1), height), dk::geom::axis::Y));
-		m_mesh.push_back(Vertex(toVec3(triangle.vertices.at(2), height), dk::geom::axis::Y));
+		auto& vertices = m_mesh.vertices.modify();
+		vertices.push_back(Vertex(toVec3(triangle.vertices.at(0), height), dk::geom::axis::Y));
+		vertices.push_back(Vertex(toVec3(triangle.vertices.at(1), height), dk::geom::axis::Y));
+		vertices.push_back(Vertex(toVec3(triangle.vertices.at(2), height), dk::geom::axis::Y));
 	}
 
 	const auto drawEdge = [&](const dk::geom::edge3& edge)
 	{
 		const auto direction = edge[1] - edge[0];
 		const auto normal = glm::cross(direction, dk::geom::axis::Y);
-		const auto indexBegin = m_mesh.vertices().size();
-		m_mesh.vertices().push_back(Vertex((glm::vec3)edge[0], (glm::vec3)normal));
-		m_mesh.vertices().push_back(Vertex((glm::vec3)edge[1], (glm::vec3)normal));
-		m_mesh.vertices().push_back(Vertex((glm::vec3)edge[1] + glm::vec3(0, -height, 0), (glm::vec3)normal));
-		m_mesh.vertices().push_back(Vertex((glm::vec3)edge[0] + glm::vec3(0, -height, 0), (glm::vec3)normal));
-		m_mesh.indices().push(indexBegin + 0);
-		m_mesh.indices().push(indexBegin + 1);
-		m_mesh.indices().push(indexBegin + 2);
-		m_mesh.indices().push(indexBegin + 2);
-		m_mesh.indices().push(indexBegin + 3);
-		m_mesh.indices().push(indexBegin + 0);
+		const auto indexBegin = m_mesh.vertices.size();
+		auto& vertices = m_mesh.vertices.modify();
+		vertices.push_back(Vertex((glm::vec3)edge[0], (glm::vec3)normal));
+		vertices.push_back(Vertex((glm::vec3)edge[1], (glm::vec3)normal));
+		vertices.push_back(Vertex((glm::vec3)edge[1] + glm::vec3(0, -height, 0), (glm::vec3)normal));
+		vertices.push_back(Vertex((glm::vec3)edge[0] + glm::vec3(0, -height, 0), (glm::vec3)normal));
+		auto& indices = m_mesh.indices;
+		indices.push(indexBegin + 0);
+		indices.push(indexBegin + 1);
+		indices.push(indexBegin + 2);
+		indices.push(indexBegin + 2);
+		indices.push(indexBegin + 3);
+		indices.push(indexBegin + 0);
 	};
 
 	for (int i = 0; i < polygon.vertices.size(); ++i)

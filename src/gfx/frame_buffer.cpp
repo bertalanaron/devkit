@@ -97,6 +97,8 @@ void dk::gfx::FrameBuffer::render(Shader& shader, VertexBuffer& vertexBuffer, Pr
 		: glDrawArraysInstanced(details::gfx::toUnderlying(primitive), 0, vertexBuffer.size(), count);
 }
 
+#include <GL/glu.h>
+
 void dk::gfx::FrameBuffer::render(Shader& shader, ElementBuffer& elementBuffer, Primitive primitive, unsigned count)
 {
 	makeActive();

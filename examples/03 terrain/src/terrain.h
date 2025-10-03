@@ -16,8 +16,8 @@ private:
 		using Vertex = dk::gfx::Vertex<glm::vec3, glm::vec3>;
 	public:
 		ChunkView()
-			: m_mesh(dk::gfx::Mesh::create<Vertex>())
-			, m_cliffModelTransforms(dk::gfx::VertexBuffer::create<dk::gfx::Vertex<glm::mat4>>())
+			: m_mesh(dk::common::id<Vertex>)
+			, m_cliffModelTransforms(dk::common::id<dk::gfx::Vertex<glm::mat4>>)
 		{ }
 
 		auto& mesh()
@@ -114,8 +114,8 @@ public:
 	void render(dk::gfx::FrameBuffer& frameBuffer, dk::gfx::Shader& shader)
 	{
 		for (auto& [coords, view] : m_views) {
-			shader.layout(std::ref(view.mesh().vertices()));
-			frameBuffer.render(shader, view.mesh().indices(), dk::gfx::Primitive::Triangles);
+			shader.layout(view.mesh());
+			frameBuffer.render(shader, view.mesh().indices, dk::gfx::Primitive::Triangles);
 		}
 	}
 

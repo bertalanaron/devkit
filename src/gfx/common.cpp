@@ -10,7 +10,7 @@ unsigned int details::gfx::toUnderlying(dk::gfx::Primitive primitive)
     case dk::gfx::Primitive::Lines:     return GL_LINES;
     case dk::gfx::Primitive::Triangles: return GL_TRIANGLES;
     default:
-        break;
+        return 0;
     }
 }
 

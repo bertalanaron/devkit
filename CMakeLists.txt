@@ -39,7 +39,9 @@ set(COMMON_PUBLIC_SOURCES
     include/devkit/common/constants.h
     include/devkit/common/move_only_any.h
     include/devkit/common/runtime_buffer.h
-    include/devkit/common/performance_monitor.h)
+    include/devkit/common/performance_monitor.h
+    include/devkit/common/filesystem_hierarchy_node.h
+    include/devkit/common/typeless.h)
 set(COMMON_PRIVATE_SOURCES
     src/common/utils.cpp)
 # io
@@ -49,7 +51,8 @@ set(IO_PUBLIC_SOURCES
     include/devkit/io/input_combination.h
     include/devkit/io/window.h
     include/devkit/io/file_dialog.h
-    include/devkit/io/frame.h)
+    include/devkit/io/frame.h
+    include/devkit/io/virtual_filesystem.h)
 set(IO_PRIVATE_SOURCES
     src/io/asset_manager.cpp
     src/io/window.cpp
@@ -74,7 +77,8 @@ set(GFX_PUBLIC_SOURCES
     include/devkit/gfx/font.h
     include/devkit/gfx/vertex_sink.h
     include/devkit/gfx/attachment_base.h
-    include/devkit/gfx/viewport.h)
+    include/devkit/gfx/viewport.h
+    include/devkit/gfx/api_resources.h)
 set(GFX_PRIVATE_SOURCES
     src/gfx/common.cpp
     src/gfx/vertex.cpp
@@ -93,7 +97,8 @@ set(GFX_PRIVATE_SOURCES
     src/gfx/attachment_base.cpp
     src/gfx/viewport.cpp
     src/gfx/context.h
-    src/gfx/context.cpp)
+    src/gfx/context.cpp
+    src/gfx/api_resources.cpp)
 # algo
 set(ALGO_PUBLIC_SOURCES
     include/devkit/algo.h

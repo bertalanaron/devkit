@@ -3,6 +3,9 @@
 
 namespace dk::geom {
 
+constexpr glm::dvec2 Origin2(0, 0);
+constexpr glm::dvec3 Origin3(0, 0, 0);
+
 namespace axis {
 
 constexpr glm::dvec3 X = { 1, 0, 0 };

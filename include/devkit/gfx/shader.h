@@ -2,7 +2,6 @@
 #include <devkit/gfx/vertex.h>
 #include <devkit/gfx/uniforms.h>
 #include <devkit/gfx/texture.h>
-#include <devkit/gfx/vertex_buffer.h>
 #include <devkit/common/properties.h>
 
 #include <GL/glew.h>
@@ -70,7 +69,7 @@ public:
 
 private:
 	std::string m_source;
-	bool        m_updated = false;
+	bool        m_updated = true;
 	unsigned    m_version = 0;
 
 	Type        m_type   = Unset;
@@ -92,27 +91,14 @@ class Shader
 {
 private:
 	using source_wptr_t     = std::weak_ptr<ShaderSource>;
-	//using source_sptr_t     = std::shared_ptr<ShaderSource>;
 	using opt_source_wptr_t = std::optional<std::weak_ptr<ShaderSource>>;
-	//using opt_source_sptr_t = std::optional<std::shared_ptr<ShaderSource>>;
 
-	class Layout {
-	public:
-		struct Element {
-			Element(VertexBuffer& vb);
-			Element(const std::pair<std::reference_wrapper<VertexBuffer>, int>& vb);
-			
-			VertexBuffer& vertexBuffer;
-			int           divisor;
-		};
-
-	public:
-		Layout(std::vector<Element>&&);
-
-		void makeActive();
-
-	private:
-		std::vector<Element> m_elements;
+public:
+	struct LayoutElement {
+		const VertexAttributes* attributes;
+		unsigned                attributesMask; 
+		std::function<void()>   bind;           // function to bind api resource of buffer
+		unsigned                divisor = 0;
 	};
 
 public:
@@ -130,23 +116,18 @@ public:
 
 	void uniformTexture(const std::string& uniform, Texture& texture);
 
-	// @brief 
-	// @param vertexBuffer - List of either vertexbuffer or { vertexbuffer, divisor }
-	template <dk::common::OfList<std::reference_wrapper<VertexBuffer>, std::pair<VertexBuffer&, int>>... Ts>
-	void layout(Ts... elements)
-	{
-		std::vector<Layout::Element> layoutElements = { std::move(Layout::Element(elements))... };
-		m_layout = Layout(std::move(layoutElements));
-	}
+	// @brief Set vertex layout including per instance data
+	void layout(std::convertible_to<LayoutElement> auto&&... elements)
+	{ m_layout = { std::move((LayoutElement)elements)... }; }
 
 private:
 	source_wptr_t     m_vertexSource;
 	source_wptr_t     m_fragmentSource;
 	opt_source_wptr_t m_geometrySource;
 
-	UniformCollection     m_uniforms;
-	TextureUnit           m_textures;
-	std::optional<Layout> m_layout = {};
+	UniformCollection          m_uniforms;
+	TextureUnit                m_textures;
+	std::vector<LayoutElement> m_layout = {};
 
 	unsigned m_vertexVersion   = 0;
 	unsigned m_fragmentVersion = 0;
@@ -159,6 +140,12 @@ private:
 	void linkSources(std::optional<std::string> fragDataLocation = std::nullopt);
 
 	//void detach();
+};
+
+inline Shader::LayoutElement perInstance(Shader::LayoutElement&& element, int divisor = 1) 
+{
+	element.divisor = divisor;
+	return element;
 };
 
 class ShaderCollection {

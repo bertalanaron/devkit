@@ -6,24 +6,47 @@ namespace dk::gfx {
 
 class VertexAttributes;
 
-enum class VertexFlags {
-	Position  = BIT(0),
-	Color0    = BIT(1),
-	Color1    = BIT(2),
-	Color2    = BIT(3),
-	Color3    = BIT(4),
-	Color4    = BIT(5),
-	Color5    = BIT(6),
-	Color6    = BIT(7),
-	Color7    = BIT(8),
-	Normals   = BIT(9),
-	TexCoord  = BIT(10),
-	Tangent   = BIT(11),
-	Bitangent = BIT(12),
-	Bones     = BIT(11)
+#define DK_VERTEXFLAGS_TABLE(F, ...)                          \
+	/*                        Index | Name      | Type     */ \
+	F( __VA_ARGS__ __VA_OPT__(,)  0 , Position  , glm::vec3 ) \
+	F( __VA_ARGS__ __VA_OPT__(,)  1 , Color0    , glm::vec4 ) \
+	F( __VA_ARGS__ __VA_OPT__(,)  2 , Color1    , glm::vec4 ) \
+	F( __VA_ARGS__ __VA_OPT__(,)  3 , Color2    , glm::vec4 ) \
+	F( __VA_ARGS__ __VA_OPT__(,)  4 , Color3    , glm::vec4 ) \
+	F( __VA_ARGS__ __VA_OPT__(,)  5 , Color4    , glm::vec4 ) \
+	F( __VA_ARGS__ __VA_OPT__(,)  6 , Color5    , glm::vec4 ) \
+	F( __VA_ARGS__ __VA_OPT__(,)  7 , Color6    , glm::vec4 ) \
+	F( __VA_ARGS__ __VA_OPT__(,)  8 , Color7    , glm::vec4 ) \
+	F( __VA_ARGS__ __VA_OPT__(,)  9 , Normal    , glm::vec3 ) \
+	F( __VA_ARGS__ __VA_OPT__(,) 10 , TexCoords , glm::vec2 ) \
+	F( __VA_ARGS__ __VA_OPT__(,) 11 , Tangent   , glm::vec3 ) \
+	F( __VA_ARGS__ __VA_OPT__(,) 12 , Bitangent , glm::vec3 ) \
+	F( __VA_ARGS__ __VA_OPT__(,) 13 , Bones     , glm::vec4 ) \
+	/* end table */
+
+#define DK_DECL_VERTEXFLAGS_ENUM(index, enumName, typeName, ...) \
+	enumName = BIT(index),                                       \
+	/* end of macro */
+
+enum class VertexFlags : unsigned
+{
+	DK_VERTEXFLAGS_TABLE(DK_DECL_VERTEXFLAGS_ENUM)
 };
 
-VertexFlags operator|(VertexFlags lhs, VertexFlags rhs);
+constexpr VertexFlags operator|(VertexFlags lhs, VertexFlags rhs)
+{ return VertexFlags((unsigned)lhs | (unsigned)rhs); }
+
+template <VertexFlags vf>
+struct type_of;
+
+#define DK_DECL_VERTEXFLAGS_TYPE_OF(index, enumName, typeName, ...)               \
+	template <> struct type_of<VertexFlags::enumName> { using type = typeName; }; \
+	/* end of macro */
+
+DK_VERTEXFLAGS_TABLE(DK_DECL_VERTEXFLAGS_TYPE_OF)
+
+template <VertexFlags vf>
+using type_of_t = type_of<vf>::type;
 
 }
 
@@ -40,9 +63,9 @@ public:
 	size_t size() const;
 
 	// @returns The index of the last attribute + 1
-	unsigned makePointersActive(size_t indexOffset = 0) const;
+	unsigned makePointersActive(size_t indexOffset = 0, unsigned mask = ~0u) const;
 
-	void setPointerDivisors(unsigned divisor = 0, size_t indexOffset = 0) const;
+	void setPointerDivisors(unsigned divisor = 0, size_t indexOffset = 0, unsigned mask = ~0u) const;
 
 private:
 	std::vector<details::gfx::GLType> m_types;
@@ -88,6 +111,41 @@ public:
 protected:
 	data_t m_data;
 };
+
+template <typename T>
+struct is_vertex
+	: std::bool_constant<common::is_specialization_or_derived_v<T, Vertex>> 
+{};
+
+template <typename T>
+constexpr bool is_vertex_v = is_vertex<T>::value;
+
+template <VertexFlags Mask>
+struct decl_vertex_from_flags {
+	template <VertexFlags Mask, VertexFlags F>
+	using maybe_tuple = std::conditional_t<(static_cast<int>(Mask) & static_cast<int>(F)) != 0, std::tuple<type_of_t<F>>, std::tuple<>>;
+
+#define DK_DECL_VERTEXFROMFLAGS_TUPLE(index, enumName, typeName, ...) \
+	, maybe_tuple<Mask, VertexFlags::enumName>{}             \
+	/* end of macro */
+
+	template <typename Tup>
+	struct tuple_to_vertex;
+
+	template <typename... Ts>
+	struct tuple_to_vertex<std::tuple<Ts...>> {
+		using type = Vertex<Ts...>;
+	};
+
+	using tuple_type = decltype(std::tuple_cat(std::tuple<>{}
+		DK_VERTEXFLAGS_TABLE(DK_DECL_VERTEXFROMFLAGS_TUPLE)
+	));
+
+	using type = typename tuple_to_vertex<tuple_type>::type;
+};
+
+template <VertexFlags vf>
+using decl_vertex_from_flags_t = typename decl_vertex_from_flags<vf>::type;
 
 using NullVertex = Vertex<>;
 

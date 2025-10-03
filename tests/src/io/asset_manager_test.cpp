@@ -51,6 +51,13 @@ TEST(AssetManager, smoke) {
 	clearDirectory("test/");
 	createFileWithTextContent("test/hello.txt", helloTxtContents);
 
+	struct X {
+		X(const std::filesystem::path& p) { }
+	};
+
+	dk::io::AssetManager assets;
+	assets.type<X>("txt", dk::common::make_factory<X>());
+
 	ASSERT_NO_THROW(
 		io::AssetManager assetManager;
 
