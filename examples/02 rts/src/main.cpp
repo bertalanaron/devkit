@@ -2,6 +2,7 @@
 #include <devkit/io.h>
 #include <devkit/gfx.h>
 #include <devkit/algo.h>
+#include <devkit/io/frame.h>
 
 #include <mini/ini.h>
 
@@ -243,10 +244,11 @@ public:
 		std::vector<dk::geom::edge2> edges;
 		dk::geom::edge2              currentEdge;
 
-		while (m_window.beginFrame()) {
+		while (m_window.isOpen()) {
+			const auto& frame = m_window.beginFrame();
 			m_assets.synchronize();
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0x333333ff));
-			moveCamera();
+			moveCamera(frame);
 
 			m_shaders["rgba"].uniforms() << m_ucCamera;
 			auto drawer2d = dk::gfx::drawer2d(dk::geom::plane::Y(), -dk::geom::axis::X);
@@ -255,9 +257,9 @@ public:
 				            << dk::gfx::draw(dk::geom::ray3({}, dk::geom::axis::Z), dk::colors::blue);
 
 			if (m_inputManager.activated("create_edge"))
-				currentEdge[0] = dk::geom::xz(dk::geom::intersection(m_camera.castRay(m_window.cursorN()), dk::geom::plane::Y()));
+				currentEdge[0] = dk::geom::xz(dk::geom::intersection(m_camera.castRay(frame.cursorN()), dk::geom::plane::Y()));
 			if (m_inputManager.active("create_edge")) {
-				currentEdge[1] = dk::geom::xz(dk::geom::intersection(m_camera.castRay(m_window.cursorN()), dk::geom::plane::Y()));
+				currentEdge[1] = dk::geom::xz(dk::geom::intersection(m_camera.castRay(frame.cursorN()), dk::geom::plane::Y()));
 				m_dbgVertexSink << drawer2d(currentEdge, dk::colors::maroon);
 			}
 			if (m_inputManager.deactivated("create_edge")) {
@@ -282,8 +284,8 @@ public:
 	}
 
 	AlgoTester()
-		: m_dbgVertexSink(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>())
-		, m_textSink(dk::gfx::VertexSink::create<dk::gfx::Font::CharVertex>())
+		: m_dbgVertexSink(dk::common::id<dk::gfx::RGBAVertex>)
+		, m_textSink(dk::common::id<dk::gfx::Font::CharVertex>)
 	{ 
 		dk::dbg::store<dk::gfx::VertexSink*, "funnel_dbg">() = &m_dbgVertexSink;
 	}
@@ -304,12 +306,12 @@ private:
 	//shaders_t                  m_shaders;
 	dk::gfx::ShaderCollection  m_shaders;
 
-	void moveCamera()
+	void moveCamera(const dk::io::Frame& frame)
 	{
 		if (m_inputManager.active("shift"))
 		{
-			auto cursorProjection     = dk::geom::intersection(m_camera.castRay(m_window.cursorN()), dk::geom::plane::Y());
-			auto prevCursorProjection = dk::geom::intersection(m_camera.castRay(m_window.cursorN() - m_window.cursorDeltaN()), dk::geom::plane::Y());
+			auto cursorProjection     = dk::geom::intersection(m_camera.castRay(frame.cursorN()), dk::geom::plane::Y());
+			auto prevCursorProjection = dk::geom::intersection(m_camera.castRay(frame.cursorN() - frame.cursorDeltaN()), dk::geom::plane::Y());
 			dk::gfx::Camera::Orbit::shift(m_camera, prevCursorProjection - cursorProjection);
 		}
 

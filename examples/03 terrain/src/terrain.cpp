@@ -118,10 +118,15 @@ void Terrain::ChunkView::pushPolygon(dk::geom::polygon2&& polygon, int height)
 			return glm::vec3(v.x, hight, v.y);
 		};
 
+		const auto indexBegin = m_mesh.vertices.size();
 		auto& vertices = m_mesh.vertices.modify();
 		vertices.push_back(Vertex(toVec3(triangle.vertices.at(0), height), dk::geom::axis::Y));
 		vertices.push_back(Vertex(toVec3(triangle.vertices.at(1), height), dk::geom::axis::Y));
 		vertices.push_back(Vertex(toVec3(triangle.vertices.at(2), height), dk::geom::axis::Y));
+		auto& indices = m_mesh.indices;
+		indices.push(indexBegin + 0);
+		indices.push(indexBegin + 1);
+		indices.push(indexBegin + 2);
 	}
 
 	const auto drawEdge = [&](const dk::geom::edge3& edge)

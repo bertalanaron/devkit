@@ -8,7 +8,7 @@ dk::gfx::MeshMask::MeshMask(Mesh& _mesh, VertexFlags target, VertexFlags origina
 {
 	unsigned targetbits = static_cast<unsigned>(target);
 	unsigned originalbits = static_cast<unsigned>(original);
-	for (unsigned i = 0u; i < sizeof(VertexFlags); ++i)
+	for (unsigned i = 0u; i < sizeof(VertexFlags) * 8u; ++i)
 	{
 		if (targetbits % 2) // i th bit is set in flags
 		{
@@ -21,6 +21,4 @@ dk::gfx::MeshMask::MeshMask(Mesh& _mesh, VertexFlags target, VertexFlags origina
 		targetbits >>= 1u;
 		originalbits >>= 1u;
 	}
-
-	m_mask = ~0u;
 }

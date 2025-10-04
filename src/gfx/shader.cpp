@@ -123,9 +123,9 @@ unsigned dk::gfx::ShaderSource::attach(Type type, unsigned program)
     if (m_updated)
     {
         compileAs(type);
-        tryDetach(type, program);
-        glAttachShader(program, m_handle);
     }
+    tryDetach(type, program);
+    glAttachShader(program, m_handle);
     return m_version;
 }
 

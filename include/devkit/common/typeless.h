@@ -160,6 +160,11 @@ public:
         { return { m_ptr, m_elemSize }; }
     };
 
+    typeless_vector() = default;
+    typeless_vector(const typeless_vector&) = default;
+    typeless_vector(typeless_vector&&) = default;
+    typeless_vector& operator=(typeless_vector&&) = default;
+
     explicit typeless_vector(size_t elemSize)
         : m_elemSize(elemSize)
     { }
@@ -407,8 +412,8 @@ public:
     { return cend(); }
 
 private:
-    size_t                 m_elemSize;
-    size_t                 m_size = 0;
+    size_t                 m_elemSize = 0;
+    size_t                 m_size     = 0;
     std::vector<std::byte> m_data;
 
     // @returns a pointer to the data buffer and the index of the insertion

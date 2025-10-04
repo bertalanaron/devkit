@@ -6,9 +6,10 @@ namespace dk::common {
 template <typename D>
 class FSHierarchyNode {
 public:
-	FSHierarchyNode()                       = default;
-	FSHierarchyNode(const FSHierarchyNode&) = default;
-	FSHierarchyNode(FSHierarchyNode&&)      = default;
+	FSHierarchyNode()                             = default;
+	FSHierarchyNode(const FSHierarchyNode&)       = default;
+	FSHierarchyNode(FSHierarchyNode&&)            = default;
+	FSHierarchyNode& operator=(FSHierarchyNode&&) = default;
 
 	auto children() const
 	{

@@ -11,6 +11,11 @@ namespace dk::gfx {
 
 class VertexBuffer {
 public:
+	VertexBuffer()                          = default;
+	VertexBuffer(VertexBuffer&&)            = default;
+	VertexBuffer(const VertexBuffer&)       = default;
+	VertexBuffer& operator=(VertexBuffer&&) = default;
+
 	template <typename Vertex>
 	VertexBuffer(common::id_t<Vertex> vertexTypeId)
 		: m_attributes(Vertex::attributes())
