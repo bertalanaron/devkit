@@ -51,9 +51,9 @@ unsigned dk::gfx::VertexAttributes::makePointersActive(size_t indexOffset, unsig
             const bool isActive = mask & 1u << (index - indexOffset);
             
             // Enable attrib pointer
+            glVertexAttribPointer(index, type.count, type.type, GL_FALSE, size, (void*)sizeSoFar);
             if (isActive)
             {
-                glVertexAttribPointer(index, type.count, type.type, GL_FALSE, size, (void*)sizeSoFar);
                 glEnableVertexAttribArray(index);
             }
 

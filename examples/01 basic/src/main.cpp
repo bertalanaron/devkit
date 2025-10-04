@@ -264,11 +264,11 @@ public:
 				ImGui::End();
 			}
 
-			for (auto& mesh : m_assets.get<dk::gfx::Scene>(assetPath("planet_model")).meshes()) {
-				m_shaders["planet"].layout(mesh);
-				dk::gfx::backBuffer().render(m_shaders["planet"], mesh.indices, dk::gfx::Primitive::Triangles);
-				sceneFrameBuffer.render(m_shaders["planet"], mesh.indices, dk::gfx::Primitive::Triangles);
-			}
+			const auto texturedVertexFlags = dk::gfx::VertexFlags::Position | dk::gfx::VertexFlags::Normal | dk::gfx::VertexFlags::TexCoords;
+			auto& planetMesh = m_assets.get<dk::gfx::Scene>("/models/planet_scene.fbx")["/planet"][0](texturedVertexFlags);
+			m_shaders["planet"].layout(planetMesh);
+			dk::gfx::backBuffer().render(m_shaders["planet"], planetMesh.indices, dk::gfx::Primitive::Triangles);
+			sceneFrameBuffer.render(m_shaders["planet"], planetMesh.indices, dk::gfx::Primitive::Triangles);
 
 			// Bind uniforms and textures
 			m_shaders["rgba"].uniforms()     << m_ucCamera;
@@ -280,20 +280,20 @@ public:
 			asteroidTexture.property(dk::gfx::properties::min_filter::nearest_mipmap_linear);
 			m_shaders["asteroid"].uniformTexture("u_texture", asteroidTexture);
 			auto& asteroidMesh = *m_assets.get<dk::gfx::Scene>(assetPath("asteroid_model")).meshes().begin();
-			m_shaders["asteroid"].layout(asteroidMesh.vertices, dk::gfx::perInstance(*m_meteors));
+			m_shaders["asteroid"].layout(asteroidMesh.vertices, dk::gfx::perInstance(m_meteors));
 			// Rotate around y axis
 			static float t = 0;
 			t += frame.dt<std::chrono::seconds>() / 10.0;
 
 			m_shaders["asteroid"].uniforms().set("u_t", t);
 			// Render
-			dk::gfx::backBuffer().render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors->size());
-			sceneFrameBuffer.render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors->size());
+			dk::gfx::backBuffer().render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors.size());
+			sceneFrameBuffer.render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors.size());
 
 			// Draw skybox
 			m_shaders["skybox"].uniforms()   << m_ucCamera;
 			m_shaders["skybox"].uniformTexture("u_skybox", *m_skybox);
-			auto& unitCubeMesh = *m_assets.get<dk::gfx::Scene>("/models/cube.obj").meshes().begin();
+			auto& unitCubeMesh = m_assets.get<dk::gfx::Scene>("/models/planet_scene.fbx")["/skybox"][0]();
 			m_shaders["skybox"].layout(unitCubeMesh.vertices);
 			dk::gfx::backBuffer().render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
 			sceneFrameBuffer.render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
@@ -332,12 +332,19 @@ public:
 		// Open window
 		m_window.property(dk::io::properties::window::theme::dark);
 		m_window.open(4);
+		m_window.property(dk::io::properties::window::vsync::disabled);
 		dk::gfx::backBuffer().property(dk::gfx::properties::multisampling::enabled);
 
 		// Register asset types
-		m_assets.root(ini["data"]["path"], true);
+		m_assets.root(ini["data"]["path"] , false);
+		m_assets.watch("/textures/"       , false);
+		m_assets.watch("/textures/planets", true);
+		m_assets.watch("/models"          , false);
+		m_assets.watch("/fonts"           , false);
+		m_assets.watch("/shaders"         , true);
+
 		m_assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
-		m_assets.type<dk::gfx::Scene>("obj", dk::gfx::Scene::loadFromFile, std::nullopt, std::nullopt, dk::io::AssetManager::Async);
+		m_assets.type<dk::gfx::Scene>({ "obj", "fbx" }, dk::gfx::Scene::load, &dk::gfx::Scene::update, std::nullopt, dk::io::AssetManager::Async);
 		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load);
 		m_assets.type<YAML::Node>("yaml", YAML::LoadFile, [](YAML::Node& node, const std::string& path) { 
 			node = YAML::LoadFile(path);
@@ -384,10 +391,8 @@ public:
 		m_camera = m_assets.get<nlohmann::json>("camera.json");
 
 		// Create meteor instances
-		m_meteors = std::make_unique<dk::gfx::VertexBuffer>(dk::common::id<dk::gfx::Vertex<glm::mat4>>);
-		for (int i = 0; i < conf<int>("asteroid_count"); ++i)
-			m_meteors->modify().push_back(dk::gfx::Vertex(glm::mat4(1.0)));
-		placeAsteroids(*m_meteors);
+		m_meteors = dk::common::id<dk::gfx::Vertex<glm::mat4>>;
+		placeAsteroids(m_meteors);
 
 		//// Create debug sink
 		//m_colorSink = std::make_unique<dk::gfx::VertexSink>(std::move(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>()));
@@ -411,9 +416,8 @@ private:
 
 	std::unique_ptr<dk::gfx::Texture> m_skybox;
 
-	std::unique_ptr<dk::gfx::VertexBuffer> m_meteors;
-
-	std::unique_ptr<dk::gfx::VertexSink> m_colorSink;
+	dk::gfx::VertexBuffer m_meteors;
+	dk::gfx::VertexSink   m_colorSink;
 
 	template <typename T>
 	T conf(const std::string& path) const

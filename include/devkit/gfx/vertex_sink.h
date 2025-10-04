@@ -15,19 +15,25 @@ private:
 	using ThreadDemuxStorage = std::array<std::unique_ptr<ThreadLocalBuffer>, s_primitiveCount>;
 
 public:
+	VertexSink()                        = default;
+	VertexSink(VertexSink&&)            = default;
+	VertexSink& operator=(VertexSink&&) = default;
+
 	template <typename Vertex>
 	VertexSink(common::id_t<Vertex> vertTypeId)
 		: m_vertexAttributes(Vertex::attributes())
-	{ std::ranges::for_each(m_demux, initBuffer<Vertex>); }
+		, m_demux(ThreadDemuxStorage())
+	{ std::ranges::for_each(m_demux.value(), initBuffer<Vertex>); }
 
 	VertexSink(VertexFlags flags)
 		: m_vertexAttributes(VertexAttributes::get(flags))
-	{ std::ranges::for_each(m_demux, std::bind_back(initBufferF, flags)); }
+		, m_demux(ThreadDemuxStorage())
+	{ std::ranges::for_each(m_demux.value(), std::bind_back(initBufferF, flags)); }
 
 	template <typename Vertex>
 	VertexSink& operator<<(const DrawData<Vertex>& dd)
 	{
-		auto& buffer = m_demux.at((unsigned)dd.type)->local();
+		auto& buffer = m_demux->at((unsigned)dd.type)->local();
 		buffer.modify().insert(buffer.get().cend(), dd.vertices.begin(), dd.vertices.end());
 		return *this;
 	}
@@ -52,7 +58,7 @@ public:
 		static_assert(is_vertex_v<value_t>, 
 			"value type of range must be gfx::Vertex or derived from gfx::Vertex");
 
-		auto& buffer = m_demux.at((unsigned)primitive)->local();
+		auto& buffer = m_demux->at((unsigned)primitive)->local();
 		buffer.modify().insert(buffer.get().cend(), vertices.cbegin(), vertices.cend());
 		return *this;
 	}
@@ -64,8 +70,8 @@ public:
 	void flush(Shader& shader, FrameBuffer& frameBuffer);
 
 private:
-	const VertexAttributes* m_vertexAttributes;
-	ThreadDemuxStorage      m_demux;
+	const VertexAttributes*           m_vertexAttributes;
+	std::optional<ThreadDemuxStorage> m_demux;
 
 	template <typename Vertex>
 	static void initBuffer(std::unique_ptr<ThreadLocalBuffer>& ptr)

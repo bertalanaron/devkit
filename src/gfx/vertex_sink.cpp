@@ -3,7 +3,7 @@
 void dk::gfx::VertexSink::clear()
 {
     for (int i = 0; i < s_primitiveCount; ++i) {
-        auto& tdemux    = m_demux.at(i);
+        auto& tdemux = m_demux->at(i);
         if (!tdemux)
             continue;
 
@@ -16,7 +16,7 @@ void dk::gfx::VertexSink::draw(Shader& shader, FrameBuffer& frameBuffer)
 {
     for (int i = 0; i < s_primitiveCount; ++i) {
         Primitive primitive = Primitive(i);
-        auto&     tdemux    = m_demux.at(i);
+        auto&     tdemux    = m_demux->at(i);
         if (!tdemux)
             continue;
 

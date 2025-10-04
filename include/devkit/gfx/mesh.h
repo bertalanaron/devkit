@@ -64,6 +64,10 @@ private:
 
 class Mesh {
 public:
+	Mesh(const Mesh&)       = default;
+	Mesh(Mesh&&)            = default;
+	Mesh& operator=(Mesh&&) = default;
+
 	template <typename... VertArgs>
 	Mesh(common::id_t<Vertex<VertArgs...>> vertTypeId)
 		: vertices(vertTypeId)

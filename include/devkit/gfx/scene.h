@@ -9,22 +9,24 @@ public:
 	struct SceneNode 
 		: public common::FSHierarchyNode<SceneNode> 
 	{
+		SceneNode(SceneNode&&)            = default;
+		SceneNode& operator=(SceneNode&&) = default;
 		SceneNode(Scene& scene, std::vector<unsigned>&& meshIndices)
-			: m_scene(scene)
+			: m_scene(&scene)
 			, m_meshIndices(std::move(meshIndices))
 		{ }
 
-		std::filesystem::path     name;
-		glm::mat4                 transform = glm::identity<glm::mat4>();
+		std::filesystem::path name;
+		glm::mat4             transform = glm::identity<glm::mat4>();
 
 		auto& operator[](unsigned index)
-		{ return m_scene.m_meshFactories.at(index); }
+		{ return m_scene->m_meshFactories.at(m_meshIndices.at(index)); }
 
 		auto meshes()
 		{
 			return m_meshIndices 
 				| std::ranges::views::transform([&](unsigned index) {
-					return m_scene.m_meshFactories.at(index)();
+					return m_scene->m_meshFactories.at(m_meshIndices.at(index))();
 				});
 		}
 
@@ -32,15 +34,17 @@ public:
 		{
 			return m_meshIndices 
 				| std::ranges::views::transform([&](unsigned index) {
-					return m_scene.m_meshFactories.at(index)(flags);
+					return m_scene->m_meshFactories.at(m_meshIndices.at(index))(flags);
 				});
 		}
 
 	private:
-		Scene&                m_scene;
+		Scene*                m_scene;
 		std::vector<unsigned> m_meshIndices;
 
 		friend class common::FSHierarchyNode<SceneNode>;
+		// Temp:
+		friend class Scene;
 	};
 
 public:
@@ -65,6 +69,8 @@ public:
 		auto node = m_root->resolveRelativeNode(path);
 		if (!node)
 			throw std::runtime_error("Invalid object path");
+		// Temp fix: 
+		node->m_scene = this;
 		return *node;
 	}
 
@@ -76,13 +82,18 @@ public:
 	//	return *node;
 	//}
 
-	Scene() = default;
+	Scene()                   = default;
+	Scene(Scene&&)            = default;
+	Scene& operator=(Scene&&) = default;
+
 	Scene(const Scene&);
-	Scene(Scene&&) = default;
 	Scene(const std::filesystem::path& path);
 
-	static Scene loadFromFile(const std::string& path)
+	static Scene load(const std::string& path)
 	{ return Scene(path); }
+
+	void update(const std::string& path)
+	{ (*this) = std::move(Scene(path)); }
 
 public:
 	class MeshFactory {
