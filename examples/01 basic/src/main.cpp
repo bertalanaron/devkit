@@ -213,6 +213,58 @@ private:
 	std::string m_searchString;
 };
 
+
+// render to multi sampled render buffer -> resolve to other frame buffer for post processing
+
+/*
+
+struct PostProcessLayer {
+	void operator()(glm::ivec2 frameSize, Shader& shader);
+
+};
+
+
+
+const glm::ivec2 initialFrameSize(100, 100);
+dk::gfx::FrameBuffer fbScene;
+auto                 texScene = dk::gfx::Texture::create2DMultisample(initialFrameSize, dk::gfx::Channels::RGBA, 4);
+fbScene.outputs[0] = texScene;
+fbScene.outputs.attachRenderBuffers(dk::gfx::FrameBuffer::Depth | dk::gfx::FrameBuffer::Stencil);
+
+fbScene.outputs.attachRenderBuffer(dk::gfx::FrameBuffer::Depth24);
+fbScene.outputs.attachRenderBuffer(dk::gfx::FrameBuffer::Stencil8);
+fbScene.outputs[0].renderBuffer2DMultisample(initialFrameSize, dk::gfx::Channels::RGBA, 4);
+
+	//  throw if outputs[0] is empty otherwise setup renderbuffers based on that attachment
+
+fbScene.render(...);
+
+dk::gfx::Texture texBloomInputDownScaled = dk::gfx::Texture::create2D(initialFrameSize / 2, dk::gfx::Texture::RGBA);
+
+dk::gfx::FrameBuffer fbBloom;
+
+while (m_window.isOpen())
+{
+	const auto& frame = m_window.beginFrame();
+
+	fbScene.resize(frame.size());
+	fbBloom.resize(frame.size() / 2);
+
+	fbScene.render(...);
+
+	fbBloom.render(...);
+
+
+}
+
+dk::gfx::Texture     
+
+fb.inputs[0] = 
+
+*/
+
+
+
 class Example01 {
 public:
 	void run()
@@ -311,7 +363,12 @@ public:
 				ImGui::End();
 			}
 
-			m_window.endFrame();	
+			m_colorSink 
+				<< dk::gfx::draw(dk::geom::circle2{dk::geom::Origin2, 40.0}, DK_COLOR(0x222222ff), dk::geom::plane::Y(), -dk::geom::axis::X)
+				<< dk::gfx::draw(dk::geom::circle2{dk::geom::Origin2, 4.2}, dk::colors::orangeRed, dk::geom::plane(glm::normalize(m_camera.lookat - m_camera.position)), m_camera.right());
+			m_colorSink.flush(m_shaders["rgba"], dk::gfx::backBuffer());
+
+			m_window.endFrame();
 		}
 
 		auto& camera = m_assets.get<nlohmann::json>("camera.json");
@@ -344,7 +401,7 @@ public:
 		m_assets.watch("/shaders"         , true);
 
 		m_assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
-		m_assets.type<dk::gfx::Scene>({ "obj", "fbx" }, dk::gfx::Scene::load, &dk::gfx::Scene::update, std::nullopt, dk::io::AssetManager::Async);
+		m_assets.type<dk::gfx::Scene>({ "obj", "fbx" }, dk::gfx::Scene::load, &dk::gfx::Scene::update, std::nullopt, dk::io::AssetManager::Deferred);
 		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load);
 		m_assets.type<YAML::Node>("yaml", YAML::LoadFile, [](YAML::Node& node, const std::string& path) { 
 			node = YAML::LoadFile(path);
@@ -394,8 +451,8 @@ public:
 		m_meteors = dk::common::id<dk::gfx::Vertex<glm::mat4>>;
 		placeAsteroids(m_meteors);
 
-		//// Create debug sink
-		//m_colorSink = std::make_unique<dk::gfx::VertexSink>(std::move(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>()));
+		// Create debug sink
+		m_colorSink = dk::common::id<dk::gfx::RGBAVertex>;
 		//*m_colorSink 
 		//	<< dk::gfx::draw(dk::geom::ray3(glm::vec3(10,10,0), glm::vec3(5,5,0) - glm::vec3(10,10,0)), dk::colors::yellow)
 		//	//<< dk::gfx::draw(m_camera, dk::colors::lime)

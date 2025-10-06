@@ -38,6 +38,8 @@ public:
 	};
 
 	geom::ray3 castRay(const glm::vec2&) const;
+
+	glm::vec3 right() const;
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Camera, position, lookat, vup, fov, asp, np, fp, projection);
