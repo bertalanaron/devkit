@@ -1,6 +1,5 @@
 #include <devkit/gfx/texture.h>
 #include <devkit/gfx/frame_buffer.h>
-
 #include "context.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -9,110 +8,218 @@
 
 #include <imgui.h>
 
-dk::gfx::Texture dk::gfx::Texture::load(const std::string& path)
+unsigned dk::gfx::Texture::handle()
 {
-    Texture texture;
+    if (m_type == api::TextureType::Unset)
+        throw std::runtime_error(
+            "cannot get handle of texture with unset type "
+            "(don't use the default constructor of any texture type)");
 
-    // Load file using stb_image
-    unsigned char* pixels = stbi_load(path.c_str(), &texture.m_size.x, &texture.m_size.y, &texture.m_channels, 0);
-    if (!pixels)
-    {
-        const char* error = stbi_failure_reason();
-        spdlog::error("Failed to load texture from {}", path);
-        spdlog::error("stb_image error: {}", error);
-        return texture;
-    }
-    // Save buffer
-    size_t buffSize = texture.m_size.x * texture.m_size.y * texture.m_channels;
-    texture.m_opt_pixels = std::vector<uint8_t>(pixels, pixels + buffSize);
-    stbi_image_free(pixels);
-    
-    spdlog::trace("Loaded texture from {}", path);
-    return texture;
+    // Call initializer with handle
+    if (m_initializer.has_value())
+        m_initializer.value()(m_apiHandle.handle());
+    // Return api handle
+    return m_apiHandle.handle();
 }
 
-dk::gfx::Texture dk::gfx::Texture::loadCubeMap(const std::array<std::string, 6>& paths)
+void dk::gfx::Texture::bindToUnit(unsigned unit)
 {
-    Texture texture;
-    texture.m_type = Type::Cubemap;
-
-    std::array<std::vector<uint8_t>, 6> faces;
-    for (int i = 0; i < paths.size(); ++i) {
-        // Load file using stb_image
-        unsigned char* pixels = stbi_load(paths[i].c_str(), &texture.m_size.x, &texture.m_size.y, &texture.m_channels, 0);
-        if (!pixels)
-        {
-            const char* error = stbi_failure_reason();
-            spdlog::error("Failed to load texture from {}", paths[i]);
-            spdlog::error("stb_image error: {}", error);
-            return texture;
-        }
-        // Save buffer
-        size_t buffSize = texture.m_size.x * texture.m_size.y * texture.m_channels;
-        faces[i] = std::vector<uint8_t>(pixels, pixels + buffSize);
-        stbi_image_free(pixels);
-    }
-    texture.m_opt_pixels.emplace(std::move(faces));
-
-    spdlog::trace("Loaded cubemap from {}", paths[0]);
-    return texture;
-}
-
-dk::gfx::Texture dk::gfx::Texture::create(unsigned width, unsigned height, std::vector<uint8_t>&& pixels, int channels)
-{
-    Texture texture;
-    texture.m_size = { width, height };
-    texture.m_channels = channels;
-    texture.m_opt_pixels = std::move(pixels);
-    texture.m_resized = true;
-    return texture;
-}
-
-dk::gfx::Texture dk::gfx::Texture::create(unsigned width, unsigned height, int channels)
-{
-    Texture texture;
-    texture.m_size = { width, height };
-    texture.m_channels = channels;
-    texture.m_resized = true;
-    return texture;
-}
-
-void dk::gfx::Texture::makeActive(int unit)
-{
+    // Call initializer with handle
+    if (m_initializer.has_value())
+        m_initializer.value()(m_apiHandle.handle());
+    // Attach to texture unit
     glActiveTexture(GL_TEXTURE0 + unit);
-
-    initializeOrUpdate();
-
-    // Bind texture
-    glBindTexture(details::gfx::toUnderlying(m_type), m_handle);
+    m_apiHandle.bind(m_type);
 
     callPropertySetters(true);
 }
 
-dk::gfx::Texture::Type dk::gfx::Texture::type() const
+void dk::gfx::Texture1D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
 {
-    return m_type;
+    if (attachment == api::Attachment::Color0)
+        glFramebufferTexture1D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_1D, m_apiHandle.handle(), level);
+    else
+        glFramebufferTexture1D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_1D, m_apiHandle.handle(), level);
+
+    callPropertySetters(true);
 }
 
-void dk::gfx::Texture::showAsImGuiImage() const
+dk::gfx::Texture2D::Texture2D(const glm::ivec2& size, Channels channels)
+    : Texture(api::TextureType::Texture2D, channels)
+    , m_size(size)
 {
-    ImGui::Image((ImTextureID)(intptr_t)m_handle, ImVec2(m_size.x, m_size.y), ImVec2(0, 1), ImVec2(1, 0));
+    if (std::max(size.x, size.y) >= dk::io::GlobalState::hardware().glMaxTextureSize)
+        throw std::runtime_error("texture size exceeds hardware maximum");
+
+    // Emplace initializer which sets up texture buffer
+    m_initializer.emplace([&](unsigned handle) {
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+        glTexImage2D(GL_TEXTURE_2D, 0, api::internalFormat(channels), (unsigned)size.x, (unsigned)size.y, 0, api::toUnderlying(channels), GL_UNSIGNED_BYTE, nullptr);
+    });
 }
 
-unsigned dk::gfx::Texture::imguiTextureId()
+void loadTexture2DFromFile(const std::filesystem::path& path, unsigned handle, glm::ivec2& size, int& channels)
 {
-    initializeOrUpdate();
-    return (ImTextureID)(intptr_t)m_handle;
+    // Load file using stb_image
+    unsigned char* pixels = stbi_load(path.string().c_str(), &size.x, &size.y, &channels, 0);
+    if (!pixels)
+    {
+        const char* error = stbi_failure_reason();
+        spdlog::error("Failed to load texture from {}", path.string());
+        spdlog::error("stb_image error: {}", error);
+        return;
+    }
+
+    // Get api enum for channels
+    unsigned apiChannelsEnum = [=]() {
+        if (channels == 1) return GL_RED;
+        if (channels == 2) return GL_RG;
+        if (channels == 3) return GL_RGB;
+        if (channels == 4) return GL_RGBA;
+    }();
+
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+    glTexImage2D(GL_TEXTURE_2D, 0, apiChannelsEnum, (unsigned)size.x, (unsigned)size.y, 0, apiChannelsEnum, GL_UNSIGNED_BYTE, pixels);
+
+    stbi_image_free(pixels);
 }
 
-int toInternalFormat(int channels)
+dk::gfx::Channels channelCountToEnum(int channels)
 {
-    if (channels == 1) return GL_RED;
-    if (channels == 2) return GL_RG;
-    if (channels == 3) return GL_RGB;
-    if (channels == 4) return GL_RGBA;
-    // TODO: not this xd
-    if (channels == 5) return GL_DEPTH_COMPONENT;
+    if (channels == 1) return dk::gfx::Channels::R;
+    if (channels == 2) return dk::gfx::Channels::RG;
+    if (channels == 3) return dk::gfx::Channels::RGB;
+    if (channels == 4) return dk::gfx::Channels::RGBA;
+    throw std::runtime_error("invalid channel count");
+}
+
+dk::gfx::Texture2D::Texture2D(const std::filesystem::path& path)
+    : Texture(api::TextureType::Texture2D, Channels::R)
+{
+    // Emplace initializer which parses image data from file upon resource initialization
+    m_initializer.emplace([&,&channels_=m_channels,&size_=m_size](unsigned handle) {
+        int        channels = 1;
+        glm::ivec2 size = glm::ivec2(0, 0);
+        loadTexture2DFromFile(path, handle, size, channels);
+        channels_ = channelCountToEnum(channels);
+        size_ = size;
+    });
+}
+
+dk::gfx::Texture2D dk::gfx::Texture2D::loadFromFileAndInitialize(const std::filesystem::path& path)
+{
+    Texture2D texture(path);
+    texture.handle();
+    return texture;
+}
+
+void dk::gfx::Texture2D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
+{
+    if (attachment == api::Attachment::Color0)
+        glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_2D, m_apiHandle.handle(), level);
+    else
+        glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_2D, m_apiHandle.handle(), level);
+
+    callPropertySetters(true);
+}
+
+dk::gfx::MultisampledTexture2D::MultisampledTexture2D(const glm::ivec2& size, unsigned samples, Channels channels)
+    : Texture(api::TextureType::MultisampledTexture2D, channels)
+    , m_size(size)
+    , m_samples(samples)
+{
+    if (std::max(size.x, size.y) >= dk::io::GlobalState::hardware().glMaxTextureSize)
+        throw std::runtime_error("texture size exceeds hardware maximum");
+
+    // Emplace initializer which sets up texture buffer
+    m_initializer.emplace([&](unsigned handle) {
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, api::internalFormat(channels), (unsigned)size.x, (unsigned)size.y, GL_TRUE);
+    });
+}
+
+void dk::gfx::MultisampledTexture2D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
+{
+    if (attachment == api::Attachment::Color0)
+        glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_2D_MULTISAMPLE, m_apiHandle.handle(), level);
+    else
+        glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_2D_MULTISAMPLE, m_apiHandle.handle(), level);
+    
+    callPropertySetters(true);
+}
+
+void loadCubemapFromFile(
+    const std::array<std::filesystem::path, 6>& paths, 
+    unsigned                                    handle, 
+    glm::ivec2&                                 size, 
+    int&                                        channels)
+{
+    for (int i = 0; i < paths.size(); ++i) {
+        glm::ivec2 faceSize;
+        int        faceChannels;
+
+        // Load file using stb_image
+        unsigned char* pixels = stbi_load(paths[i].string().c_str(), &faceSize.x, &faceSize.y, &channels, 0);
+        if (!pixels)
+        {
+            const char* error = stbi_failure_reason();
+            spdlog::error("Failed to load texture from {}", paths[i].string());
+            spdlog::error("stb_image error: {}", error);
+            continue;
+        }
+
+        // Verify size and channels
+        if (i == 0)
+        {
+            size     = faceSize;
+            channels = faceChannels;
+        }
+        else
+        {
+            if (size != faceSize || channels != faceChannels)
+                throw std::runtime_error("found mismatching face size or channels");
+        }
+
+        // Get api enum for channels
+        unsigned apiChannelsEnum = [=]() {
+            if (channels == 1) return GL_RED;
+            if (channels == 2) return GL_RG;
+            if (channels == 3) return GL_RGB;
+            if (channels == 4) return GL_RGBA;
+        }();
+
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+        unsigned cubemapSlot = GL_TEXTURE_CUBE_MAP_POSITIVE_X + i;
+        glTexImage2D(cubemapSlot, 0, apiChannelsEnum, (unsigned)size.x, (unsigned)size.y, 0, apiChannelsEnum, GL_UNSIGNED_BYTE, pixels);
+
+        stbi_image_free(pixels);
+    }
+}
+
+dk::gfx::Cubemap::Cubemap(const std::array<std::filesystem::path, 6>& paths)
+    : Texture(api::TextureType::Cubemap, Channels::R)
+{
+    // Emplace initializer which parses image data from files upon resource initialization
+    m_initializer.emplace([&,&channels_=m_channels,&size_=m_size](unsigned handle) {
+        int        channels = 1;
+        glm::ivec2 size = glm::ivec2(0, 0);
+        loadCubemapFromFile(paths, handle, size, channels);
+        channels_ = channelCountToEnum(channels);
+        size_ = size;
+    });
+}
+
+void dk::gfx::Cubemap::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
+{
+    throw std::runtime_error("cubemap cannot be attached as framebuffer output");
 }
 
 bool isMipMapMinFilter(const dk::gfx::properties::min_filter& min_filter)
@@ -122,68 +229,6 @@ bool isMipMapMinFilter(const dk::gfx::properties::min_filter& min_filter)
     if (min_filter == dk::gfx::properties::min_filter::nearest_mipmap_linear) return true;
     if (min_filter == dk::gfx::properties::min_filter::nearest_mipmap_nearest) return true;
     return false;
-}
-
-dk::gfx::Texture::Texture()
-    : AttachmentBase()
-{ }
-
-void dk::gfx::Texture::initializeOrUpdate()
-{
-    // Generate texture
-    if (!m_handle) {
-        glGenTextures(1, &m_handle);
-        glBindTexture(details::gfx::toUnderlying(m_type), m_handle);
-
-        // Set default filtering
-        glTexParameteri(details::gfx::toUnderlying(m_type), GL_TEXTURE_MIN_FILTER, details::gfx::toUnderlying(property<dk::gfx::properties::min_filter>()));
-        glTexParameteri(details::gfx::toUnderlying(m_type), GL_TEXTURE_MAG_FILTER, details::gfx::toUnderlying(property<dk::gfx::properties::mag_filter>()));
-        if (m_handle && isMipMapMinFilter(property<dk::gfx::properties::min_filter>()))
-            glGenerateMipmap(details::gfx::toUnderlying(m_type));
-    }
-    else {
-        glBindTexture(details::gfx::toUnderlying(m_type), m_handle);
-    }
-
-    if (!m_resized)
-        return;
-    m_resized = false;
-
-    if (!m_opt_pixels.has_value()) { 
-        // Create empty texture
-#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-#endif
-        glTexImage2D(details::gfx::toUnderlying(m_type), 0, toInternalFormat(m_channels), (unsigned)m_size.x, (unsigned)m_size.y, 0, toInternalFormat(m_channels), GL_UNSIGNED_BYTE, nullptr);
-        return;
-    }
-    std::visit(dk::common::overload {
-        // Load normal texture
-        [this](const std::vector<uint8_t>& pixels) {
-#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-#endif
-            glTexImage2D(GL_TEXTURE_2D, 0, toInternalFormat(m_channels), (unsigned)m_size.x, (unsigned)m_size.y, 0, toInternalFormat(m_channels), GL_UNSIGNED_BYTE, pixels.data());
-        },
-        // Load cube map
-        [this](const std::array<std::vector<uint8_t>, 6>& faces) {
-            for (int i = 0; i < faces.size(); ++i) {
-#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
-                glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-#endif
-                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
-                    0, toInternalFormat(m_channels), (unsigned)m_size.x, (unsigned)m_size.y, 0, toInternalFormat(m_channels), GL_UNSIGNED_BYTE, faces.at(i).data()
-                );
-            }
-        }
-    }, m_opt_pixels.value());
-}
-
-void dk::gfx::Texture::attachAs(FrameBuffer& buffer, unsigned underlyingAttachmentIndex)
-{
-    initializeOrUpdate();
-    glFramebufferTexture2D(GL_FRAMEBUFFER, underlyingAttachmentIndex, details::gfx::toUnderlying(m_type), m_handle, 0);
-    callPropertySetters(true);
 }
 
 dk::gfx::TextureUnit::SlotRef::SlotRef(TextureUnit& unit, int slot)
@@ -240,24 +285,24 @@ void dk::gfx::TextureUnit::makeActive()
     for (int i = 0; i < m_slotCount; ++i) {
         if (!m_textures[i].has_value())
             continue;
-        m_textures[i].value().get().makeActive(i);
+        m_textures[i].value().get().bindToUnit(i);
     }
 }
 
 template <>
 void details::common::setProperty(dk::gfx::Texture& texture, const dk::gfx::properties::min_filter& min_filter)
 {
-    glTexParameteri(details::gfx::toUnderlying(texture.type()), GL_TEXTURE_MIN_FILTER, details::gfx::toUnderlying(min_filter));
-    if (texture.m_handle && isMipMapMinFilter(min_filter)) {
-        glBindTexture(details::gfx::toUnderlying(texture.type()), texture.m_handle);
-        glGenerateMipmap(details::gfx::toUnderlying(texture.type()));
+    glTexParameteri(dk::gfx::api::toUnderlying(texture.m_type), GL_TEXTURE_MIN_FILTER, details::gfx::toUnderlying(min_filter));
+    if (texture.handle() && isMipMapMinFilter(min_filter)) {
+        glBindTexture(dk::gfx::api::toUnderlying(texture.m_type), texture.handle());
+        glGenerateMipmap(dk::gfx::api::toUnderlying(texture.m_type));
     }
 }
 
 template <>
 void details::common::setProperty(dk::gfx::Texture& texture, const dk::gfx::properties::mag_filter& mag_filter)
 {
-    glTexParameteri(details::gfx::toUnderlying(texture.type()), GL_TEXTURE_MAG_FILTER, details::gfx::toUnderlying(mag_filter));
+    glTexParameteri(dk::gfx::api::toUnderlying(texture.m_type), GL_TEXTURE_MAG_FILTER, details::gfx::toUnderlying(mag_filter));
 }
 
 int details::gfx::toUnderlying(dk::gfx::properties::min_filter min_filter)
@@ -277,15 +322,4 @@ int details::gfx::toUnderlying(dk::gfx::properties::min_filter min_filter)
 int details::gfx::toUnderlying(dk::gfx::properties::mag_filter mag_filter)
 {
     return toUnderlying(dk::gfx::properties::min_filter(mag_filter));
-}
-
-int details::gfx::toUnderlying(const dk::gfx::Texture::Type& type)
-{
-    switch (type)
-    {
-    case dk::gfx::Texture::Type::Normal : return GL_TEXTURE_2D;
-    case dk::gfx::Texture::Type::Cubemap: return GL_TEXTURE_CUBE_MAP;
-    default:
-        return 0;
-    }
 }

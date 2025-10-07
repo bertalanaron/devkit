@@ -49,4 +49,33 @@ private:
 	friend class Resource<VertexBufferObject>;
 };
 
-} // namespace dk::gfx
+unsigned toUnderlying(Channels channels)
+{
+
+}
+
+unsigned internalFormat(Channels channels)
+{
+
+}
+
+enum class Attachment { Color0, Depth, Stencil, DepthAndStencil };
+unsigned toUnderlying(Attachment attachment);
+
+enum class TextureType { Unset, Texture1D, Texture2D, Texture3D, Cubemap, MultisampledTexture2D };
+unsigned toUnderlying(TextureType type);
+bool canAttachToFrameBuffer(TextureType type);
+
+class Texture
+	: public Resource<Texture>
+{
+public:
+	void bind(TextureType textureType);
+
+private:
+	unsigned initialize();
+
+	friend class Resource<Texture>;
+};
+
+} // namespace dk::gfx::api

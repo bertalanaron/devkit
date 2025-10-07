@@ -2,6 +2,7 @@
 #include <devkit/gfx/common.h>
 #include <devkit/common/properties.h>
 #include <devkit/gfx/attachment_base.h>
+#include <devkit/gfx/api_resources.h>
 
 namespace dk::gfx::properties {
 
@@ -25,49 +26,171 @@ int toUnderlying(dk::gfx::properties::mag_filter);
 namespace dk::gfx {
 
 class FrameBuffer;
+class TextureUnit;
+
+enum class Channels {
+	R, RG, RGB, RGBA, ARGB, Depth16, Depth24, Depth32, Stencil8
+};
+
+namespace api {
+unsigned toUnderlying(Channels);
+unsigned internalFormat(Channels);
+}
+
+class RenderTarget {
+protected:
+	virtual void setAsTarget(api::Attachment attachment, unsigned colorIndex = 0, unsigned level = 0) = 0;
+	virtual glm::ivec3 size() const = 0;
+	virtual unsigned samples() const { return 1; }
+
+	friend class FrameBuffer;
+};
 
 class Texture
-	: public details::gfx::TextureProperties<Texture>
-	, public AttachmentBase
+	: public RenderTarget
+	, public details::gfx::TextureProperties<Texture>
 {
+protected:
+	using Initializer = std::optional<std::function<void(unsigned)>>;
+
 public:
-	enum class Type { Normal, Cubemap, /* TODO: Multisample */ };
+	Texture(api::TextureType type, Channels channels)
+		: m_type(type)
+		, m_channels(channels)
+	{ }
 
-	static Texture load(const std::string& path);
+	unsigned handle();
 
-	// @brief left, right, top, bottom front, back,
-	static Texture loadCubeMap(const std::array<std::string, 6>& paths);
+protected:
+	api::TextureType m_type;
+	api::Texture     m_apiHandle;
+	Channels         m_channels;
+	Initializer      m_initializer;
 
-	static Texture create(unsigned width, unsigned height, std::vector<uint8_t>&& pixels, int channels);
-
-	// @brief Create empty texture
-	static Texture create(unsigned width, unsigned height, int channels);
-
-	void makeActive(int unit);
-
-	Type type() const;
-
-	void showAsImGuiImage() const;
-
-	unsigned imguiTextureId();
-
-	Texture();
-
-private:
-	using opt_pixels_t = std::optional<std::variant<std::vector<uint8_t>, std::array<std::vector<uint8_t>, 6>>>;
-
-	Type         m_type = Type::Normal;
-	unsigned int m_handle = 0;
-	int          m_channels = 0;
-
-	opt_pixels_t m_opt_pixels;
-
-	void initializeOrUpdate() override;
-
-	void attachAs(FrameBuffer& buffer, unsigned underlyingAttachmentIndex) override;
+	void bindToUnit(unsigned unit);
 
 	template <typename D, typename E>
 	friend void details::common::setProperty(D&, const E&);
+
+	friend class TextureUnit;
+};
+
+class Texture1D
+	: public Texture
+{
+public:
+	Texture1D(Texture1D&&)            = default;
+	Texture1D& operator=(Texture1D&&) = default;
+
+	Texture1D()
+		: Texture(api::TextureType::Unset, Channels::R)
+	{ }
+
+	Texture1D(int size, Channels channels)
+		: Texture(api::TextureType::Texture1D, channels)
+		, m_size(size)
+	{ }
+
+private:
+	int m_size;
+
+	void setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level) override;
+
+	glm::ivec3 size() const override
+	{ return { m_size, 1, 1 }; }
+};
+
+class Texture2D 
+	: public Texture
+{
+public:
+	Texture2D(Texture2D&&)            = default;
+	Texture2D& operator=(Texture2D&&) = default;
+
+	Texture2D() 
+		: Texture(api::TextureType::Unset, Channels::R)
+	{ }
+
+	Texture2D(const glm::ivec2& size, Channels channels = Channels::RGBA);
+
+	Texture2D(const std::filesystem::path& path);
+
+	// @breif Call after graphics context was initalized
+	Texture2D loadFromFileAndInitialize(const std::filesystem::path& path);
+
+private:
+	glm::ivec2 m_size;
+
+	void setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level) override;
+
+	glm::ivec3 size() const override
+	{ return { m_size.x, m_size.y, 1 }; }
+};
+
+class Cubemap
+	: public Texture
+{
+public:
+	Cubemap(Cubemap&&)            = default;
+	Cubemap& operator=(Cubemap&&) = default;
+
+	Cubemap() 
+		: Texture(api::TextureType::Unset, Channels::R)
+	{ }
+
+	Cubemap(const std::array<std::filesystem::path, 6>& paths);
+
+private:
+	glm::ivec2 m_size;
+
+	void setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level) override;
+
+	glm::ivec3 size() const override
+	{ return { m_size.x, m_size.y, 1 }; }
+};
+
+class MultisampledTexture2D
+	: public Texture
+{
+public:
+	MultisampledTexture2D(MultisampledTexture2D&&)            = default;
+	MultisampledTexture2D& operator=(MultisampledTexture2D&&) = default;
+
+	MultisampledTexture2D(const glm::ivec2& size, unsigned samples, Channels channels = Channels::RGBA);
+
+private:
+	glm::ivec2 m_size;
+	unsigned   m_samples;
+
+	void setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level) override;
+
+	glm::ivec3 size() const override
+	{ return { m_size.x, m_size.y, 1 }; }
+
+	unsigned samples() const override { return m_samples; }
+};
+
+
+//class FrameBuffer {
+//private:
+//	struct Attachment {
+//		void operator=(RenderTarget& _target)
+//		{ target = &_target; }
+//
+//		std::optional<RenderTarget*> target;
+//	};
+//
+//public:
+//	std::vector<Attachment> color;
+//	Attachment              depth;
+//	Attachment              stencil;
+//};
+
+
+class RenderBuffer
+	: public RenderTarget
+{
+
 };
 
 class TextureUnit {
@@ -109,11 +232,5 @@ private:
 	std::vector<opt_texture_ref_t> m_textures;
 	int                            m_slotCount;
 };
-
-}
-
-namespace details::gfx {
-
-int toUnderlying(const dk::gfx::Texture::Type& type);
 
 }

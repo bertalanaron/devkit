@@ -31,6 +31,7 @@ public:
 	struct HardwareVariantState {
 		int glMaxTextureImageUnits = 0;
 		int glMaxTextureSize       = 0;
+		int glMaxColorAttachments  = 0;
 	};
 
 	struct State {
