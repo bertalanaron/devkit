@@ -11,7 +11,7 @@
 #include <devkit/gfx/scene.h>
 #include <devkit/gfx/camera.h>
 #include <devkit/gfx/texture.h>
-#include <devkit/gfx/font.h>
+//#include <devkit/gfx/font.h>
 #include <devkit/gfx/vertex_sink.h>
 #include <devkit/io/frame.h>
 
@@ -140,7 +140,7 @@ public:
 		const int MaxDropDownSize = 200;
 		std::string label = std::format("###Asset{}_{:x}", typeid(T).name(), reinterpret_cast<intptr_t>(this));
 		
-		ImGui::Image(assets.get<T>(m_selected).imguiTextureId(), ImVec2(18, 18));
+		ImGui::Image(assets.get<T>(m_selected).handle(), ImVec2(18, 18));
 		ImGui::SameLine();
 
 		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, FLT_MAX));
@@ -158,7 +158,7 @@ public:
 					if (!relativePath.contains(m_searchString))
 						continue;
 					bool isSelected = (relativePath == m_selected);
-					ImGui::Image(asset.imguiTextureId(), ImVec2(18, 18));
+					ImGui::Image(asset.handle(), ImVec2(18, 18));
 					ImGui::SameLine();
 					if (ImGui::Selectable(relativePath.c_str(), isSelected)) {
 						m_selected = relativePath;
@@ -269,26 +269,21 @@ class Example01 {
 public:
 	void run()
 	{
-		dk::gfx::VertexSink textVertexSink(dk::common::id<dk::gfx::Font::CharVertex>);
+		//dk::gfx::VertexSink textVertexSink(dk::common::id<dk::gfx::Font::CharVertex>);
 
-		dk::gfx::Texture sceneOutTexture = [&] {
-			const auto windowSize = m_window.property<dk::io::properties::window::size>();
-			return dk::gfx::Texture::create(windowSize.x, windowSize.y, 4);
-		}();
-		dk::gfx::Texture sceneOutDepth = [&] {
-			const auto windowSize = m_window.property<dk::io::properties::window::size>();
-			return dk::gfx::Texture::create(windowSize.x, windowSize.y, 5);
-		}();
+		dk::gfx::Texture2D sceneColorTex(m_window.property<dk::io::properties::window::size>(), dk::gfx::Channels::RGB);
+		dk::gfx::Texture2D sceneDepthTex(m_window.property<dk::io::properties::window::size>(), dk::gfx::Channels::Depth);
+
 		dk::gfx::FrameBuffer sceneFrameBuffer;
-		sceneFrameBuffer.attachColor(sceneOutTexture, 0);
-		sceneFrameBuffer.attachDepth(sceneOutDepth);
+		sceneFrameBuffer.color[0] = sceneColorTex;
+		sceneFrameBuffer.depth    = sceneDepthTex;
 
 		while (m_window.isOpen()) {
 			const auto& frame = m_window.beginFrame();
 			// Clear backbuffer
-			sceneFrameBuffer.clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0x1e1e1eff));
-			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color, DK_COLOR(0x1e1e1eff));
-			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0xffffffff));
+			sceneFrameBuffer.clear(dk::gfx::Clear::Color | dk::gfx::Clear::Depth, DK_COLOR(0x1e1e1eff));
+			dk::gfx::backBuffer().clear(dk::gfx::Clear::Color | dk::gfx::Clear::Depth, DK_COLOR(0x1e1e1eff));
+			//dk::gfx::backBuffer().clear(dk::gfx::Clear::Color | dk::gfx::Clear::Depth, DK_COLOR(0xffffffff));
 
 			m_assets.synchronize();
 
@@ -300,15 +295,15 @@ public:
 			// Draw scene
 			m_shaders["planet"].uniforms() << m_ucCamera;
 			if (ImGui::Begin("Planet texture")) {
-				static AssetSelector<dk::gfx::Texture> planetTextureSelector("textures/planets/mars.png");
+				static AssetSelector<dk::gfx::Texture2D> planetTextureSelector("textures/planets/mars.png");
 				//auto& planetTexture = m_assets.get<dk::gfx::Texture>(assetPath("planet_texture"));
 				auto& planetTexture = planetTextureSelector.get(m_assets);
 				auto slot = m_shaders["planet"].textures().emptySlot();
 				m_shaders["planet"].uniformTexture("u_texture", planetTexture);
-				if (&planetTexture == &m_assets.get<dk::gfx::Texture>("textures/planets/earth.png")) {
+				if (&planetTexture == &m_assets.get<dk::gfx::Texture2D>("textures/planets/earth.png")) {
 					m_shaders["planet"].uniforms().set("u_useSpecular", (int)true);
-					m_shaders["planet"].uniformTexture("u_normal"  , m_assets.get<dk::gfx::Texture>("textures/planets/earth_normal_map.png"));
-					m_shaders["planet"].uniformTexture("u_specular", m_assets.get<dk::gfx::Texture>("textures/planets/earth_specular_map.png"));
+					m_shaders["planet"].uniformTexture("u_normal"  , m_assets.get<dk::gfx::Texture2D>("textures/planets/earth_normal_map.png"));
+					m_shaders["planet"].uniformTexture("u_specular", m_assets.get<dk::gfx::Texture2D>("textures/planets/earth_specular_map.png"));
 				}
 				else {
 					m_shaders["planet"].uniforms().set("u_useSpecular", (int)false);
@@ -328,7 +323,7 @@ public:
 
 			// Draw asteroids
 			m_shaders["asteroid"].uniforms() << m_ucCamera;
-			auto& asteroidTexture = m_assets.get<dk::gfx::Texture>(assetPath("asteroid_texture"));
+			auto& asteroidTexture = m_assets.get<dk::gfx::Texture2D>(assetPath("asteroid_texture"));
 			asteroidTexture.property(dk::gfx::properties::min_filter::nearest_mipmap_linear);
 			m_shaders["asteroid"].uniformTexture("u_texture", asteroidTexture);
 			auto& asteroidMesh = *m_assets.get<dk::gfx::Scene>(assetPath("asteroid_model")).meshes().begin();
@@ -344,7 +339,7 @@ public:
 
 			// Draw skybox
 			m_shaders["skybox"].uniforms()   << m_ucCamera;
-			m_shaders["skybox"].uniformTexture("u_skybox", *m_skybox);
+			m_shaders["skybox"].uniformTexture("u_skybox", m_skybox);
 			auto& unitCubeMesh = m_assets.get<dk::gfx::Scene>("/models/planet_scene.fbx")["/skybox"][0]();
 			m_shaders["skybox"].layout(unitCubeMesh.vertices);
 			dk::gfx::backBuffer().render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
@@ -357,7 +352,7 @@ public:
 				m_window.property(dk::common::toggle(m_window.property<dk::io::properties::window::mode>()));
 
 			if (ImGui::Begin("FrameBuffer")) {
-				sceneOutTexture.showAsImGuiImage();
+				ImGui::Image((ImTextureID)(intptr_t)sceneColorTex.handle(), ImVec2(sceneColorTex.size().x, sceneColorTex.size().y), ImVec2(0, 1), ImVec2(1, 0));
 				ImVec2 size = ImGui::GetWindowSize();
 				//sceneFrameBuffer.resize(glm::ivec2(size.x, size.y));
 				ImGui::End();
@@ -402,12 +397,12 @@ public:
 
 		m_assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
 		m_assets.type<dk::gfx::Scene>({ "obj", "fbx" }, dk::gfx::Scene::load, &dk::gfx::Scene::update, std::nullopt, dk::io::AssetManager::Deferred);
-		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load);
+		m_assets.type<dk::gfx::Texture2D>("png", dk::gfx::Texture2D::loadFromFileAndInitialize, std::nullopt, std::nullopt, dk::io::AssetManager::Async);
 		m_assets.type<YAML::Node>("yaml", YAML::LoadFile, [](YAML::Node& node, const std::string& path) { 
 			node = YAML::LoadFile(path);
 			spdlog::info("{}", YAML::Dump(node));
 		});
-		m_assets.type<dk::gfx::Font>("ttf", dk::gfx::Font::load);
+		//m_assets.type<dk::gfx::Font>("ttf", dk::gfx::Font::load);
 		using JsonFStream = dk::io::FileStream<nlohmann::json>;
 		m_assets.type<nlohmann::json>("json", JsonFStream::load, JsonFStream::update, JsonFStream::save);
 		
@@ -428,15 +423,15 @@ public:
 		m_shaders["skybox"].property(dk::gfx::properties::depth_func::lequal);
 
 		// Load skybox
-		m_skybox = std::make_unique<dk::gfx::Texture>(std::move(dk::gfx::Texture::loadCubeMap({
+		m_skybox = dk::gfx::Cubemap({
 			(m_assets.root() / "textures/skyboxes/stars/right.png").string(),
 			(m_assets.root() / "textures/skyboxes/stars/left.png").string(),
 			(m_assets.root() / "textures/skyboxes/stars/top.png").string(),
 			(m_assets.root() / "textures/skyboxes/stars/bottom.png").string(),
 			(m_assets.root() / "textures/skyboxes/stars/front.png").string(),
 			(m_assets.root() / "textures/skyboxes/stars/back.png").string()
-		})));
-		m_skybox->property(dk::gfx::properties::min_filter::linear);
+		});
+		m_skybox.property(dk::gfx::properties::min_filter::linear);
 
 		// Bind camera
 		m_ucCamera.bind("u_camera.VP",        [&]() -> glm::mat4 { return m_camera.P() * m_camera.V(); });
@@ -471,7 +466,7 @@ private:
 	dk::gfx::UniformCollection m_ucCamera;
 	dk::gfx::ShaderCollection  m_shaders;
 
-	std::unique_ptr<dk::gfx::Texture> m_skybox;
+	dk::gfx::Cubemap m_skybox;
 
 	dk::gfx::VertexBuffer m_meteors;
 	dk::gfx::VertexSink   m_colorSink;
@@ -496,7 +491,7 @@ private:
 		if (ImGui::CollapsingHeader("Window", ImGuiTreeNodeFlags_DefaultOpen))
 			imguiPropertiesPanel(m_window, 40.f);
 		if (ImGui::CollapsingHeader("Globe Texture", ImGuiTreeNodeFlags_DefaultOpen))
-			imguiPropertiesPanel(m_assets.get<dk::gfx::Texture>(assetPath("planet_texture")), 40.f);
+			imguiPropertiesPanel(m_assets.get<dk::gfx::Texture2D>(assetPath("planet_texture")), 40.f);
 		ImGui::DragFloat("##fov", &m_camera.fov, 0.01, 0, 3.1415);
 		ImGui::End();
 	}

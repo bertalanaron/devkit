@@ -29,7 +29,7 @@ class FrameBuffer;
 class TextureUnit;
 
 enum class Channels {
-	R, RG, RGB, RGBA, ARGB, Depth16, Depth24, Depth32, Stencil8
+	R, RG, RGB, BGR, RGBA, BGRA, Depth, DepthStencil
 };
 
 namespace api {
@@ -40,7 +40,7 @@ unsigned internalFormat(Channels);
 class RenderTarget {
 protected:
 	virtual void setAsTarget(api::Attachment attachment, unsigned colorIndex = 0, unsigned level = 0) = 0;
-	virtual glm::ivec3 size() const = 0;
+	virtual glm::ivec3 targetSize() const = 0;
 	virtual unsigned samples() const { return 1; }
 
 	friend class FrameBuffer;
@@ -51,7 +51,7 @@ class Texture
 	, public details::gfx::TextureProperties<Texture>
 {
 protected:
-	using Initializer = std::optional<std::function<void(unsigned)>>;
+	using Initializer = std::optional<std::function<void(unsigned, Texture*)>>;
 
 public:
 	Texture(api::TextureType type, Channels channels)
@@ -82,21 +82,21 @@ public:
 	Texture1D(Texture1D&&)            = default;
 	Texture1D& operator=(Texture1D&&) = default;
 
-	Texture1D()
-		: Texture(api::TextureType::Unset, Channels::R)
-	{ }
+	//Texture1D()
+	//	: Texture(api::TextureType::Unset, Channels::R)
+	//{ }
 
-	Texture1D(int size, Channels channels)
-		: Texture(api::TextureType::Texture1D, channels)
-		, m_size(size)
-	{ }
+	//Texture1D(int size, Channels channels)
+	//	: Texture(api::TextureType::Texture1D, channels)
+	//	, m_size(size)
+	//{ }
 
 private:
-	int m_size;
+	int m_size = 0;
 
 	void setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level) override;
 
-	glm::ivec3 size() const override
+	glm::ivec3 targetSize() const override
 	{ return { m_size, 1, 1 }; }
 };
 
@@ -116,14 +116,16 @@ public:
 	Texture2D(const std::filesystem::path& path);
 
 	// @breif Call after graphics context was initalized
-	Texture2D loadFromFileAndInitialize(const std::filesystem::path& path);
+	static Texture2D loadFromFileAndInitialize(const std::string& path);
+
+	glm::ivec2 size() const { return m_size; }
 
 private:
 	glm::ivec2 m_size;
 
 	void setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level) override;
 
-	glm::ivec3 size() const override
+	glm::ivec3 targetSize() const override
 	{ return { m_size.x, m_size.y, 1 }; }
 };
 
@@ -145,7 +147,7 @@ private:
 
 	void setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level) override;
 
-	glm::ivec3 size() const override
+	glm::ivec3 targetSize() const override
 	{ return { m_size.x, m_size.y, 1 }; }
 };
 
@@ -164,7 +166,7 @@ private:
 
 	void setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level) override;
 
-	glm::ivec3 size() const override
+	glm::ivec3 targetSize() const override
 	{ return { m_size.x, m_size.y, 1 }; }
 
 	unsigned samples() const override { return m_samples; }

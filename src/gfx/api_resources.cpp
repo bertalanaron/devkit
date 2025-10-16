@@ -1,4 +1,5 @@
 #include <devkit/gfx/api_resources.h>
+#include <devkit/gfx/texture.h>
 #include "context.h"
 
 void dk::gfx::api::VertexBufferArray::bind()
@@ -45,6 +46,25 @@ unsigned dk::gfx::api::VertexBufferObject::initialize()
 	return vbo;
 }
 
+unsigned dk::gfx::api::toUnderlying(dk::gfx::Channels channels)
+{
+	switch (channels)
+	{
+	case Channels::R    : return GL_RED;
+	case Channels::RG   : return GL_RG;
+	case Channels::RGB  : return GL_RGB;
+	case Channels::BGR  : return GL_BGR;
+	case Channels::RGBA : return GL_RGBA;
+	case Channels::BGRA : return GL_BGRA;
+	default: return 0;
+	}
+}
+
+unsigned dk::gfx::api::internalFormat(dk::gfx::Channels channels)
+{
+	return toUnderlying(channels);
+}
+
 unsigned dk::gfx::api::toUnderlying(Attachment attachment)
 {
 	switch (attachment)
@@ -80,6 +100,7 @@ void dk::gfx::api::Texture::bind(TextureType textureType)
 {
 	auto tex = handle();
 	glBindTexture(toUnderlying(textureType), tex);
+	glGenerateMipmap(toUnderlying(textureType));
 }
 
 unsigned dk::gfx::api::Texture::initialize()
@@ -87,4 +108,24 @@ unsigned dk::gfx::api::Texture::initialize()
 	GLuint tex = 0;
 	glGenTextures(1, &tex);
 	return tex;
+}
+
+dk::gfx::api::FrameBuffer::FrameBuffer(dk::gfx::api::FrameBuffer::backbuffer_t)
+	: Resource()
+	, m_isBackbuffer(true)
+{ }
+
+void dk::gfx::api::FrameBuffer::bind()
+{
+	auto fb = handle();
+	glBindFramebuffer(GL_FRAMEBUFFER, fb);
+}
+
+unsigned dk::gfx::api::FrameBuffer::initialize()
+{
+	if (m_isBackbuffer)
+		return 0;
+	GLuint fb = 0;
+	glGenFramebuffers(1, &fb);
+	return fb;
 }

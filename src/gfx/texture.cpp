@@ -17,31 +17,42 @@ unsigned dk::gfx::Texture::handle()
 
     // Call initializer with handle
     if (m_initializer.has_value())
-        m_initializer.value()(m_apiHandle.handle());
+    {
+        m_apiHandle.bind(m_type);
+        m_initializer.value()(m_apiHandle.handle(), this);
+        m_initializer.reset();
+        callPropertySetters(true);
+    }
+    
     // Return api handle
     return m_apiHandle.handle();
 }
 
 void dk::gfx::Texture::bindToUnit(unsigned unit)
 {
-    // Call initializer with handle
-    if (m_initializer.has_value())
-        m_initializer.value()(m_apiHandle.handle());
     // Attach to texture unit
     glActiveTexture(GL_TEXTURE0 + unit);
     m_apiHandle.bind(m_type);
+    // Call initializer with handle
+    if (m_initializer.has_value())
+    {
+        m_initializer.value()(m_apiHandle.handle(), this);
+        m_initializer.reset();
+        callPropertySetters(true);
+    }
 
-    callPropertySetters(true);
+    callPropertySetters(false);
 }
 
 void dk::gfx::Texture1D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
 {
+    m_apiHandle.bind(m_type);
     if (attachment == api::Attachment::Color0)
         glFramebufferTexture1D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_1D, m_apiHandle.handle(), level);
     else
         glFramebufferTexture1D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_1D, m_apiHandle.handle(), level);
 
-    callPropertySetters(true);
+    callPropertySetters(false);
 }
 
 dk::gfx::Texture2D::Texture2D(const glm::ivec2& size, Channels channels)
@@ -52,7 +63,7 @@ dk::gfx::Texture2D::Texture2D(const glm::ivec2& size, Channels channels)
         throw std::runtime_error("texture size exceeds hardware maximum");
 
     // Emplace initializer which sets up texture buffer
-    m_initializer.emplace([&](unsigned handle) {
+    m_initializer.emplace([&](unsigned handle, Texture* texture) {
 #if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 #endif
@@ -60,32 +71,28 @@ dk::gfx::Texture2D::Texture2D(const glm::ivec2& size, Channels channels)
     });
 }
 
-void loadTexture2DFromFile(const std::filesystem::path& path, unsigned handle, glm::ivec2& size, int& channels)
+stbi_uc* loadTexture2DFromFile(const std::filesystem::path& path, glm::ivec2& size, unsigned& channels)
 {
     // Load file using stb_image
-    unsigned char* pixels = stbi_load(path.string().c_str(), &size.x, &size.y, &channels, 0);
+    int channelCount = 1;
+    auto pixels = stbi_load(path.string().c_str(), &size.x, &size.y, &channelCount, 0);
     if (!pixels)
     {
         const char* error = stbi_failure_reason();
         spdlog::error("Failed to load texture from {}", path.string());
         spdlog::error("stb_image error: {}", error);
-        return;
+        return nullptr;
     }
 
     // Get api enum for channels
-    unsigned apiChannelsEnum = [=]() {
-        if (channels == 1) return GL_RED;
-        if (channels == 2) return GL_RG;
-        if (channels == 3) return GL_RGB;
-        if (channels == 4) return GL_RGBA;
+    channels = [=]() {
+        if (channelCount == 1) return GL_RED;
+        if (channelCount == 2) return GL_RG;
+        if (channelCount == 3) return GL_RGB;
+        if (channelCount == 4) return GL_RGBA;
     }();
 
-#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
-    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-#endif
-    glTexImage2D(GL_TEXTURE_2D, 0, apiChannelsEnum, (unsigned)size.x, (unsigned)size.y, 0, apiChannelsEnum, GL_UNSIGNED_BYTE, pixels);
-
-    stbi_image_free(pixels);
+    return pixels;
 }
 
 dk::gfx::Channels channelCountToEnum(int channels)
@@ -100,31 +107,38 @@ dk::gfx::Channels channelCountToEnum(int channels)
 dk::gfx::Texture2D::Texture2D(const std::filesystem::path& path)
     : Texture(api::TextureType::Texture2D, Channels::R)
 {
+    unsigned channels = 0;
+    auto pixels = loadTexture2DFromFile(path, m_size, channels);
+
     // Emplace initializer which parses image data from file upon resource initialization
-    m_initializer.emplace([&,&channels_=m_channels,&size_=m_size](unsigned handle) {
-        int        channels = 1;
-        glm::ivec2 size = glm::ivec2(0, 0);
-        loadTexture2DFromFile(path, handle, size, channels);
-        channels_ = channelCountToEnum(channels);
-        size_ = size;
-    });
+    if (pixels)
+        m_initializer.emplace([path=path,channels,pixels](unsigned handle, Texture* tex) {
+            Texture2D* texture = dynamic_cast<Texture2D*>(tex);
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+            glTexImage2D(GL_TEXTURE_2D, 0, channels, (unsigned)texture->m_size.x, (unsigned)texture->m_size.y, 0, channels, GL_UNSIGNED_BYTE, pixels);
+
+            stbi_image_free(pixels);
+        });
 }
 
-dk::gfx::Texture2D dk::gfx::Texture2D::loadFromFileAndInitialize(const std::filesystem::path& path)
+dk::gfx::Texture2D dk::gfx::Texture2D::loadFromFileAndInitialize(const std::string& path)
 {
     Texture2D texture(path);
-    texture.handle();
+    //texture.handle();
     return texture;
 }
 
 void dk::gfx::Texture2D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
 {
+    m_apiHandle.bind(m_type);
     if (attachment == api::Attachment::Color0)
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_2D, m_apiHandle.handle(), level);
     else
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_2D, m_apiHandle.handle(), level);
 
-    callPropertySetters(true);
+    callPropertySetters(false);
 }
 
 dk::gfx::MultisampledTexture2D::MultisampledTexture2D(const glm::ivec2& size, unsigned samples, Channels channels)
@@ -136,7 +150,7 @@ dk::gfx::MultisampledTexture2D::MultisampledTexture2D(const glm::ivec2& size, un
         throw std::runtime_error("texture size exceeds hardware maximum");
 
     // Emplace initializer which sets up texture buffer
-    m_initializer.emplace([&](unsigned handle) {
+    m_initializer.emplace([&](unsigned handle, Texture*) {
 #if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 #endif
@@ -146,12 +160,13 @@ dk::gfx::MultisampledTexture2D::MultisampledTexture2D(const glm::ivec2& size, un
 
 void dk::gfx::MultisampledTexture2D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
 {
+    m_apiHandle.bind(m_type);
     if (attachment == api::Attachment::Color0)
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_2D_MULTISAMPLE, m_apiHandle.handle(), level);
     else
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_2D_MULTISAMPLE, m_apiHandle.handle(), level);
     
-    callPropertySetters(true);
+    callPropertySetters(false);
 }
 
 void loadCubemapFromFile(
@@ -165,7 +180,7 @@ void loadCubemapFromFile(
         int        faceChannels;
 
         // Load file using stb_image
-        unsigned char* pixels = stbi_load(paths[i].string().c_str(), &faceSize.x, &faceSize.y, &channels, 0);
+        unsigned char* pixels = stbi_load(paths[i].string().c_str(), &faceSize.x, &faceSize.y, &faceChannels, 0);
         if (!pixels)
         {
             const char* error = stbi_failure_reason();
@@ -208,12 +223,12 @@ dk::gfx::Cubemap::Cubemap(const std::array<std::filesystem::path, 6>& paths)
     : Texture(api::TextureType::Cubemap, Channels::R)
 {
     // Emplace initializer which parses image data from files upon resource initialization
-    m_initializer.emplace([&,&channels_=m_channels,&size_=m_size](unsigned handle) {
+    m_initializer.emplace([paths=paths](unsigned handle, Texture* texture) {
         int        channels = 1;
         glm::ivec2 size = glm::ivec2(0, 0);
         loadCubemapFromFile(paths, handle, size, channels);
-        channels_ = channelCountToEnum(channels);
-        size_ = size;
+        ((Cubemap*)texture)->m_channels = channelCountToEnum(channels);
+        ((Cubemap*)texture)->m_size = size;
     });
 }
 
@@ -294,7 +309,6 @@ void details::common::setProperty(dk::gfx::Texture& texture, const dk::gfx::prop
 {
     glTexParameteri(dk::gfx::api::toUnderlying(texture.m_type), GL_TEXTURE_MIN_FILTER, details::gfx::toUnderlying(min_filter));
     if (texture.handle() && isMipMapMinFilter(min_filter)) {
-        glBindTexture(dk::gfx::api::toUnderlying(texture.m_type), texture.handle());
         glGenerateMipmap(dk::gfx::api::toUnderlying(texture.m_type));
     }
 }

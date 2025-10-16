@@ -25,30 +25,36 @@ using FrameBufferProperties = dk::common::DeferredPropertyCollection<D,
 
 namespace dk::gfx {
 
+enum class Clear { Color = 0x00004000, Depth = 0x00000100 };
+
+inline Clear operator|(Clear a, Clear b) { return Clear((int)a | (int)b); }
+
 class FrameBuffer 
 	: public details::gfx::FrameBufferProperties<FrameBuffer> 
 {
 private:
-	using opt_texture_ref_t = std::optional<std::reference_wrapper<Texture>>;
+	struct Attachment {
+		void operator=(RenderTarget& _target)
+		{ target = &_target; }
 
-	struct backbuffer_t {};
+		glm::ivec3 size() const 
+		{
+			return (!target.has_value())
+				? glm::ivec3(0, 0, 0) 
+				: target.value()->targetSize();  
+		}
+
+		std::optional<RenderTarget*> target;
+	};
 
 public:
-	enum class ClearMask { Color = 0x00004000, Depth = 0x00000100 };
-	inline friend ClearMask operator|(ClearMask a, ClearMask b) { return ClearMask((int)a | (int)b); }
-
 	FrameBuffer();
+	FrameBuffer(api::FrameBuffer::backbuffer_t);
 	FrameBuffer(FrameBuffer&&) = default;
 
-	// @brief When attaching to 0, viewport is automatically set to texture size
-	void attachColor(AttachmentBase& target, int attachmentIndex = 0);
-
-	opt_texture_ref_t color(int attachmentIndex = 0);
-
-	// @brief Create a renderbuffer to hold depth information
-	void attachDepth(AttachmentBase& target);
-
-	opt_texture_ref_t depth();
+	std::vector<Attachment> color;
+	Attachment              depth;
+	Attachment              stencil;
 
 	// @brief Set size and offset of viewport. 
 	// When not set, viewport size is the size of the first attachment. 
@@ -57,7 +63,7 @@ public:
 	float aspectRatio() const;
 	
 	// Has to be run on the render thread.
-	void clear(ClearMask mask, const glm::vec4& color = dk::colors::black);
+	void clear(Clear mask, const glm::vec4& color = dk::colors::black);
 
 	// @brief Draw data bound in the shader using it's layout(...) method. Use a vertex buffer for indexing. 
 	// Has to be run on the render thread.
@@ -68,17 +74,8 @@ public:
 	void render(Shader& shader, ElementBuffer& elementBuffer, Primitive primitive, unsigned count = 1);
 
 private:
-	unsigned m_handle = 0;
-
-	int                          m_maxColorAttachments;
-	std::vector<AttachmentBase*> m_colorAttachments;
-	AttachmentBase*              m_depthAttachment;
-
-	std::optional<Viewport>      m_viewport;
-
-	FrameBuffer(backbuffer_t);
-
-	void initializeOrUpdate();
+	api::FrameBuffer        m_apiHandle; 
+	std::optional<Viewport> m_viewport;
 
 	void makeActive();
 

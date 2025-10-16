@@ -49,16 +49,6 @@ private:
 	friend class Resource<VertexBufferObject>;
 };
 
-unsigned toUnderlying(Channels channels)
-{
-
-}
-
-unsigned internalFormat(Channels channels)
-{
-
-}
-
 enum class Attachment { Color0, Depth, Stencil, DepthAndStencil };
 unsigned toUnderlying(Attachment attachment);
 
@@ -76,6 +66,25 @@ private:
 	unsigned initialize();
 
 	friend class Resource<Texture>;
+};
+
+class FrameBuffer
+	: public Resource<FrameBuffer>
+{
+public:
+	struct backbuffer_t { };
+
+	FrameBuffer() = default;
+	FrameBuffer(backbuffer_t);
+
+	void bind();
+
+private:
+	bool m_isBackbuffer = false;
+
+	unsigned initialize();
+
+	friend class Resource<FrameBuffer>;
 };
 
 } // namespace dk::gfx::api
