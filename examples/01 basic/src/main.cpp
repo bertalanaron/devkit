@@ -566,6 +566,8 @@ private:
 int main(void) {
 	spdlog::set_level(spdlog::level::trace);
 
+	f();
+
 	spdlog::info("{}", nlohmann_extension::smart_dump(nlohmann::json(dk::io::modkey::ctrl + dk::io::key::s)));
 
 	Example01 app;
