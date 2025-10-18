@@ -150,17 +150,10 @@ private:
 
 }
 
-template <typename T>
-struct std::formatter<glm::vec<2, T, glm::defaultp>> : std::formatter<T> {
-	constexpr auto parse(std::format_parse_context& ctx) {
-		return std::formatter<T>::parse(ctx);
-	}
-	auto format(const glm::ivec2& v, std::format_context& ctx) const {
-		auto out = ctx.out();
-		out = std::format_to(out, "({}", v.x);
-		out = std::format_to(out, ", ");
-		out = std::formatter<T>::format(v.y, ctx);
-		return std::format_to(out, ")");
+template <typename T, glm::qualifier Q>
+struct std::formatter<glm::vec<2, T, Q>> : std::formatter<T> {
+	auto format(const glm::vec<2, T, Q>& v, std::format_context& ctx) const {
+		return std::format_to(ctx.out(), "({},{})", v.x, v.y);
 	}
 };
 
@@ -250,18 +243,19 @@ public:
 	void operator()(Ts&&... values)
 	{ (this->operator()(std::forward<decltype(values)>(values)), ...); }
 
-	void set(auto... args)
-	{ this->operator()(std::forward<decltype(args)>(args)...); }
+	template <OfList<Properties...>... Ts>
+	void set(Ts&&... values)
+	{ this->operator()(std::forward<decltype(values)>(values)...); }
 
 	template <OfList<Properties...> Property>
-	const auto& get()
+	const auto& get() const
 	{
 		constexpr auto index = property_index<Property>;
 		return std::get<index>(m_value);
 	}
 
 	template <OfList<Properties...> First, OfList<Properties...> Second, OfList<Properties...>... Rest>
-	auto get() -> std::tuple<First, Second, Rest...>
+	auto get() const -> std::tuple<First, Second, Rest...>
 	{ return std::make_tuple(get<First>(), get<Second>(), get<Rest>()...); }
 
 	template <typename F>
@@ -309,9 +303,7 @@ inline void from_json(const nlohmann::json& j, ConfigurationBase<Properties...>&
 {
 	config.for_each([&j,&config](const auto& p) { 
 		using P = std::decay_t<decltype(p)>;
-		P parsed;
-		from_json(j[ConfigurationBase<Properties...>::property_name(p)], parsed);
-		config(std::move(parsed));
+		config(std::move(j[ConfigurationBase<Properties...>::property_name(p)].template get<P>()));
 	});
 }
 
@@ -480,13 +472,19 @@ inline void f()
 	//nlohmann_extension::smart_dump(json);
 
 	using Window = _dk::io::Window;
+	using FrameBuffer = _dk::io::FrameBuffer;
 
 	Window      window;
+	FrameBuffer frameBuffer;
 
-	window.config(Window::Title("Demo Window"));
-	window.config(Window::Theme::Dark);
+	window.config(Window::Title("Demo Window"),
+				  Window::Theme::Dark);
+
+	frameBuffer.config(FrameBuffer::PointSize(2.f));
 
 	Window window2;
+	std::apply(window2.config, window.config.get<Window::Title, Window::Theme>());
+
 	from_json(nlohmann::json(window.config), window2.config);
 
 	spdlog::info(nlohmann_extension::smart_dump(nlohmann::json(window2.config)));
