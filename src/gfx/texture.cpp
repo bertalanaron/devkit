@@ -30,7 +30,7 @@ unsigned dk::gfx::Texture::handle()
     return m_apiHandle.handle();
 }
 
-void dk::gfx::Texture::updateConfig(bool force = false)
+void dk::gfx::Texture::updateConfig(bool force)
 {
     // Call property setters
     config.for_each([&](const auto& prop) {
@@ -351,5 +351,5 @@ void dk::gfx::setTextureProperty(dk::gfx::Texture& texture, const Texture::MagFi
         }
     }();
 
-    glTexParameteri(details::gfx::toUnderlying(texture.m_type), GL_TEXTURE_MAG_FILTER, underlying);
+    glTexParameteri(dk::gfx::api::toUnderlying(texture.m_type), GL_TEXTURE_MAG_FILTER, underlying);
 }

@@ -11,7 +11,7 @@
 #include <devkit/gfx/scene.h>
 #include <devkit/gfx/camera.h>
 #include <devkit/gfx/texture.h>
-#include <devkit/gfx/font.h>
+//#include <devkit/gfx/font.h>
 #include <devkit/gfx/vertex_sink.h>
 #include <devkit/io/frame.h>
 
@@ -348,8 +348,8 @@ public:
 
 		//dk::gfx::VertexSink textVertexSink(dk::common::id<dk::gfx::Font::CharVertex>);
 
-		Texture2D sceneOutTexture = Texture2D(m_window.config.get<Window::Size>(), Channels::RGBA);
-		Texture2D sceneOutDepth   = Texture2D(m_window.config.get<Window::Size>(), Channels::Depth);
+		Texture2D sceneColorTex = Texture2D(m_window.config.get<Window::Size>(), Channels::RGBA);
+		Texture2D sceneDepthTex = Texture2D(m_window.config.get<Window::Size>(), Channels::Depth);
 
 		dk::gfx::FrameBuffer sceneFrameBuffer;
 		sceneFrameBuffer.color[0] = sceneColorTex;

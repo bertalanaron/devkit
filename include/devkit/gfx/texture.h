@@ -58,7 +58,7 @@ protected:
 
 	void bindToUnit(unsigned unit);
 
-	void updateConfig();
+	void updateConfig(bool force = false);
 
 	template <typename P>
 	friend void setTextureProperty(Texture&, const P&);
