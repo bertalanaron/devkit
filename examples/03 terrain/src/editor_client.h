@@ -82,7 +82,8 @@ public:
 
 	void render(const dk::io::Frame& frame) override
 	{
-		dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, dk::colors::black);
+		dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, dk::colors::gray);
+		//dk::gfx::backBuffer().config(dk::gfx::FrameBuffer::DepthTest::Enabled);
 
 		// Update camera
 		m_view.update(frame, m_cameraController);

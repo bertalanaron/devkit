@@ -18,43 +18,21 @@ private:
 	struct backbuffer_t {};
 
 public:
-	enum class DepthTest   { Disabled, Enabled };
-	enum class DepthFunc   { Less, Never, Equal, Lequal, Greater, NotEqual, Gequal, Always };
-	enum class Blend       { Disabled, Enabled };
+	enum class DepthTest      { Disabled, Enabled };
+	enum class DepthFunc      { Less, Never, Equal, Lequal, Greater, NotEqual, Gequal, Always };
+	enum class Blend          { Disabled, Enabled };
 	enum class SrcBlendFactor { One, Zero, SrcAlpha, OneMinusSrcAlpha };
 	enum class DstBlendFactor { Zero, One, SrcAlpha, OneMinusSrcAlpha };
-	enum class CullFace    { Disabled, Enabled };
-	enum class ScissorTest { Disabled, Enabled };
-	enum class Multisample { Disabled, Enabled };
-	using      LineWidth   = common::UniqueProperty<float, "LineWidth">;
-	using      PointSize   = common::UniqueProperty<float, "PointSize">;
+	enum class CullFace       { Disabled, Enabled };
+	enum class ScissorTest    { Disabled, Enabled };
+	enum class Multisample    { Disabled, Enabled };
+	enum class SampleShading  { Disabled, Enabled };
+	using      LineWidth      = common::UniqueProperty<float, "LineWidth">;
+	using      PointSize      = common::UniqueProperty<float, "PointSize">;
 
-	class Config
-		: private common::ConfigurationBase<
-			DepthTest, DepthFunc, Blend, SrcBlendFactor, DstBlendFactor, 
-		    CullFace, ScissorTest, Multisample, LineWidth, PointSize>
-	{
-	private:
-		using Base = common::ConfigurationBase<
-			DepthTest, DepthFunc, Blend, SrcBlendFactor, DstBlendFactor, 
-			CullFace, ScissorTest, Multisample, LineWidth, PointSize>;
-
-	public:
-		using ConfigurationBase::operator();
-		using ConfigurationBase::set;
-		using ConfigurationBase::get;
-
-		inline friend void to_json(nlohmann::json& j, const Config& config)
-		{ to_json(j, (const Base&)config); }
-
-		inline friend void from_json(const nlohmann::json& j, Config& config)
-		{ from_json(j, (Base&)config); }
-
-	private:
-		using ConfigurationBase::ConfigurationBase;
-
-		friend class FrameBuffer;
-	};
+	class Config : DK_CONFIG_SPECIALIZATION(FrameBuffer, 
+		DepthTest, DepthFunc, Blend, SrcBlendFactor, DstBlendFactor, CullFace, 
+		ScissorTest, Multisample, SampleShading, LineWidth, PointSize);
 
 	Config config;
 

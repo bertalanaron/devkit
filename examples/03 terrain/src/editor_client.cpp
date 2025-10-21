@@ -15,8 +15,8 @@ void EditorClient::setup()
 	m_cameraController.inputs.define("shift", dk::io::modkey::none + dk::io::button::middle);
 
 	// Setup window
-	m_window.property(dk::io::properties::window::theme::dark);
-	m_window.property(dk::io::properties::window::size(1280, 720));
+	m_window.config(dk::io::Window::Theme::Dark);
+	m_window.config(dk::io::Window::Size(1280, 720));
 
 	// Create edit strategies
 	m_editStrategies.emplace_back(std::make_unique<TerrainEditStrategy>(this));
@@ -29,13 +29,12 @@ void EditorClient::setup()
 	m_shaders.insert("rgba", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rgba_vs.glsl", "/shaders/rgba_fs.glsl"));
 	// Terrain
 	m_shaders.insert("terrain", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rts/terrain_vs.glsl", "/shaders/rts/terrain_fs.glsl"));
-	m_shaders["terrain"].property(dk::gfx::properties::depth_test::enabled);
 
 	// Set texture filtering
 	for (auto [path, texture] : m_assets.each<dk::gfx::Texture>("/textures/terrain"))
 	{
-		texture.property(dk::gfx::properties::min_filter::nearest_mipmap_linear);
-		texture.property(dk::gfx::properties::mag_filter::linear);
+		texture.config(dk::gfx::Texture::MinFilter::NearestMipmapLinear);
+		texture.config(dk::gfx::Texture::MagFilter::Linear);
 	}
 
 	// Setup global debug output

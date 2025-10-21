@@ -12,40 +12,24 @@ class Frame;
 class Window 
 {
 public:
-	using      Size      = common::UniqueProperty<glm::ivec2 , "Size">;
-	using      Title     = common::UniqueProperty<std::string, "Title">;
-	enum class Border    { Enabled = 1, Disabled = 0 };
-	enum class Mode      { Windowed, Fullscreen };
-	enum class Theme     { Light, Dark };
-	enum class VSync     { Disabled, Retrace, Adaptive };
-	enum class MouseGrab { Disabled, Enabled };
+	using      Size        = common::UniqueProperty<glm::ivec2 , "Size">;
+	using      Title       = common::UniqueProperty<std::string, "Title">;
+	enum class Border      { Enabled, Disabled };
+	enum class Mode        { Windowed, Fullscreen };
+	enum class Theme       { Light, Dark };
+	enum class VSync       { Disabled, Retrace, Adaptive };
+	enum class MouseGrab   { Disabled, Enabled };
+	enum class Resize      { Enabled, Disabled };
+	enum class AlwaysOnTop { Disabled, Enabled };
+	using      Opacity     = common::UniqueProperty<float, "Opacity">;
 
-	class Config 
-		: private common::ConfigurationBase<Size, Title, Border, Mode, Theme, VSync, MouseGrab>
-	{
-	private:
-		using Base = common::ConfigurationBase<Size, Title, Border, Mode, Theme, VSync, MouseGrab>;
+	class Config : DK_CONFIG_SPECIALIZATION(Window,
+		Size, Title, Border, Mode, Theme, VSync, MouseGrab, 
+		Resize, AlwaysOnTop, Opacity);
 
-	public:
-		using ConfigurationBase::operator();
-		using ConfigurationBase::set;
-		using ConfigurationBase::get;
-
-		inline friend void to_json(nlohmann::json& j, const Config& config)
-		{ to_json(j, (const Base&)config); }
-
-		inline friend void from_json(const nlohmann::json& j, Config& config)
-		{ from_json(j, (Base&)config); }
-
-	private:
-		using ConfigurationBase::ConfigurationBase;
-
-		friend class Window;
-	};
-
-public:
 	Config config;
 
+public:
 	Window();
 
 	// @brief Opens a window and activates it's context

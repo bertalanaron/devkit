@@ -105,7 +105,7 @@ const dk::io::Frame& dk::io::Window::beginFrame()
 
 	// Update properties
 	config.for_each([&](const auto& prop) {
-		if (!config.updated(prop))
+		if (!config.dirty(prop))
 			return;
 		spdlog::debug("Window.{}={}", Config::property_name(prop), std::format("{}", prop));
 		setWindowProperty(*this, prop);
@@ -186,7 +186,7 @@ void dk::io::Window::warpCursor(const glm::ivec2& destination) const
 dk::io::Window::Window()
 	: m_eventHandler(std::make_unique<WindowEventHandler>(*this))
 	, m_frame(std::make_unique<const Frame>())
-	, config(Size(720, 480), Title("DevKit Window"), Theme::Dark)
+	, config(Size(720, 480), Title("DevKit Window"), Theme::Dark, Opacity(1.0f))
 { }
 
 dk::io::Window::~Window()
@@ -300,3 +300,15 @@ void dk::io::setWindowProperty(Window& window, const Window::Mode& mode)
 template <>
 void dk::io::setWindowProperty(Window& window, const Window::MouseGrab& mouseGrab)
 { SDL_SetWindowMouseGrab(window.m_context->sdlWindowContext, mouseGrab == Window::MouseGrab::Enabled); }
+
+template <>
+void dk::io::setWindowProperty(Window& window, const Window::Resize& resize)
+{ SDL_SetWindowResizable(window.m_context->sdlWindowContext, resize == Window::Resize::Enabled); }
+
+template <>
+void dk::io::setWindowProperty(Window& window, const Window::AlwaysOnTop& alwaysOnTop)
+{ SDL_SetWindowAlwaysOnTop(window.m_context->sdlWindowContext, alwaysOnTop == Window::AlwaysOnTop::Enabled); }
+
+template <>
+void dk::io::setWindowProperty(Window& window, const Window::Opacity& opacity)
+{ SDL_SetWindowOpacity(window.m_context->sdlWindowContext, opacity.value); }

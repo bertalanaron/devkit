@@ -138,13 +138,13 @@ void dk::gfx::FrameBuffer::makeActive()
 	config.for_each([&](const auto& prop) {
 		// Skip if value is currently active in the global context
 		auto& currentlyBound = s_currentContextConfig[(const void*)dk::io::GlobalState::currentWindowContext()];
-		if (prop == currentlyBound.get<std::decay_t<prop>())
+		if (prop == currentlyBound.get<std::decay_t<decltype(prop)>>())
 			return;
 		// Update gl context
-		spdlog::debug("FrameBuffer.{}={}", Config::property_name(prop), std::format("{}", prop));
-		setWindowProperty(*this, prop);
+		//spdlog::debug("FrameBuffer.{}={}", Config::property_name(prop), std::format("{}", prop));
+		setFrameBufferProperty(*this, prop);
 		// Update gl context tracker used for skipping
-		currentlyBound(prop);
+		currentlyBound.set<std::decay_t<decltype(prop)>>(prop);
 	});
 	
 	// Set color attachments
@@ -251,6 +251,28 @@ void dk::gfx::setFrameBufferProperty(FrameBuffer& frameBuffer, const FrameBuffer
 {
 	glBlendFunc(blendFactorToUnderlying(frameBuffer.config.get<FrameBuffer::SrcBlendFactor>()), 
 		        blendFactorToUnderlying(dstFactor));
+}
+
+template <>
+void dk::gfx::setFrameBufferProperty(FrameBuffer& frameBuffer, const FrameBuffer::SampleShading& sampleShading)
+{
+	if (!GLEW_ARB_sample_shading)
+	{
+		static bool logged = false;
+		if (!logged)
+		{
+			logged = true;
+			spdlog::warn("[gfx] Sample shading is not available");
+		}
+		return;
+	}
+
+	if (sampleShading == std::decay_t<decltype(sampleShading)>::Enabled) {
+		glEnable(GL_SAMPLE_SHADING);
+		glMinSampleShading(1.0);
+	}
+	else 
+		glDisable(GL_SAMPLE_SHADING);
 }
 
 template <>

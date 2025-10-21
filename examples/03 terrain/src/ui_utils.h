@@ -46,6 +46,7 @@ public:
 		{
 			setup();
 			m_window.open(std::stoi(ini_or("graphics", "msaa", "1")));
+			dk::gfx::backBuffer().config(dk::gfx::FrameBuffer::DepthTest::Enabled);
 			m_initialized = true;
 		}
 		const auto& frame = m_window.beginFrame();

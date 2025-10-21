@@ -26,9 +26,20 @@ struct UniqueProperty {
 	UniqueProperty& operator=(T&& _value)
 	{ value = std::forward<decltype(_value)>(_value); }
 
+	bool operator==(const UniqueProperty&) const = default;
+
 	operator T&() { return value; }
 	operator const T&() const { return value; }
 };
+
+template <typename T>
+struct is_unique_property : std::false_type {};
+
+template <typename U, string_literal Name>
+struct is_unique_property<UniqueProperty<U, Name>> : std::true_type {};
+
+template <typename T>
+concept UniquePropertySpecialization = is_unique_property<std::remove_cvref_t<T>>::value;
 
 template <typename T, string_literal Name>
 struct std::formatter<UniqueProperty<T, Name>> : std::formatter<T> {
@@ -66,20 +77,34 @@ public:
 	{ set(std::forward<decltype(properties)>(properties)...); }
 
 	template <OfList<Properties...> Property>
-	void operator()(Property&& value)
+	void operator()(const Property& value)
 	{
 		constexpr auto index = property_index<Property>;
-		std::get<index>(m_value) = std::forward<decltype(value)>(value);
-		m_dirty.set(index, true);
+		auto& elem = std::get<index>(m_value);
+		const bool changed = !(elem == value);
+		elem = std::forward<decltype(value)>(value);
+		if (changed)
+			m_dirty.set(index, true);
+	}
+
+	template <OfList<Properties...> Property>
+	void set(const Property& value)
+	{
+		constexpr auto index = property_index<Property>;
+		auto& elem = std::get<index>(m_value);
+		const bool changed = !(elem == value);
+		elem = std::forward<decltype(value)>(value);
+		if (changed)
+			m_dirty.set(index, true);
 	}
 
 	template <OfList<Properties...>... Ts>
-	void operator()(Ts&&... values)
+	void operator()(const Ts&... values)
 	{ (this->operator()(std::forward<decltype(values)>(values)), ...); }
 
 	template <OfList<Properties...>... Ts>
-	void set(Ts&&... values)
-	{ this->operator()(std::forward<decltype(values)>(values)...); }
+	void set(const Ts&... values)
+	{ (this->set(std::forward<decltype(values)>(values)), ...); }
 
 	template <OfList<Properties...> Property>
 	const auto& get() const
@@ -146,186 +171,27 @@ inline void from_json(const nlohmann::json& j, ConfigurationBase<Properties...>&
 
 } // namespace dk::common
 
-
-
-namespace _dk::io {
-
-class Window {
-public:
-	using      Size      = dk::common::UniqueProperty<glm::ivec2 , "Size">;
-	using      Title     = dk::common::UniqueProperty<std::string, "Title">;
-	enum class Border    { Enabled = 1, Disabled = 0 };
-	enum class Mode      { Windowed, Fullscreen };
-	enum class Theme     { Light, Dark };
-	enum class VSync     { Disabled, Retrace, Adaptive };
-	enum class MouseGrab { Disabled, Enabled };
-
-	class Config 
-		: private dk::common::ConfigurationBase<
-			Size, Title, Border, Mode, Theme, VSync, MouseGrab>
-	{
-	public:
-		using ConfigurationBase::operator();
-		using ConfigurationBase::set;
-		using ConfigurationBase::get;
-
-		inline friend void to_json(nlohmann::json& j, const Config& config)
-		{ to_json(j, (const dk::common::ConfigurationBase<Size, Title, Border, Mode, Theme, VSync, MouseGrab>&)config); }
-		
-		inline friend void from_json(const nlohmann::json& j, Config& config)
-		{ from_json(j, (dk::common::ConfigurationBase<Size, Title, Border, Mode, Theme, VSync, MouseGrab>&)config); }
-
-	private:
-		using ConfigurationBase::ConfigurationBase;
-
-		friend class Window;
-	};
-	
-	Config config;
-
-	void beginFrame()
-	{
-		config.for_each([this](const auto& prop) {
-			if (!config.dirty(prop))
-				return;
-			spdlog::debug("Window.{}={}", Config::property_name(prop), std::format("{}", prop));
-			setWindowProperty(*this, prop);
-		});
-		config.reset_dirty();
-	}
-
-	Window()
-		: config(Title("Unnamed"), Size(720, 480))
-	{ 
-		config.reset_dirty(); 
-	}
-
-private:
-	template <typename P>
-	friend void setWindowProperty(Window&, const P&);
-};
-
-//class FrameBuffer {
-//public:
-//	enum class DepthTest { Disabled, Enabled };
-//	enum class DepthFunc {  };
-//	enum class Blend { Disabled, Enabled };
-//	enum class BlendEquation { };
-//	enum class CullFace { Disabled, Enabled };
-//	enum class ScissorTest { Disabled, Enabled };
-//	enum class Multisample { Disabled, Enabled };
-//	using      LineWidth = dk::common::UniqueProperty<float, "LineWidth">;
-//	using      PointSize = dk::common::UniqueProperty<float, "PointSize">;
-//
-//	class Config
-//		: private dk::common::ConfigurationBase<
-//			DepthTest, DepthFunc, Blend, BlendEquation, CullFace, ScissorTest, Multisample, LineWidth, PointSize>
-//	{
-//	public:
-//		using ConfigurationBase::operator();
-//		using ConfigurationBase::set;
-//		using ConfigurationBase::get;
-//
-//	private:
-//		using ConfigurationBase::ConfigurationBase;
-//
-//		friend class FrameBuffer;
-//	};
-//
-//	Config config;
-//
-//private:
-//	template <typename P>
-//	friend void setFrameBufferProperty(FrameBuffer&, const P&);
-//};
-
-class Texture {
-public:
-	enum class MinFilter { };
-	enum class MagFilter { };
-	enum class WrapS { };
-	enum class WrapT { };
-	using      BorderColor = dk::common::UniqueProperty<glm::vec4, "BorderColor">;
-
-	class Config 
-		: dk::common::ConfigurationBase<
-			MinFilter, MagFilter, WrapS, WrapT, BorderColor>
-	{
-
-	};
-
-private:
-
-};
-
-
-template <>
-inline void setWindowProperty(Window& window, const Window::Size& size)
-{ spdlog::trace("TODO: set window size {}", std::format("{}", size.value)); }
-
-template <>
-inline void setWindowProperty(Window& window, const Window::Title& title)
-{ spdlog::trace("TODO: set window title {}", title.value); }
-
-template <>
-inline void setWindowProperty(Window& window, const Window::Border& border)
-{ spdlog::trace("TODO: set window border {}", magic_enum::enum_name(border)); }
-
-template <>
-inline void setWindowProperty(Window& window, const Window::Mode& mode)
-{ spdlog::trace("TODO: set window mode {}", magic_enum::enum_name(mode)); }
-
-template <>
-inline void setWindowProperty(Window& window, const Window::Theme& theme)
-{ spdlog::trace("TODO: set window theme {}", magic_enum::enum_name(theme)); }
-
-template <>
-inline void setWindowProperty(Window& window, const Window::VSync& vsync)
-{ spdlog::trace("TODO: set window vsync {}", magic_enum::enum_name(vsync)); }
-
-template <>
-inline void setWindowProperty(Window& window, const Window::MouseGrab& mouseGrab)
-{ spdlog::trace("TODO: set window mouseGrab {}", magic_enum::enum_name(mouseGrab)); }
-
-}
-
-
-inline void f() 
-{
-	//enum class E1 { a1, a2 };
-	//enum class E2 { b1, b2 };
-	//enum class E3 { c1, c2 };
-	//using Title = dk::common::UniqueProperty<std::string, "Title">;
-	//using Size  = dk::common::UniqueProperty<glm::ivec2, "Size">;
-	//struct Config 
-	//	: dk::common::ConfigurationBase<E1, E2, Title, Size>
-	//{  };
-	//Config config;
-	//
-	//config(E1::a1, E2::b2);
-	//config(Title("Hello World!"));
-
-	//nlohmann::json json(config);
-	//
-	//spdlog::info(nlohmann_extension::smart_dump(json));
-	//nlohmann_extension::smart_dump(json);
-
-	using Window = _dk::io::Window;
-	using FrameBuffer = _dk::io::FrameBuffer;
-
-
-	Window      window;
-	FrameBuffer frameBuffer;
-
-	window.config(Window::Title("Demo Window"),
-				  Window::Theme::Dark);
-
-	frameBuffer.config(FrameBuffer::PointSize(2.f));
-
-	Window window2;
-	std::apply(window2.config, window.config.get<Window::Title, Window::Theme>());
-
-	from_json(nlohmann::json(window.config), window2.config);
-
-	spdlog::info(nlohmann_extension::smart_dump(nlohmann::json(window2.config)));
-}
+#define DK_CONFIG_SPECIALIZATION(owner, ...)                        \
+	 private common::ConfigurationBase<__VA_ARGS__> {               \
+	private:                                                        \
+	using Base = common::ConfigurationBase<__VA_ARGS__>;	        \
+																	\
+	public:															\
+		using ConfigurationBase::operator();						\
+		using ConfigurationBase::set;								\
+		using ConfigurationBase::get;								\
+		using ConfigurationBase::for_each;							\
+		using ConfigurationBase::property_name;                     \
+																	\
+		inline friend void to_json(nlohmann::json& j, const Config& config) \
+		{ to_json(j, (const Base&)config); }						\
+																	\
+		inline friend void from_json(const nlohmann::json& j, Config& config) \
+		{ from_json(j, (Base&)config); }							\
+																	\
+	private:														\
+		using ConfigurationBase::ConfigurationBase;					\
+																	\
+		friend class owner;                                         \
+	} 																\
+	/* end of macro */
