@@ -1,0 +1,8 @@
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO jhasse/poly2tri
+    REF master
+    SHA512 194d41a0c2923feae3861da5521368857ef114097d906e3e33b8a6431cee1641873e0f162a4ca0a9cb4771213745eea9ee6c31ef0c2a259cee946e9efc8e077f
+)
+
+file(INSTALL ${SOURCE_PATH}/poly2tri DESTINATION ${CURRENT_PACKAGES_DIR}/include/mini)

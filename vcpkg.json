@@ -1,0 +1,26 @@
+{
+  "name": "devkit",
+  "version": "0.1.0",
+  "builtin-baseline": "9e8416f15d93fa9347e3291bd8c128dd44200ba5",
+  "dependencies": [
+    "sdl3",
+    "glew",
+	{
+      "name": "imgui",
+      "features": [ "opengl3-binding", "sdl3-binding", "docking-experimental" ]
+    },
+	"glm",
+	"stb",
+	"nlohmann-json",
+	"spdlog",
+	"gtest",
+	"assimp",
+	"magic-enum",
+	"yaml-cpp",
+	"nativefiledialog-extended", 
+	"ftxui",
+	"boost-dll",
+	"mini",
+	"poly2tri"
+  ]
+}
