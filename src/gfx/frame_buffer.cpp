@@ -1,4 +1,5 @@
 #include <devkit/gfx/frame_buffer.h>
+#include "context.h"
 
 #include <GL/glew.h>
 
@@ -80,12 +81,6 @@ void dk::gfx::FrameBuffer::attachDepth(AttachmentBase& target)
 	m_depthAttachment = &target;
 }
 
-void dk::gfx::FrameBuffer::resize(const glm::ivec2& size, int colorAttachment)
-{
-	auto& color = m_colorAttachments.at(colorAttachment);
-	color->resize(size);
-}
-
 void dk::gfx::FrameBuffer::clear(ClearMask mask, const glm::vec4& color)
 {
 	makeActive();
@@ -102,6 +97,8 @@ void dk::gfx::FrameBuffer::render(Shader& shader, VertexBuffer& vertexBuffer, Pr
 		: glDrawArraysInstanced(details::gfx::toUnderlying(primitive), 0, vertexBuffer.size(), count);
 }
 
+#include <GL/glu.h>
+
 void dk::gfx::FrameBuffer::render(Shader& shader, ElementBuffer& elementBuffer, Primitive primitive, unsigned count)
 {
 	makeActive();
@@ -112,9 +109,14 @@ void dk::gfx::FrameBuffer::render(Shader& shader, ElementBuffer& elementBuffer, 
 		: glDrawElementsInstanced(details::gfx::toUnderlying(primitive), elementBuffer.count(), GL_UNSIGNED_INT, 0, count);
 }
 
+void dk::gfx::FrameBuffer::setViewport(const gfx::Viewport& viewport)
+{
+	m_viewport = viewport;
+}
+
 float dk::gfx::FrameBuffer::aspectRatio() const
 {
-	return m_colorAttachments[0]->aspectRatio();
+	return m_viewport.value_or(Viewport(m_colorAttachments[0]->size())).aspectRatio();
 }
 
 void dk::gfx::FrameBuffer::initializeOrUpdate()
@@ -129,7 +131,8 @@ void dk::gfx::FrameBuffer::makeActive()
 	initializeOrUpdate();
 	glBindFramebuffer(GL_FRAMEBUFFER, (m_handle == -1) ? 0 : m_handle);
 
-	glViewport(0, 0, m_colorAttachments[0]->size().x, m_colorAttachments[0]->size().y);
+	const Viewport viewport = m_viewport.value_or(Viewport(m_colorAttachments[0]->size()));
+	viewport.makeActive();
 	callPropertySetters(true);
 	
 	// Set color attachments
@@ -165,13 +168,14 @@ dk::gfx::FrameBuffer::FrameBuffer(backbuffer_t)
 
 dk::gfx::FrameBuffer& dk::gfx::backBuffer() 
 {
-	static FrameBuffer c_backBuffer(FrameBuffer::backbuffer_t{});
-	return c_backBuffer;
-}
+	static std::mutex s_backbufferMut;
+	static std::unordered_map<const io::WindowContext*, std::unique_ptr<FrameBuffer>> s_frameBuffers;
 
-void details::gfx::setBackbufferViewport(const glm::ivec2& size)
-{
-	dk::gfx::backBuffer().resize(size);
+	std::lock_guard lock(s_backbufferMut);
+	auto& fb_ptr = s_frameBuffers[io::GlobalState::currentWindowContext()];
+	if (!fb_ptr)
+		fb_ptr.reset(new FrameBuffer(FrameBuffer::backbuffer_t{}));
+	return *fb_ptr;
 }
 
 template <>

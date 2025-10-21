@@ -39,7 +39,9 @@ set(COMMON_PUBLIC_SOURCES
     include/devkit/common/constants.h
     include/devkit/common/move_only_any.h
     include/devkit/common/runtime_buffer.h
-    include/devkit/common/performance_monitor.h)
+    include/devkit/common/performance_monitor.h
+    include/devkit/common/filesystem_hierarchy_node.h
+    include/devkit/common/typeless.h)
 set(COMMON_PRIVATE_SOURCES
     src/common/utils.cpp)
 # io
@@ -48,12 +50,15 @@ set(IO_PUBLIC_SOURCES
     include/devkit/io/asset_manager.h
     include/devkit/io/input_combination.h
     include/devkit/io/window.h
-    include/devkit/io/file_dialog.h)
+    include/devkit/io/file_dialog.h
+    include/devkit/io/frame.h
+    include/devkit/io/virtual_filesystem.h)
 set(IO_PRIVATE_SOURCES
     src/io/asset_manager.cpp
     src/io/window.cpp
     src/io/input_combination.cpp
-    src/io/file_dialog.cpp)
+    src/io/file_dialog.cpp
+    src/io/frame.cpp)
 # gfx
 set(GFX_PUBLIC_SOURCES
     include/devkit/gfx.h
@@ -71,7 +76,9 @@ set(GFX_PUBLIC_SOURCES
     include/devkit/gfx/element_buffer.h
     include/devkit/gfx/font.h
     include/devkit/gfx/vertex_sink.h
-    include/devkit/gfx/attachment_base.h)
+    include/devkit/gfx/attachment_base.h
+    include/devkit/gfx/viewport.h
+    include/devkit/gfx/api_resources.h)
 set(GFX_PRIVATE_SOURCES
     src/gfx/common.cpp
     src/gfx/vertex.cpp
@@ -87,7 +94,11 @@ set(GFX_PRIVATE_SOURCES
     src/gfx/texture.cpp
     src/gfx/font.cpp
     src/gfx/vertex_sink.cpp
-    src/gfx/attachment_base.cpp)
+    src/gfx/attachment_base.cpp
+    src/gfx/viewport.cpp
+    src/gfx/context.h
+    src/gfx/context.cpp
+    src/gfx/api_resources.cpp)
 # algo
 set(ALGO_PUBLIC_SOURCES
     include/devkit/algo.h
@@ -154,10 +165,11 @@ find_package(ftxui CONFIG REQUIRED)
 find_package(Boost REQUIRED COMPONENTS dll)
 find_path(MINI_INCLUDE_DIRS "mini/ini.h")
 find_package(poly2tri REQUIRED)
+find_package(cereal CONFIG REQUIRED)
 
 # Link dependencies
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 GLEW::GLEW assimp::assimp nfd::nfd Boost::dll poly2tri::poly2tri)
-target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui glm::glm nlohmann_json::nlohmann_json spdlog::spdlog_header_only magic_enum::magic_enum yaml-cpp::yaml-cpp ftxui::dom ftxui::screen ftxui::component)
+target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui glm::glm nlohmann_json::nlohmann_json spdlog::spdlog_header_only magic_enum::magic_enum yaml-cpp::yaml-cpp ftxui::dom ftxui::screen ftxui::component cereal::cereal)
 target_include_directories(${PROJECT_NAME} PUBLIC ${MINI_INCLUDE_DIRS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${SDL3_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
 

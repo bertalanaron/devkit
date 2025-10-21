@@ -6,37 +6,60 @@
 
 namespace dk::gfx {
 
-// TODO: use single vertex buffer for all threads
+// @brief Threadsafe vertex buffer container for multi threaded drawing. 
 class VertexSink {
+private:
+	static constexpr size_t s_primitiveCount = magic_enum::enum_count<Primitive>();
+
+	using ThreadLocalBuffer  = common::ThreadDemuxContainer<VertexBuffer>;
+	using ThreadDemuxStorage = std::array<std::unique_ptr<ThreadLocalBuffer>, s_primitiveCount>;
+
 public:
-	template <typename Vertex>
-	static VertexSink create()
-	{
-		return VertexSink(Vertex::attributes());
-	}
-
-	static VertexSink create(VertexFlags flags);
+	VertexSink()                        = default;
+	VertexSink(VertexSink&&)            = default;
+	VertexSink& operator=(VertexSink&&) = default;
 
 	template <typename Vertex>
-	VertexSink& operator<<(const DrawData<Vertex>& drawData)
+	VertexSink(common::id_t<Vertex> vertTypeId)
+		: m_vertexAttributes(Vertex::attributes())
+		, m_demux(ThreadDemuxStorage())
+	{ std::ranges::for_each(m_demux.value(), initBuffer<Vertex>); }
+
+	VertexSink(VertexFlags flags)
+		: m_vertexAttributes(VertexAttributes::get(flags))
+		, m_demux(ThreadDemuxStorage())
+	{ std::ranges::for_each(m_demux.value(), std::bind_back(initBufferF, flags)); }
+
+	template <typename Vertex>
+	VertexSink& operator<<(const DrawData<Vertex>& dd)
 	{
-		m_demux.at((unsigned)drawData.type)->local().insert<Vertex>(drawData.vertices.cbegin(), drawData.vertices.cend());
+		auto& buffer = m_demux->at((unsigned)dd.type)->local();
+		buffer.modify().insert(buffer.get().cend(), dd.vertices.begin(), dd.vertices.end());
 		return *this;
 	}
 
-	template <typename Vertex>
-	VertexSink& operator<<(const std::vector<DrawData<Vertex>>& drawData)
+	template <typename Range>
+		requires(std::ranges::input_range<Range>)
+	VertexSink& operator<<(Range&& dds)
 	{
-		for (const auto& dd : drawData) 
-			m_demux.at((unsigned)dd.type)->local().insert<Vertex>(dd.vertices.cbegin(), dd.vertices.cend());
+		using value_t = std::ranges::range_value_t<Range>;
+		static_assert(is_draw_data_v<value_t>, 
+			"value type of range must be gfx::DrawData");
+
+		std::ranges::for_each(dds, [&](const auto& dd) { (*this) << dd; });
 		return *this;
 	}
 
-	template <typename Vertex>
-	VertexSink& push_back(dk::gfx::Primitive primitive, const std::vector<Vertex>& vertices)
+	// @param vertices Range of vertices
+	template <typename Range>
+	VertexSink& insert_back(dk::gfx::Primitive primitive, Range&& vertices)
 	{
-		//for (const auto& v : vertices)
-		m_demux.at((unsigned)primitive)->local().insert<Vertex>(vertices.cbegin(), vertices.cend());
+		using value_t = std::ranges::range_value_t<Range>;
+		static_assert(is_vertex_v<value_t>, 
+			"value type of range must be gfx::Vertex or derived from gfx::Vertex");
+
+		auto& buffer = m_demux->at((unsigned)primitive)->local();
+		buffer.modify().insert(buffer.get().cend(), vertices.cbegin(), vertices.cend());
 		return *this;
 	}
 
@@ -47,16 +70,15 @@ public:
 	void flush(Shader& shader, FrameBuffer& frameBuffer);
 
 private:
-	const VertexAttributes* m_vertexAttributes;
+	const VertexAttributes*           m_vertexAttributes;
+	std::optional<ThreadDemuxStorage> m_demux;
 
-	static constexpr size_t s_primitiveCount = magic_enum::enum_count<Primitive>();
-	using primitive_demux_t = std::array<std::unique_ptr<common::ThreadDemuxContainer<VertexBuffer>>, s_primitiveCount>;
+	template <typename Vertex>
+	static void initBuffer(std::unique_ptr<ThreadLocalBuffer>& ptr)
+	{ ptr.reset(new ThreadLocalBuffer([] { return VertexBuffer(common::id<Vertex>); })); }
 
-	primitive_demux_t m_demux;
-
-	static VertexBuffer createVertexBuffer(const VertexAttributes* attributes);
-
-	VertexSink(const VertexAttributes* vertexAttributes);
+	static void initBufferF(std::unique_ptr<ThreadLocalBuffer>& ptr, VertexFlags flags)
+	{ ptr.reset(new ThreadLocalBuffer([flags] { return VertexBuffer(flags); })); }
 };
 
 }

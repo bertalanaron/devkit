@@ -15,7 +15,7 @@ void dk::algo::NavmeshChunk::pushPolygon(const dk::geom::polygon2& polygon, Navm
 	auto out = dk::dbg::store_or<dk::gfx::VertexSink*, "navmesh_poly_out">(nullptr);
 	std::vector<glm::vec4> colors { DK_COLOR(0x5d0203ff), DK_COLOR(0xbc3918ff), DK_COLOR(0xfe9c44ff), DK_COLOR(0xf9f387ff), DK_COLOR(0x765d5dff) };
 	for (const auto& part : convexParts) {
-		int height = dk::dbg::store_or<int, "current_height">(1);
+		int height = dk::dbg::store_threadlocal_or<int, "current_height">(1);
 		const auto& color = colors.at(height % colors.size());
 		*out << dk::gfx::draw(part, color, color, dk::geom::plane::Y() + height + .001, -dk::geom::axis::X);
 	}
@@ -128,16 +128,18 @@ int dk::algo::NavmeshChunk::nodeLevelThroughEdge(const geom::edge2& edge) const
 	return m_nodeLevels.at(node);
 }
 
+dk::algo::NavmeshGenerator::NavmeshGenerator(const NavmeshGenerator& other)
+	: m_isConcurrent(other.m_isConcurrent)
+	, m_threadCount(other.m_threadCount)
+{
+	initializeWorkers();
+}
+
 dk::algo::NavmeshGenerator::NavmeshGenerator(int threadCount)
 	: m_isConcurrent(threadCount > 0)
 	, m_threadCount(threadCount)
 {
-	// Start worker threads
-	if (m_isConcurrent) {
-		for (int i = 0; i < threadCount; ++i) {
-			m_workers.push_back(std::jthread([this, i](std::stop_token stopToken) { runWorker(stopToken); }));
-		}
-	}
+	initializeWorkers();
 }
 
 void dk::algo::NavmeshGenerator::build(glm::ivec2 sizeInChunks, std::vector<NavmeshChunk>& chunks, Navmesh& navmesh) {
@@ -236,6 +238,16 @@ void dk::algo::NavmeshGenerator::promoteLevel3Nodes(glm::ivec2 sizeInChunks, std
 	}
 }
 
+void dk::algo::NavmeshGenerator::initializeWorkers()
+{
+	// Start worker threads
+	if (m_isConcurrent) {
+		for (int i = 0; i < m_threadCount; ++i) {
+			m_workers.push_back(std::jthread([this, i](std::stop_token stopToken) { runWorker(stopToken); }));
+		}
+	}
+}
+
 void dk::algo::NavmeshGenerator::runWorker(std::stop_token stopToken) {
 	while (true) {
 		auto maybeJob = m_jobs.pop(stopToken);
@@ -266,7 +278,8 @@ dk::algo::Navmesh::Navmesh(glm::ivec2 sizeInChunks, glm::ivec2 chunkSize)
 	m_chunks.resize(m_sizeInChunks.x * m_sizeInChunks.y);
 }
 
-void dk::algo::Navmesh::build(NavmeshGenerator& generator) {
+void dk::algo::Navmesh::build(NavmeshGenerator& generator) 
+{
 	generator.build(m_sizeInChunks, m_chunks, *this);
 }
 

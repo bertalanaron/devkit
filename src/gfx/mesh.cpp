@@ -1,14 +1,24 @@
 #include <devkit/gfx/mesh.h>
 
-#include <assimp/Importer.hpp>
-#include <assimp/scene.h>
-
-dk::gfx::Mesh dk::gfx::Mesh::create(VertexFlags flags)
+dk::gfx::MeshMask::MeshMask(Mesh& _mesh, VertexFlags target, VertexFlags original)
+	: mesh(_mesh)
+	, vertices(mesh.vertices)
+	, indices(mesh.indices)
+	, material(mesh.material)
 {
-	return Mesh(std::move(VertexBuffer::create(flags)), std::move(ElementBuffer()));
-}
+	unsigned targetbits = static_cast<unsigned>(target);
+	unsigned originalbits = static_cast<unsigned>(original);
+	for (unsigned i = 0u; i < sizeof(VertexFlags) * 8u; ++i)
+	{
+		if (targetbits % 2) // i th bit is set in flags
+		{
+			if (!(originalbits % 2))
+				throw std::runtime_error("target includes flag not present in original");
+			m_mask |= (1u << i);
+		}
 
-dk::gfx::Mesh::Mesh(VertexBuffer&& vb, ElementBuffer&& eb)
-	: m_vertexBuffer(std::move(vb))
-	, m_elementBuffer(std::move(eb))
-{ }
+		// shift bits
+		targetbits >>= 1u;
+		originalbits >>= 1u;
+	}
+}

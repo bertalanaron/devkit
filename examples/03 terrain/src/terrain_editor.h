@@ -1,129 +1,64 @@
 #pragma once
-#include <devkit/gfx/frame_buffer.h>
-#include <devkit/gfx/vertex_sink.h>
-#include <devkit/gfx/camera.h>
-#include <devkit/io/window.h>
-#include <devkit/io/asset_manager.h>
-#include <devkit/algo/draw.h>
-#include <devkit/io/input_combination.h>
+#include "editor_client.h"
 
-#include <imgui.h>
-
-#include "terrain.h"
-
-class TerrainEditor {
+class EditorClient::TerrainEditStrategy
+	: public EditorClient::EditStrategyBase
+{
 public:
-	TerrainEditor(dk::io::AssetManager& assets)
-		: m_vOut(std::move(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>()))
-		, m_vOutNavmeshGeneration(std::move(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>()))
-		, m_draw2d(dk::geom::plane::Y(), -dk::geom::axis::X)
+	using EditStrategyBase::EditStrategyBase;
+
+	void setup() override
 	{
-		// Set up shaders
-		// Debug
-		m_shaders.insert("rgba", assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rgba_vs.glsl", "/shaders/rgba_fs.glsl"));
-		// Terrain
-		m_shaders.insert("terrain", assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rts/terrain_vs.glsl", "/shaders/rts/terrain_fs.glsl"));
-		m_shaders["terrain"].property(dk::gfx::properties::depth_test::enabled);
-
-		// Setup global debug outputs
-		dk::dbg::store<dk::gfx::VertexSink*, "navmesh_poly_out">() = &m_vOutNavmeshGeneration;
-
-		// Setup inputs
-		m_inputs.define("apply"         , dk::io::button::left);
-		m_inputs.define("apply_positive", dk::io::modkey::none  + dk::io::button::left);
-		m_inputs.define("apply_negative", dk::io::modkey::shift + dk::io::button::left);
-		m_inputs.define("save"          , dk::io::modkey::ctrl + dk::io::key::s);
-		m_inputs.define("load"          , dk::io::modkey::ctrl + dk::io::key::l);
+		editor().m_inputs.define("select_edit_strategy_terrain", 
+			dk::io::modkey::alt + dk::io::key::_1);
+		editor().m_inputs.define("raise_terrain_cliff", dk::io::modkey::none + dk::io::button::left);
+		editor().m_inputs.define("lower_terrain_cliff", dk::io::modkey::shift + dk::io::button::left);
+		editor().m_inputs.define("modify_terrain"     , dk::io::button::left);
 	}
 
-	void update(Terrain& terrain, const dk::gfx::Camera& camera, const dk::io::Window& window)
+	void update(const dk::io::Frame& frame) override
 	{
-		m_ucCamera.bind("u_camera.position" , [&] { return camera.position; });
-		m_ucCamera.bind("u_camera.direction", [&] { return camera.lookat - camera.position; });
-		m_ucCamera.bind("u_camera.VP"       , [&] { return camera.P() * camera.V(); });
+		// Calculate cursors intersection with terrain
+		const auto cursor = [&] { 
+			const auto ray          = editor().m_view.camera().castRay(frame.cursorN());
+			const auto intersection = dk::geom::intersection(ray, dk::geom::plane::Y());
+			return dk::geom::xz(intersection); 
+		}();
+		editor().m_navmeshGenerationDebugOut << dk::gfx::draw(cursor, dk::colors::red, dk::geom::plane::Y(), -dk::geom::axis::X);
 
-		const auto cursor = dk::geom::xz(dk::geom::intersection(camera.castRay(window.cursorN()), dk::geom::plane::Y()));
-		
-		m_vOut << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::X}, dk::colors::red)
-			   << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::Y}, dk::colors::lime)
-			   << dk::gfx::draw(dk::geom::edge3{glm::vec3(0, 0, 0), dk::geom::axis::Z}, dk::colors::blue);
-
-		changeTerrainHeight(terrain, cursor);
-
-		const auto offsetFromVertexCurr = dk::dbg::store<float, "offset_from_vertex">();
-		if (ImGui::Begin("marching squares"))
-		{
-			ImGui::Text("offset_from_vertex:");
-			ImGui::SameLine();
-			ImGui::DragFloat("##offsetFromVertex", &dk::dbg::store<float, "offset_from_vertex">(), 0.001f, 0.501f, 0.999f);
-			ImGui::End();
-		}
-		if (offsetFromVertexCurr != dk::dbg::store<float, "offset_from_vertex">())
-			regenerateNavmesh(terrain);
-		if (dk::io::key::r)
-			regenerateNavmesh(terrain);
-
-		if (m_inputs.activated("save"))
-			saveHeightMap(terrain);
-		if (m_inputs.activated("load"))
-			loadHeightMap(terrain);
-
-		m_vOut << m_draw2d(cursor, dk::colors::aqua);
+		changeTerrainHeight(*editor().m_state->terrain, cursor);
 	}
 
-	void render(Terrain& terrain, dk::gfx::FrameBuffer& frameBuffer, dk::io::AssetManager& assets)
+	bool showToolbarIcon() override
 	{
-		// Bind camera
-		m_shaders["rgba"].uniforms()    << m_ucCamera;
-		m_shaders["terrain"].uniforms() << m_ucCamera;
-
-		// Render debug data
-		m_vOut.flush(m_shaders["rgba"], frameBuffer);
-		m_vOutNavmeshGeneration.draw(m_shaders["rgba"], frameBuffer);
-
-		// Render terrain
-		m_shaders["terrain"].uniformTexture("u_grassTexture", assets.get<dk::gfx::Texture>("/textures/terrain/grass.png"));
-		m_shaders["terrain"].uniformTexture("u_rockTexture" , assets.get<dk::gfx::Texture>("/textures/terrain/rock.png"));
-		terrain.render(frameBuffer, m_shaders["terrain"]);
-
-		// Render ground
-		//m_shaders["terrain"].layout(std::ref(m_groundMesh.vertices()));
-		//frameBuffer.render(m_shaders["terrain"], m_groundMesh.indices(), dk::gfx::Primitive::Triangles);
+		// Show button
+		bool result = ImGui::Button("terrain")
+			|| editor().m_inputs.activated("select_edit_strategy_terrain");
+		// Show hotkey in tooltip
+		if (ImGui::IsItemHovered())
+			ImGui::SetTooltip("alt + 1");
+		return result;
 	}
 
-	void regenerateNavmesh(Terrain& terrain)
+	void showOptionsPanel() override
 	{
-		m_vOutNavmeshGeneration.clear();
-		for (int x = 0; x < terrain.m_accessor.sizeInChunks().x; ++x)
-			for (int y = 0; y < terrain.m_accessor.sizeInChunks().y; ++y)
-				terrain.m_changedChunks.insert(glm::ivec2(x, y));
+		ImGui::Text("Edit terrain");
 	}
-
-	bool saveHeightMap(Terrain& terrain);
-
-	void loadHeightMap(Terrain& terrain);
 
 private:
-	dk::gfx::VertexSink        m_vOut;
-	dk::gfx::VertexSink        m_vOutNavmeshGeneration;
-	dk::gfx::drawer2d          m_draw2d;
-	dk::gfx::ShaderCollection  m_shaders;
-	dk::gfx::UniformCollection m_ucCamera;
-	dk::io::InputManager       m_inputs;
-
 	int m_hightAtCursor = 0;
 
 	void changeTerrainHeight(Terrain& terrain, const glm::ivec2& cursor)
 	{
-		if (!terrain.m_accessor.isInbounds(cursor))
+		if (!terrain.accessor().isInbounds(cursor))
 			return;
-		if (m_inputs.activated("apply")) 
-			m_hightAtCursor = terrain.m_cells[terrain.m_accessor.indexOf(cursor)].height;
-		if (m_inputs.active("apply_positive"))
+		if (editor().m_inputs.activated("modify_terrain")) 
+			m_hightAtCursor = terrain[cursor].height;
+		if (editor().m_inputs.active("raise_terrain_cliff"))
 			terrain.setHeight(cursor, m_hightAtCursor + 1);
-		if (m_inputs.active("apply_negative"))
+		if (editor().m_inputs.active("lower_terrain_cliff"))
 			terrain.setHeight(cursor, m_hightAtCursor - 1);
-		if (m_inputs.active("apply"))
-			m_vOutNavmeshGeneration.clear();
+		if (editor().m_inputs.active("modify_terrain"))
+			editor().m_navmeshGenerationDebugOut.clear();
 	}
 };

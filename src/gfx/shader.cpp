@@ -121,7 +121,9 @@ void dk::gfx::ShaderSource::tryDetach(Type type, unsigned program)
 unsigned dk::gfx::ShaderSource::attach(Type type, unsigned program)
 {
     if (m_updated)
+    {
         compileAs(type);
+    }
     tryDetach(type, program);
     glAttachShader(program, m_handle);
     return m_version;
@@ -130,35 +132,6 @@ unsigned dk::gfx::ShaderSource::attach(Type type, unsigned program)
 bool dk::gfx::ShaderSource::updated() const
 {
     return m_updated;
-}
-
-dk::gfx::Shader::Layout::Element::Element(VertexBuffer& vb)
-    : vertexBuffer(vb)
-    , divisor(0)
-{ }
-
-dk::gfx::Shader::Layout::Element::Element(const std::pair<std::reference_wrapper<VertexBuffer>, int>& element)
-    : vertexBuffer(element.first)
-    , divisor(element.second)
-{ }
-
-dk::gfx::Shader::Layout::Layout(std::vector<Element>&& elements)
-    : m_elements(std::move(elements))
-{ }
-
-void dk::gfx::Shader::Layout::makeActive()
-{
-    unsigned pointerIndex = 0;
-    for (auto& element : m_elements) {
-        element.vertexBuffer.makeActive();
-
-        // Set vertex attrib pointers
-        unsigned nextPointerIndex = element.vertexBuffer.vertexAttributes()->makePointersActive(pointerIndex);
-        // Set divisor
-        element.vertexBuffer.vertexAttributes()->setPointerDivisors(element.divisor, pointerIndex);
-
-        pointerIndex = nextPointerIndex;
-    }
 }
 
 template <>
@@ -271,10 +244,21 @@ void dk::gfx::Shader::makeActive()
     callPropertySetters(true);
 
     // Set vertex layout
-    if (m_layout.has_value())
-        m_layout->makeActive();
+    int attributeIndex = 0;
+    for (auto& layoutElement : m_layout)
+    {
+        // Bind api resource of buffer
+        layoutElement.bind();
+        // Set attribute pointers
+        const auto nextIndex = layoutElement.attributes->makePointersActive(attributeIndex, layoutElement.attributesMask);
+        // Set pointer divisors
+        layoutElement.attributes->setPointerDivisors(layoutElement.divisor, attributeIndex, layoutElement.attributesMask);
+        attributeIndex = nextIndex;
+    }
+
     // Bind textures
     m_textures.makeActive();
+    
     // Bind uniforms
     m_uniforms.makeActive(m_program);
 }
@@ -289,8 +273,11 @@ void dk::gfx::Shader::uniformTexture(const std::string& uniform, Texture& textur
 
     auto opt_slot = textures().emptySlot();
     if (!opt_slot.has_value())
+    {
         // No empty slot is available
+        spdlog::warn("[gfx] Shaders's texture unit has no available slot");
         return;
+    }
 
     textures()[opt_slot.value()] = texture;
     uniforms().set(uniform, opt_slot.value());

@@ -47,6 +47,13 @@ dk::geom::ray3 dk::gfx::Camera::castRay(const glm::vec2& ndc) const
     }
 }
 
+glm::vec3 dk::gfx::Camera::right() const
+{
+	glm::vec3 w = glm::normalize(position - lookat);
+	glm::vec3 u = glm::normalize(cross(vup, w));
+	return u;
+}
+
 void dk::gfx::Camera::Orbit::shift(Camera & camera, const glm::vec3& amount)
 {
 	camera.position += amount;

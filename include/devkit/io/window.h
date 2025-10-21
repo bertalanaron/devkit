@@ -1,6 +1,7 @@
 #pragma once
 #include <devkit/common/utils.h>
 #include <devkit/common/properties.h>
+#include <devkit/gfx/viewport.h>
 
 namespace dk::io::properties {
 namespace window {
@@ -40,6 +41,13 @@ using WindowProperties = dk::common::DeferredPropertyCollection<D,
 
 namespace dk::io {
 
+using TickCounter = long long unsigned;
+
+class WindowContext;
+
+class Frame;
+
+
 class Window 
 	: public details::io::WindowProperties<Window>
 {
@@ -49,44 +57,32 @@ public:
 	// @brief Opens a window and activates it's context
 	// @param msaa - Multisample Anti Aliasing sample count (msaa is disabled when set to 1)
 	void open(int msaa = 1);
+	bool isOpen() const;
 	void close();
 
 	// @brief Begin new frame
 	// @returns True when window is open and context switching was successful
-	bool beginFrame();
-
-	//
+	const Frame& beginFrame();
 	void endFrame();
 
-	// @brief Activates the windows context for graphics (gl context) 
-	void useContext();
+	void makeCurrent();
 
-	std::chrono::nanoseconds dt() const;
-
-	template <typename T = double>
-	T dtSeconds() const 
-	{ return std::chrono::duration<T>(dt()).count(); }
-
-	// @brief Get the cursor position relative to the window in pixels
-	glm::vec2 cursorP() const;
-	glm::vec2 cursorDeltaP() const;
-
-	// @brief Get the normalized cursor position relative to the window
-	glm::vec2 cursorN() const;
-	glm::vec2 cursorDeltaN() const;
-
-	bool wrapOutOfBoundsCursor(bool allowInnerBorder = false) const;
+	void warpCursor(const glm::ivec2& destination) const;
 
 	~Window();
 
 private:
-	struct Context;
+	class WindowEventHandler;
 
 private:
-	std::unique_ptr<Context> m_context;
+	std::unique_ptr<const WindowContext> m_context;
+	std::unique_ptr<WindowEventHandler>  m_eventHandler;
 
-	std::chrono::system_clock::time_point m_frameStart = {};
-	std::chrono::system_clock::duration   m_timeSinceLastFrame = {};
+	bool                         m_isOpen = false;
+	bool                         m_closeRequested = false;
+	std::unique_ptr<const Frame> m_frame;
+ 
+	gfx::Viewport buildViewport() const;
 
 	template <typename D, typename E>
 	friend void details::common::setProperty(D&, const E&);

@@ -22,6 +22,8 @@
 #include <numbers>
 
 #include <spdlog/spdlog.h>
+#include <spdlog/async.h>
+#include <spdlog/sinks/basic_file_sink.h>
 
 #include <nlohmann/json.hpp>
 
@@ -82,6 +84,9 @@ concept OfList = (std::same_as<T, Ts> || ...);
 template <typename T>
 struct id_t { using type = T; };
 
+template <typename T>
+constexpr auto id = id_t<T>{};
+
 template <typename... Ts>
 using reverse_tuple = decltype(details::common::_reverse_tuple(std::tuple<Ts...>()));
 
@@ -119,6 +124,39 @@ struct wstring_literal {
 	const wchar_t* c_str() const { return value; }
 };
 
+template <typename T>
+struct copyable_unique_ptr {
+	using pointer = std::unique_ptr<T>::pointer;
+	std::unique_ptr<T> ptr;
+
+	copyable_unique_ptr(std::unique_ptr<T>&& p) : ptr(std::move(p)) {}
+	copyable_unique_ptr(const copyable_unique_ptr& other)
+		: ptr(other.ptr ? std::make_unique<T>(*other.ptr) : nullptr) {}
+	copyable_unique_ptr& operator=(const copyable_unique_ptr& other) {
+		if (this != &other)
+			ptr = other.ptr ? std::make_unique<T>(*other.ptr) : nullptr;
+		return *this;
+	}
+	copyable_unique_ptr(copyable_unique_ptr&&) noexcept = default;
+	copyable_unique_ptr& operator=(copyable_unique_ptr&&) noexcept = default;
+
+	constexpr pointer get() const 
+	{ return ptr.get(); }
+
+	constexpr pointer operator->() const
+	{ return ptr.operator->(); }
+
+	constexpr std::add_lvalue_reference_t<T> operator*() const 
+	{ return *ptr; }
+
+	operator bool() const 
+	{ return (bool)ptr; }
+};
+
+template <typename T>
+auto make_copyable_unique(auto&&... args)
+{ return copyable_unique_ptr(std::make_unique<T>(args...)); }
+
 template <typename D>
 class SingletonBase {
 public:
@@ -131,6 +169,84 @@ public:
 		return c_instance;
 	}
 };
+
+class ScopeGuard
+{
+public:
+	ScopeGuard(const auto& engageFunc, const auto& releaseFunc)
+		: m_releaseFunc(releaseFunc)
+	{
+		engageFunc();
+		m_engaged = true;
+	}
+
+	ScopeGuard(const auto& releaseFunc)
+		: m_engaged(true)
+		, m_releaseFunc(releaseFunc)
+	{ }
+
+	// @brief Stop release callback from executing
+	void release() { m_engaged = false; }
+
+	~ScopeGuard()
+	{
+		if (m_engaged)
+			m_releaseFunc();
+	}
+
+private:
+	bool                  m_engaged = false;
+	std::function<void()> m_releaseFunc;
+};
+
+
+template <typename Base>
+class watched_object : private Base {
+public:
+	using Base::Base;
+
+	const Base& get() const { return *static_cast<const Base*>(this); }
+
+	Base& modify()
+	{
+		m_dirty = true;
+		return *static_cast<Base*>(this);	
+	}
+
+	bool dirty() const { return m_dirty; }
+	void reset_dirty_flag() { m_dirty = false; }
+
+private:
+	bool m_dirty = true;
+};
+
+template <class T>
+struct factory_method
+{
+	T operator()(auto&&... args) const
+	{ return T(std::forward<decltype(args)>(args)...); }
+};
+
+template <class T>
+factory_method<T> make_factory()
+{ return {}; }
+
+template <typename Derived, template <typename...> class BaseTemplate>
+struct is_specialization_or_derived {
+private:
+	// helper that succeeds if Derived is convertible to BaseTemplate<Args...>*
+	template <typename... Args>
+	static std::true_type test(BaseTemplate<Args...>*);
+
+	// fallback
+	static std::false_type test(...);
+
+public:
+	static constexpr bool value = decltype(test(std::declval<Derived*>()))::value;
+};
+
+template <typename Derived, template <typename...> class BaseTemplate>
+constexpr bool is_specialization_or_derived_v = is_specialization_or_derived<Derived, BaseTemplate>::value;
 
 template <typename T>
 struct function_traits
@@ -238,6 +354,11 @@ struct storage {
 	inline static std::optional<T> value;
 };
 
+template <typename T, dk::common::string_literal Label>
+struct threadlocal_storage {
+	inline static std::unordered_map<std::thread::id, T> values;
+};
+
 } // details::dbg
 
 namespace dk::dbg {
@@ -261,6 +382,22 @@ const T& store_or(const T& fallback) {
 	if (!details::dbg::storage<T, Label>::value.has_value())
 		return fallback;
 	return details::dbg::storage<T, Label>::value.value(); 
+}
+
+template <typename T, common::string_literal Label>
+	requires(std::is_default_constructible_v<T>)
+T& store_threadlocal()
+{
+	return details::dbg::threadlocal_storage<T, Label>::values[std::this_thread::get_id()];
+}
+
+template <typename T, common::string_literal Label>
+const T& store_threadlocal_or(const T& fallback)
+{
+	auto it = details::dbg::threadlocal_storage<T, Label>::values.find(std::this_thread::get_id());
+	if (it == details::dbg::threadlocal_storage<T, Label>::values.end())
+		return fallback;
+	return it->second;
 }
 
 } // dk::dbg
@@ -368,3 +505,68 @@ GLM_FMT(vec3 , "({}, {}, {})", v.x, v.y, v.z)
 GLM_FMT(ivec3, "({}, {}, {})", v.x, v.y, v.z)
 GLM_FMT(uvec3, "({}, {}, {})", v.x, v.y, v.z)
 GLM_FMT(dvec3, "({}, {}, {})", v.x, v.y, v.z)
+
+GLM_FMT(vec4 , "({}, {}, {})", v.x, v.y, v.z, v.w)
+GLM_FMT(ivec4, "({}, {}, {})", v.x, v.y, v.z, v.w)
+GLM_FMT(uvec4, "({}, {}, {})", v.x, v.y, v.z, v.w)
+GLM_FMT(dvec4, "({}, {}, {})", v.x, v.y, v.z, v.w)
+
+#define __DK_WRAP(...) (__VA_ARGS__),
+#define __DK_EXPAND(X) X
+#define __DK_EXPAND_ALL(...) __VA_ARGS__
+
+#define __DK_CONCAT2(A, B) A##B
+#define __DK_CONCAT2_DEFERRED(A, B) __DK_CONCAT2(A, B)
+#define __DK_CONCAT3(A, B, C) A##B##C
+#define __DK_CONCAT3_DEFERRED(A, B, C) __DK_CONCAT3(A, B, C)
+
+#define __DK_IF_0(trueCase, falseCase) falseCase
+#define __DK_IF_1(trueCase, falseCase) trueCase
+#define __DK_IF(condition, trueCase, falseCase) \
+	__DK_CONCAT2_DEFERRED(__DK_IF_, condition)(trueCase, falseCase)
+
+#define __DK_OPT_0(x) 
+#define __DK_OPT_1(x) x
+#define DK_OPT(check, x) __DK_CONCAT2_DEFERRED(__DK_OPT_, check)(x)
+
+#define __DK_OPT_COMMA_0
+#define __DK_OPT_COMMA_1 ,
+// Places a comma if check is 1 and nothing if check is 0
+#define DK_OPT_COMMA(check) __DK_CONCAT2_DEFERRED(__DK_OPT_COMMA_, check)
+
+#define __DK_TABLE_AT_0( X, ...) X 
+#define __DK_TABLE_AT_1( _0, X, ...) X 
+#define __DK_TABLE_AT_2( _0, _1, X, ...) X 
+#define __DK_TABLE_AT_3( _0, _1, _2, X, ...) X 
+#define __DK_TABLE_AT_4( _0, _1, _2, _3, X, ...) X 
+#define __DK_TABLE_AT_5( _0, _1, _2, _3, _4, X, ...) X 
+#define __DK_TABLE_AT_6( _0, _1, _2, _3, _4, _5, X, ...) X 
+#define __DK_TABLE_AT_7( _0, _1, _2, _3, _4, _5, _6, X, ...) X 
+#define __DK_TABLE_AT_8( _0, _1, _2, _3, _4, _5, _6, _7, X, ...) X 
+#define __DK_TABLE_AT_9( _0, _1, _2, _3, _4, _5, _6, _7, _8, X, ...) X 
+#define __DK_TABLE_AT_10(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, X, ...) X 
+#define __DK_TABLE_AT_11(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, X, ...) X 
+#define __DK_TABLE_AT_12(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, X, ...) X 
+#define __DK_TABLE_AT_13(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, X, ...) X 
+#define __DK_TABLE_AT_14(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, X, ...) X 
+#define __DK_TABLE_AT_15(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, X, ...) X 
+#define __DK_TABLE_AT_16(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, X, ...) X 
+#define __DK_TABLE_AT_17(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, X, ...) X 
+#define __DK_TABLE_AT_18(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, X, ...) X 
+#define __DK_TABLE_AT_19(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, X, ...) X 
+#define __DK_TABLE_AT_20(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, X, ...) X 
+#define __DK_TABLE_AT_INDIRECT(IDX, ...) __DK_TABLE_AT_##IDX##(__VA_ARGS__)
+#define DK_TABLE_AT(IDX, TABLE) __DK_TABLE_AT_INDIRECT(IDX, TABLE(__DK_WRAP))
+#define DK_EXPAND_TABLE_AT(IDX, TABLE) __DK_CONCAT2_DEFERRED(__DK_EXPAND_ALL, DK_TABLE_AT(IDX, TABLE))
+
+#define __DK_MEMBERS_XY(F  , ...) F(__VA_ARGS__ __VA_OPT__(,) x , 1) F(__VA_ARGS__ __VA_OPT__(,) y , 0)
+#define __DK_MEMBERS_XYZ(F , ...) F(__VA_ARGS__ __VA_OPT__(,) x , 1) F(__VA_ARGS__ __VA_OPT__(,) y , 1) F(__VA_ARGS__ __VA_OPT__(,) z , 0)
+#define __DK_MEMBERS_XYZW(F, ...) F(__VA_ARGS__ __VA_OPT__(,) x , 1) F(__VA_ARGS__ __VA_OPT__(,) y , 1) F(__VA_ARGS__ __VA_OPT__(,) z , 1) F(__VA_ARGS__ __VA_OPT__(,) w , 0)
+#define __DK_MEMBERS_RGBA(F, ...) F(__VA_ARGS__ __VA_OPT__(,) r , 1) F(__VA_ARGS__ __VA_OPT__(,) g , 1) F(__VA_ARGS__ __VA_OPT__(,) b , 1) F(__VA_ARGS__ __VA_OPT__(,) a , 0)
+
+#define __DK_JOIN_WITH_LUT_GETIDX(IDX, ...) IDX
+#define __DK_JOIN_WITH_LUT_ELEM(F, LUT, IDX, ...) F(IDX, __VA_ARGS__, DK_EXPAND_TABLE_AT(IDX, LUT))
+// Requires the index to be TABLE's first element
+#define __DK_JOIN_WITH_LUT(LUT, TABLE, F) TABLE(__DK_JOIN_WITH_LUT_ELEM, F, LUT)
+
+#define __DK_STR(X) #X

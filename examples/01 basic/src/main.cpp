@@ -13,6 +13,7 @@
 #include <devkit/gfx/texture.h>
 #include <devkit/gfx/font.h>
 #include <devkit/gfx/vertex_sink.h>
+#include <devkit/io/frame.h>
 
 #include <imgui.h>
 
@@ -27,6 +28,8 @@
 #include <nfd.h>
 
 #include <fstream>
+
+#include <GL/glu.h>
 
 template <typename E, typename C>
 	requires(std::is_enum_v<E>)
@@ -210,11 +213,63 @@ private:
 	std::string m_searchString;
 };
 
+
+// render to multi sampled render buffer -> resolve to other frame buffer for post processing
+
+/*
+
+struct PostProcessLayer {
+	void operator()(glm::ivec2 frameSize, Shader& shader);
+
+};
+
+
+
+const glm::ivec2 initialFrameSize(100, 100);
+dk::gfx::FrameBuffer fbScene;
+auto                 texScene = dk::gfx::Texture::create2DMultisample(initialFrameSize, dk::gfx::Channels::RGBA, 4);
+fbScene.outputs[0] = texScene;
+fbScene.outputs.attachRenderBuffers(dk::gfx::FrameBuffer::Depth | dk::gfx::FrameBuffer::Stencil);
+
+fbScene.outputs.attachRenderBuffer(dk::gfx::FrameBuffer::Depth24);
+fbScene.outputs.attachRenderBuffer(dk::gfx::FrameBuffer::Stencil8);
+fbScene.outputs[0].renderBuffer2DMultisample(initialFrameSize, dk::gfx::Channels::RGBA, 4);
+
+	//  throw if outputs[0] is empty otherwise setup renderbuffers based on that attachment
+
+fbScene.render(...);
+
+dk::gfx::Texture texBloomInputDownScaled = dk::gfx::Texture::create2D(initialFrameSize / 2, dk::gfx::Texture::RGBA);
+
+dk::gfx::FrameBuffer fbBloom;
+
+while (m_window.isOpen())
+{
+	const auto& frame = m_window.beginFrame();
+
+	fbScene.resize(frame.size());
+	fbBloom.resize(frame.size() / 2);
+
+	fbScene.render(...);
+
+	fbBloom.render(...);
+
+
+}
+
+dk::gfx::Texture     
+
+fb.inputs[0] = 
+
+*/
+
+
+
 class Example01 {
 public:
 	void run()
 	{
-		dk::gfx::VertexSink textVertexSink = dk::gfx::VertexSink::create<dk::gfx::Font::CharVertex>();
+		dk::gfx::VertexSink textVertexSink(dk::common::id<dk::gfx::Font::CharVertex>);
 
 		dk::gfx::Texture sceneOutTexture = [&] {
 			const auto windowSize = m_window.property<dk::io::properties::window::size>();
@@ -228,7 +283,8 @@ public:
 		sceneFrameBuffer.attachColor(sceneOutTexture, 0);
 		sceneFrameBuffer.attachDepth(sceneOutDepth);
 
-		while (m_window.beginFrame()) {
+		while (m_window.isOpen()) {
+			const auto& frame = m_window.beginFrame();
 			// Clear backbuffer
 			sceneFrameBuffer.clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0x1e1e1eff));
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color, DK_COLOR(0x1e1e1eff));
@@ -237,7 +293,7 @@ public:
 			m_assets.synchronize();
 
 			showGUI();
-			moveCamera();
+			moveCamera(frame);
 
 			//ImGui::ShowDemoWindow();
 
@@ -259,11 +315,12 @@ public:
 				}
 				ImGui::End();
 			}
-			for (auto& mesh : m_assets.get<dk::gfx::Scene>(assetPath("planet_model")).meshes()) {
-				m_shaders["planet"].layout(std::ref(mesh.vertices()));
-				dk::gfx::backBuffer().render(m_shaders["planet"], mesh.indices(), dk::gfx::Primitive::Triangles);
-				sceneFrameBuffer.render(m_shaders["planet"], mesh.indices(), dk::gfx::Primitive::Triangles);
-			}
+
+			const auto texturedVertexFlags = dk::gfx::VertexFlags::Position | dk::gfx::VertexFlags::Normal | dk::gfx::VertexFlags::TexCoords;
+			auto& planetMesh = m_assets.get<dk::gfx::Scene>("/models/planet_scene.fbx")["/planet"][0](texturedVertexFlags);
+			m_shaders["planet"].layout(planetMesh);
+			dk::gfx::backBuffer().render(m_shaders["planet"], planetMesh.indices, dk::gfx::Primitive::Triangles);
+			sceneFrameBuffer.render(m_shaders["planet"], planetMesh.indices, dk::gfx::Primitive::Triangles);
 
 			// Bind uniforms and textures
 			m_shaders["rgba"].uniforms()     << m_ucCamera;
@@ -274,23 +331,24 @@ public:
 			auto& asteroidTexture = m_assets.get<dk::gfx::Texture>(assetPath("asteroid_texture"));
 			asteroidTexture.property(dk::gfx::properties::min_filter::nearest_mipmap_linear);
 			m_shaders["asteroid"].uniformTexture("u_texture", asteroidTexture);
-			auto& asteroidMesh = m_assets.get<dk::gfx::Scene>(assetPath("asteroid_model")).meshes().at(0);
-			m_shaders["asteroid"].layout(std::ref(asteroidMesh.vertices()), std::make_pair(std::ref(*m_meteors), 1));
+			auto& asteroidMesh = *m_assets.get<dk::gfx::Scene>(assetPath("asteroid_model")).meshes().begin();
+			m_shaders["asteroid"].layout(asteroidMesh.vertices, dk::gfx::perInstance(m_meteors));
 			// Rotate around y axis
 			static float t = 0;
-			t += (double)m_window.dt().count() / 80000000000;
+			t += frame.dt<std::chrono::seconds>() / 10.0;
+
 			m_shaders["asteroid"].uniforms().set("u_t", t);
 			// Render
-			dk::gfx::backBuffer().render(m_shaders["asteroid"], asteroidMesh.indices(), dk::gfx::Primitive::Triangles, m_meteors->size());
-			sceneFrameBuffer.render(m_shaders["asteroid"], asteroidMesh.indices(), dk::gfx::Primitive::Triangles, m_meteors->size());
+			dk::gfx::backBuffer().render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors.size());
+			sceneFrameBuffer.render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors.size());
 
 			// Draw skybox
 			m_shaders["skybox"].uniforms()   << m_ucCamera;
 			m_shaders["skybox"].uniformTexture("u_skybox", *m_skybox);
-			auto& unitCubeMesh = m_assets.get<dk::gfx::Scene>("/models/cube.obj").meshes().at(0);
-			m_shaders["skybox"].layout(std::ref(unitCubeMesh.vertices()));
-			dk::gfx::backBuffer().render(m_shaders["skybox"], unitCubeMesh.indices(), dk::gfx::Primitive::Triangles);
-			sceneFrameBuffer.render(m_shaders["skybox"], unitCubeMesh.indices(), dk::gfx::Primitive::Triangles);
+			auto& unitCubeMesh = m_assets.get<dk::gfx::Scene>("/models/planet_scene.fbx")["/skybox"][0]();
+			m_shaders["skybox"].layout(unitCubeMesh.vertices);
+			dk::gfx::backBuffer().render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
+			sceneFrameBuffer.render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
 
 			// Close window with esc
 			if (dk::io::key::esc) m_window.close();
@@ -301,11 +359,16 @@ public:
 			if (ImGui::Begin("FrameBuffer")) {
 				sceneOutTexture.showAsImGuiImage();
 				ImVec2 size = ImGui::GetWindowSize();
-				sceneFrameBuffer.resize(glm::ivec2(size.x, size.y));
+				//sceneFrameBuffer.resize(glm::ivec2(size.x, size.y));
 				ImGui::End();
 			}
 
-			m_window.endFrame();	
+			m_colorSink 
+				<< dk::gfx::draw(dk::geom::circle2{dk::geom::Origin2, 40.0}, DK_COLOR(0x222222ff), dk::geom::plane::Y(), -dk::geom::axis::X)
+				<< dk::gfx::draw(dk::geom::circle2{dk::geom::Origin2, 4.2}, dk::colors::orangeRed, dk::geom::plane(glm::normalize(m_camera.lookat - m_camera.position)), m_camera.right());
+			m_colorSink.flush(m_shaders["rgba"], dk::gfx::backBuffer());
+
+			m_window.endFrame();
 		}
 
 		auto& camera = m_assets.get<nlohmann::json>("camera.json");
@@ -326,12 +389,19 @@ public:
 		// Open window
 		m_window.property(dk::io::properties::window::theme::dark);
 		m_window.open(4);
+		m_window.property(dk::io::properties::window::vsync::disabled);
 		dk::gfx::backBuffer().property(dk::gfx::properties::multisampling::enabled);
 
 		// Register asset types
-		m_assets.root(ini["data"]["path"], true);
+		m_assets.root(ini["data"]["path"] , false);
+		m_assets.watch("/textures/"       , false);
+		m_assets.watch("/textures/planets", true);
+		m_assets.watch("/models"          , false);
+		m_assets.watch("/fonts"           , false);
+		m_assets.watch("/shaders"         , true);
+
 		m_assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
-		m_assets.type<dk::gfx::Scene>("obj", dk::gfx::Scene::load, std::nullopt, std::nullopt, dk::io::AssetManager::Deferred);
+		m_assets.type<dk::gfx::Scene>({ "obj", "fbx" }, dk::gfx::Scene::load, &dk::gfx::Scene::update, std::nullopt, dk::io::AssetManager::Deferred);
 		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load);
 		m_assets.type<YAML::Node>("yaml", YAML::LoadFile, [](YAML::Node& node, const std::string& path) { 
 			node = YAML::LoadFile(path);
@@ -378,13 +448,11 @@ public:
 		m_camera = m_assets.get<nlohmann::json>("camera.json");
 
 		// Create meteor instances
-		m_meteors = std::make_unique<dk::gfx::VertexBuffer>(std::move(dk::gfx::VertexBuffer::create<dk::gfx::Vertex<glm::mat4>>()));
-		for (int i = 0; i < conf<int>("asteroid_count"); ++i)
-			m_meteors->push_back(dk::gfx::Vertex(glm::mat4(1.0)));
-		placeAsteroids(*m_meteors);
+		m_meteors = dk::common::id<dk::gfx::Vertex<glm::mat4>>;
+		placeAsteroids(m_meteors);
 
-		//// Create debug sink
-		//m_colorSink = std::make_unique<dk::gfx::VertexSink>(std::move(dk::gfx::VertexSink::create<dk::gfx::RGBAVertex>()));
+		// Create debug sink
+		m_colorSink = dk::common::id<dk::gfx::RGBAVertex>;
 		//*m_colorSink 
 		//	<< dk::gfx::draw(dk::geom::ray3(glm::vec3(10,10,0), glm::vec3(5,5,0) - glm::vec3(10,10,0)), dk::colors::yellow)
 		//	//<< dk::gfx::draw(m_camera, dk::colors::lime)
@@ -405,9 +473,8 @@ private:
 
 	std::unique_ptr<dk::gfx::Texture> m_skybox;
 
-	std::unique_ptr<dk::gfx::VertexBuffer> m_meteors;
-
-	std::unique_ptr<dk::gfx::VertexSink> m_colorSink;
+	dk::gfx::VertexBuffer m_meteors;
+	dk::gfx::VertexSink   m_colorSink;
 
 	template <typename T>
 	T conf(const std::string& path) const
@@ -434,10 +501,10 @@ private:
 		ImGui::End();
 	}
 
-	void moveCamera()
+	void moveCamera(const dk::io::Frame& frame)
 	{
 		if (dk::io::button::left)
-			m_orbit.tilt(m_camera, m_window.cursorDeltaP() * glm::vec2(.004, .004));
+			m_orbit.tilt(m_camera, (glm::vec2)frame.cursorDeltaP() * glm::vec2(.004, .004));
 		if (dk::io::wheel::up)
 			m_orbit.zoom(m_camera, 0.9);
 		if (dk::io::wheel::down)
@@ -490,7 +557,7 @@ private:
 			model = glm::rotate(model, rotAngle, glm::vec3(0.4f, 0.6f, 0.8f));
 
 			// 4. now add to list of matrices
-			asteroids.set(i, dk::gfx::Vertex(model));
+			asteroids.modify().push_back(dk::gfx::Vertex(model));
 		}  
 	}
 };
@@ -498,32 +565,6 @@ private:
 
 int main(void) {
 	spdlog::set_level(spdlog::level::trace);
-
-	dk::common::ThreadDemuxContainer<dk::common::TypelessBuffer> tdc(
-		[]{ return dk::common::TypelessBuffer(dk::common::id_t<glm::vec4>{}); });
-
-	dk::common::TypelessBuffer other(dk::common::id_t<glm::vec4>{});
-	other.push_back(dk::colors::blue);
-	other.push_back(dk::colors::blue);
-	other.push_back(dk::colors::blue);
-
-	tdc.local().push_back(dk::colors::red);
-	tdc.local().push_back(dk::colors::red);
-	tdc.local().push_back(dk::colors::red);
-	tdc.local().push_back(dk::colors::red);
-
-	tdc.local().insert(tdc.local().end(), other.begin(), other.end());
-
-	for (int i = 0; i < other.size(); ++i)
-		tdc.local().at(i) = other.at(i);
-
-	for (auto& [thread, buffer] : *tdc.global())
-	{
-		for (glm::vec4& v : buffer)
-		{
-			spdlog::info("{}", nlohmann::json(v).dump(0));
-		}
-	}
 
 	spdlog::info("{}", nlohmann_extension::smart_dump(nlohmann::json(dk::io::modkey::ctrl + dk::io::key::s)));
 
