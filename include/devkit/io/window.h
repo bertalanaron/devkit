@@ -3,66 +3,63 @@
 #include <devkit/common/properties.h>
 #include <devkit/gfx/viewport.h>
 
-namespace dk::io::properties {
-namespace window {
-	DK_DECL_DERIVED_PROP(size , glm, ivec2 , 720, 480);
-	DK_DECL_DERIVED_PROP(title, std, string, "devkit window");
-	enum class border { enabled, disabled };
-	enum class mode { windowed, fullscreen };
-	enum class theme { light, dark };
-	enum class vsync { disabled, retrace, adaptive };
-	enum class mouse_grab { disabled, enabled };
-}
-} // dk::io::properties
-
-namespace details::io {
-
-int toUnderlying(dk::io::properties::window::vsync vsync);
-
-uint32_t toUnderlying(dk::io::properties::window::mode mode);
-
-} // details::io
-
-namespace details::io {
-
-struct SDL_StaticContext;
-
-template <typename D>
-using WindowProperties = dk::common::DeferredPropertyCollection<D,
-	dk::io::properties::window::size,
-	dk::io::properties::window::title,
-	dk::io::properties::window::border,
-	dk::io::properties::window::mode,
-	dk::io::properties::window::theme,
-	dk::io::properties::window::vsync,
-	dk::io::properties::window::mouse_grab>;
-
-} // details::io
-
 namespace dk::io {
 
 using TickCounter = long long unsigned;
-
 class WindowContext;
-
 class Frame;
 
-
 class Window 
-	: public details::io::WindowProperties<Window>
 {
 public:
+	using      Size      = common::UniqueProperty<glm::ivec2 , "Size">;
+	using      Title     = common::UniqueProperty<std::string, "Title">;
+	enum class Border    { Enabled = 1, Disabled = 0 };
+	enum class Mode      { Windowed, Fullscreen };
+	enum class Theme     { Light, Dark };
+	enum class VSync     { Disabled, Retrace, Adaptive };
+	enum class MouseGrab { Disabled, Enabled };
+
+	class Config 
+		: private common::ConfigurationBase<Size, Title, Border, Mode, Theme, VSync, MouseGrab>
+	{
+	private:
+		using Base = common::ConfigurationBase<Size, Title, Border, Mode, Theme, VSync, MouseGrab>;
+
+	public:
+		using ConfigurationBase::operator();
+		using ConfigurationBase::set;
+		using ConfigurationBase::get;
+
+		inline friend void to_json(nlohmann::json& j, const Config& config)
+		{ to_json(j, (const Base&)config); }
+
+		inline friend void from_json(const nlohmann::json& j, Config& config)
+		{ from_json(j, (Base&)config); }
+
+	private:
+		using ConfigurationBase::ConfigurationBase;
+
+		friend class Window;
+	};
+
+public:
+	Config config;
+
 	Window();
 
 	// @brief Opens a window and activates it's context
 	// @param msaa - Multisample Anti Aliasing sample count (msaa is disabled when set to 1)
 	void open(int msaa = 1);
+
 	bool isOpen() const;
+	
 	void close();
 
 	// @brief Begin new frame
 	// @returns True when window is open and context switching was successful
 	const Frame& beginFrame();
+
 	void endFrame();
 
 	void makeCurrent();
@@ -84,10 +81,8 @@ private:
  
 	gfx::Viewport buildViewport() const;
 
-	template <typename D, typename E>
-	friend void details::common::setProperty(D&, const E&);
-
-	friend struct details::io::SDL_StaticContext;
+	template <typename P>
+	friend void setWindowProperty(Window& window, const P&);
 };
 
 } // dk::io

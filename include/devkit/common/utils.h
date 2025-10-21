@@ -445,6 +445,23 @@ const T& store_threadlocal_or(const T& fallback)
 
 } // dk::dbg
 
+template <typename T, glm::qualifier Q>
+struct std::formatter<glm::vec<2, T, Q>> : std::formatter<T> {
+	auto format(const glm::vec<2, T, Q>& v, std::format_context& ctx) const {
+		return std::format_to(ctx.out(), "({},{})", v.x, v.y);
+	}
+};
+
+template <typename E>
+	requires (std::is_enum_v<E>)
+struct std::formatter<E> : std::formatter<std::string_view> {
+	template <typename FormatContext>
+	auto format(const E& enum_value, FormatContext& ctx) const {
+		auto enum_name = magic_enum::enum_name(enum_value);
+		return std::formatter<std::string_view>::format(enum_name, ctx);
+	}
+};
+
 namespace nlohmann {
 template <typename Enum>
 	requires std::is_enum_v<Enum>

@@ -45,8 +45,8 @@ public:
 			m_window.m_closeRequested = true;
 			break;
 		case SDL_EVENT_WINDOW_RESIZED:
-			using size_t = dk::io::properties::window::size;
-			m_window.propertyChanged(size_t(event.data1, event.data2));
+			m_window.config(Window::Size(event.data1, event.data2));
+			m_window.config.reset_dirty<Window::Size>();
 			break;
 		default:
 			break;
@@ -60,7 +60,7 @@ private:
 void dk::io::Window::open(int msaa)
 {
 	// Setup context and event handling
-	m_context = GlobalState::createWindowContext(msaa, property<properties::window::size>());
+	m_context = GlobalState::createWindowContext(msaa, config.get<Window::Size>());
 	GlobalState::addListener(m_context->sdlWindowID, m_eventHandler.get());
 	m_isOpen  = true;
 	// Configure OpenGL
@@ -71,7 +71,13 @@ void dk::io::Window::open(int msaa)
 	m_context->imguiIO->ConfigFlags |= ImGuiConfigFlags_NavNoCaptureKeyboard;
 	ImGui::StyleColorsDark();
 
-	callPropertySetters();
+	// Call API setters for initial configuration
+	config.for_each([&](const auto& prop) {
+		setWindowProperty(*this, prop);
+	});
+	// Initial configuration should not be registered as updated
+	// otherwise we would set them again in the first frame
+	config.reset_dirty();
 }
 
 void dk::io::Window::close()
@@ -93,10 +99,18 @@ const dk::io::Frame& dk::io::Window::beginFrame()
 
 	// Use context
 	m_context->makeCurrent();
+
 	// Handle events
 	GlobalState::tryHandleAndDispatchEvents(m_eventHandler.get());
+
 	// Update properties
-	callPropertySetters();
+	config.for_each([&](const auto& prop) {
+		if (!config.updated(prop))
+			return;
+		spdlog::debug("Window.{}={}", Config::property_name(prop), std::format("{}", prop));
+		setWindowProperty(*this, prop);
+	});
+	config.reset_dirty();
 
 	// Start the Dear ImGui frame
 	ImGui_ImplOpenGL3_NewFrame();
@@ -172,6 +186,7 @@ void dk::io::Window::warpCursor(const glm::ivec2& destination) const
 dk::io::Window::Window()
 	: m_eventHandler(std::make_unique<WindowEventHandler>(*this))
 	, m_frame(std::make_unique<const Frame>())
+	, config(Size(720, 480), Title("DevKit Window"), Theme::Dark)
 { }
 
 dk::io::Window::~Window()
@@ -219,7 +234,7 @@ dk::gfx::Viewport dk::io::Window::buildViewport() const
 	// Parse values (convert y coords)
 	const ImVec2 size = ImVec2(centralRect.GetWidth(), centralRect.GetHeight());  // Width/Height in pixels
 	const ImVec2 pos  = ImVec2(centralRect.Min.x - node->Pos.x, centralRect.Min.y - node->Pos.y);   // Top-left in screen space
-	const auto windowSizeY = property<dk::io::properties::window::size>().y;
+	const auto windowSizeY = config.get<Size>().value.y;
 
 	return dk::gfx::Viewport(
 		glm::ivec2(size.x, size.y), 
@@ -227,80 +242,61 @@ dk::gfx::Viewport dk::io::Window::buildViewport() const
 }
 
 template <>
-void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::size& size) 
-{
-	SDL_SetWindowSize(window.m_context->sdlWindowContext, size.x, size.y);
-	spdlog::trace("Set size for window: {}", window.m_context->sdlWindowID);
-}
+void dk::io::setWindowProperty(Window& window, const Window::Size& size)
+{ SDL_SetWindowSize(window.m_context->sdlWindowContext, size.value.x, size.value.y); }
 
 template <>
-void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::title& title)
-{
-	SDL_SetWindowTitle(window.m_context->sdlWindowContext, title.c_str());
-	spdlog::trace("Set title as \"{}\" for window: {}", title, window.m_context->sdlWindowID);
-}
+void dk::io::setWindowProperty(Window& window, const Window::Title& title)
+{ SDL_SetWindowTitle(window.m_context->sdlWindowContext, title.value.c_str()); }
 
 template <>
-void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::border& border)
-{
-	bool isEnabled = border == dk::io::properties::window::border::enabled;
-	SDL_SetWindowBordered(window.m_context->sdlWindowContext, isEnabled);
-	spdlog::trace("Set border {} for window: {}", (isEnabled ? "enabled" : "disabled"), window.m_context->sdlWindowID);
-}
+void dk::io::setWindowProperty(Window& window, const Window::Border& border)
+{ SDL_SetWindowBordered(window.m_context->sdlWindowContext, border == Window::Border::Enabled); }
 
 template <>
-void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::theme& theme)
+void dk::io::setWindowProperty(Window& window, const Window::Theme& theme)
 {
-	BOOL USE_DARK_MODE = theme == dk::io::properties::window::theme::dark;
+	BOOL USE_DARK_MODE = (theme == Window::Theme::Dark);
 	BOOL SET_IMMERSIVE_DARK_MODE_SUCCESS = SUCCEEDED(DwmSetWindowAttribute(
 		window.m_context->nativeWindowHandle, DWMWINDOWATTRIBUTE::DWMWA_USE_IMMERSIVE_DARK_MODE,
 		&USE_DARK_MODE, sizeof(USE_DARK_MODE)));
 	spdlog::trace("Set {} theme for window: {}", (USE_DARK_MODE ? "dark" : "light"), window.m_context->sdlWindowID);
 
 	// hack: Have to hide and show the window to apply color change
-	bool border = window.property<dk::io::properties::window::border>() == dk::io::properties::window::border::enabled;
+	bool border = (window.config.get<Window::Border>() == Window::Border::Enabled);
 	SDL_SetWindowBordered(window.m_context->sdlWindowContext, !border);
 	SDL_SetWindowBordered(window.m_context->sdlWindowContext, border);
 }
 
 template <>
-void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::vsync& vsync)
-{
-	SDL_GL_SetSwapInterval(details::io::toUnderlying(vsync));
+void dk::io::setWindowProperty(Window& window, const Window::VSync& vsync)
+{ 
+	const auto underlying = [&]{
+		switch (vsync)
+		{
+		case Window::VSync::Disabled: return  0;
+		case Window::VSync::Retrace : return  1;
+		case Window::VSync::Adaptive: return -1;
+		default: return 0; 
+		}
+	}();
+	SDL_GL_SetSwapInterval(underlying);
 }
 
 template <>
-void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::mode& mode)
+void dk::io::setWindowProperty(Window& window, const Window::Mode& mode)
 {
-	SDL_SetWindowFullscreen(window.m_context->sdlWindowContext, details::io::toUnderlying(mode));
+	const auto underlying = [&] {
+		switch (mode)
+		{
+		case Window::Mode::Windowed  : return 0ull;
+		case Window::Mode::Fullscreen: return SDL_WINDOW_FULLSCREEN;
+		default: return 0ull;
+		}
+	}();
+	SDL_SetWindowFullscreen(window.m_context->sdlWindowContext, underlying);
 }
 
 template <>
-void details::common::setProperty(dk::io::Window& window, const dk::io::properties::window::mouse_grab& mode)
-{
-	SDL_SetWindowMouseGrab(window.m_context->sdlWindowContext, (bool)mode);
-}
-
-int details::io::toUnderlying(dk::io::properties::window::vsync vsync)
-{
-	switch (vsync)
-	{
-	case dk::io::properties::window::vsync::disabled: return 0;
-	case dk::io::properties::window::vsync::retrace:  return 1;
-	case dk::io::properties::window::vsync::adaptive: return -1;
-	default:
-		return 0;
-	}
-}
-
-uint32_t details::io::toUnderlying(dk::io::properties::window::mode mode) {
-	switch (mode)
-	{
-	case dk::io::properties::window::mode::windowed:   return 0;
-	case dk::io::properties::window::mode::fullscreen: return SDL_WINDOW_FULLSCREEN;
-		break;
-	default:
-		break;
-	}
-	//SDL_WINDOW_FULLSCREEN, SDL_WINDOW_FULLSCREEN_DESKTOP
-}
+void dk::io::setWindowProperty(Window& window, const Window::MouseGrab& mouseGrab)
+{ SDL_SetWindowMouseGrab(window.m_context->sdlWindowContext, mouseGrab == Window::MouseGrab::Enabled); }

@@ -269,24 +269,27 @@ class Example01 {
 public:
 	void run()
 	{
-		dk::gfx::VertexSink textVertexSink(dk::common::id<dk::gfx::Font::CharVertex>);
+		using namespace dk::gfx;
+		using namespace dk::io;
 
-		dk::gfx::Texture sceneOutTexture = [&] {
-			const auto windowSize = m_window.property<dk::io::properties::window::size>();
-			return dk::gfx::Texture::create(windowSize.x, windowSize.y, 4);
+		VertexSink textVertexSink(dk::common::id<Font::CharVertex>);
+
+		Texture sceneOutTexture = [&] {
+			const glm::ivec2 windowSize = m_window.config.get<Window::Size>();
+			return Texture::create(windowSize.x, windowSize.y, 4);
 		}();
-		dk::gfx::Texture sceneOutDepth = [&] {
-			const auto windowSize = m_window.property<dk::io::properties::window::size>();
-			return dk::gfx::Texture::create(windowSize.x, windowSize.y, 5);
+		Texture sceneOutDepth = [&] {
+			const glm::ivec2 windowSize = m_window.config.get<Window::Size>();
+			return Texture::create(windowSize.x, windowSize.y, 5);
 		}();
-		dk::gfx::FrameBuffer sceneFrameBuffer;
+		FrameBuffer sceneFrameBuffer;
 		sceneFrameBuffer.attachColor(sceneOutTexture, 0);
 		sceneFrameBuffer.attachDepth(sceneOutDepth);
 
 		while (m_window.isOpen()) {
 			const auto& frame = m_window.beginFrame();
 			// Clear backbuffer
-			sceneFrameBuffer.clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0x1e1e1eff));
+			sceneFrameBuffer.clear(FrameBuffer::ClearMask::Color | FrameBuffer::ClearMask::Depth, DK_COLOR(0x1e1e1eff));
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color, DK_COLOR(0x1e1e1eff));
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0xffffffff));
 
@@ -354,7 +357,7 @@ public:
 			if (dk::io::key::esc) m_window.close();
 			// Toggle fullscreen with the f key
 			if (dk::io::key::f(dk::io::currentInputState()) && !dk::io::key::f(dk::io::previousInputState()))
-				m_window.property(dk::common::toggle(m_window.property<dk::io::properties::window::mode>()));
+				m_window.config(dk::common::toggle(m_window.config.get<dk::io::Window::Mode>()));
 
 			if (ImGui::Begin("FrameBuffer")) {
 				sceneOutTexture.showAsImGuiImage();
@@ -387,10 +390,10 @@ public:
 		}();
 
 		// Open window
-		m_window.property(dk::io::properties::window::theme::dark);
+		m_window.config(dk::io::Window::Theme::Dark);
+		m_window.config(dk::io::Window::VSync::Disabled);
 		m_window.open(4);
-		m_window.property(dk::io::properties::window::vsync::disabled);
-		dk::gfx::backBuffer().property(dk::gfx::properties::multisampling::enabled);
+		dk::gfx::backBuffer().config(dk::gfx::FrameBuffer::Multisample::Enabled);
 
 		// Register asset types
 		m_assets.root(ini["data"]["path"] , false);
