@@ -6,41 +6,6 @@
 
 #include <GL/glew.h>
 
-namespace dk::gfx::properties {
-
-enum class depth_test { disabled, enabled };
-enum class depth_mask { enabled, disabled };
-
-enum class depth_func { less, never, equal, lequal, greater, notequal, gequal, always };
-
-enum class blend { disabled, enabled };
-enum class blend_func_src_factor { one, zero, src_alpha, one_minus_src_alpha };
-enum class blend_func_dst_factor { zero, one, src_alpha, one_minus_src_alpha };
-
-enum class sample_shading { disabled, enabled };
-
-}
-
-namespace details::gfx {
-
-unsigned toUnderlying(dk::gfx::properties::depth_func df); 
-
-unsigned toUnderlying(dk::gfx::properties::blend_func_src_factor bfs); 
-unsigned toUnderlying(dk::gfx::properties::blend_func_dst_factor bfd); 
-
-template <typename D>
-using ShaderProperyCollection = dk::common::DeferredPropertyCollection<D, 
-	dk::gfx::properties::depth_test,
-	dk::gfx::properties::depth_mask,
-	dk::gfx::properties::depth_func,
-	dk::gfx::properties::backface_culling,
-	dk::gfx::properties::blend,
-	dk::gfx::properties::blend_func_src_factor,
-	dk::gfx::properties::blend_func_dst_factor,
-	dk::gfx::properties::sample_shading>;
-
-}
-
 namespace dk::gfx {
 
 class ShaderSource {
@@ -86,9 +51,7 @@ private:
 
 namespace dk::gfx {
 
-class Shader 
-	: public details::gfx::ShaderProperyCollection<Shader>
-{
+class Shader {
 private:
 	using source_wptr_t     = std::weak_ptr<ShaderSource>;
 	using opt_source_wptr_t = std::optional<std::weak_ptr<ShaderSource>>;

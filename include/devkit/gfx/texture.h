@@ -3,33 +3,22 @@
 #include <devkit/common/properties.h>
 #include <devkit/gfx/attachment_base.h>
 
-namespace dk::gfx::properties {
-
-enum class min_filter { nearest, linear, linear_mipmap_linear, linear_mipmap_nearest, nearest_mipmap_linear, nearest_mipmap_nearest };
-enum class mag_filter { nearest, linear };
-
-}
-
-namespace details::gfx {
-
-template <typename D>
-using TextureProperties = dk::common::DeferredPropertyCollection<D, 
-	dk::gfx::properties::min_filter,
-	dk::gfx::properties::mag_filter>;
-
-int toUnderlying(dk::gfx::properties::min_filter);
-int toUnderlying(dk::gfx::properties::mag_filter);
-
-}
-
 namespace dk::gfx {
 
 class FrameBuffer;
 
 class Texture
-	: public details::gfx::TextureProperties<Texture>
-	, public AttachmentBase
+	: public AttachmentBase
 {
+public:
+	enum class MinFilter { Nearest, Linear, LinearMipmapLinear, LinearMipmapNearest, NearestMipmapLinear, NearestMipmapNearest };
+	enum class MagFilter { Nearest, Linear };
+
+	class Config : DK_CONFIG_SPECIALIZATION(Texture, 
+		MinFilter, MagFilter);
+
+	Config config;
+	
 public:
 	enum class Type { Normal, Cubemap, /* TODO: Multisample */ };
 
@@ -66,8 +55,8 @@ private:
 
 	void attachAs(FrameBuffer& buffer, unsigned underlyingAttachmentIndex) override;
 
-	template <typename D, typename E>
-	friend void details::common::setProperty(D&, const E&);
+	template <typename P>
+	friend void setTextureProperty(Texture&, const P&);
 };
 
 class TextureUnit {

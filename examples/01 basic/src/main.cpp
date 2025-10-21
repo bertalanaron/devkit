@@ -11,7 +11,6 @@
 #include <devkit/gfx/scene.h>
 #include <devkit/gfx/camera.h>
 #include <devkit/gfx/texture.h>
-#include <devkit/gfx/font.h>
 #include <devkit/gfx/vertex_sink.h>
 #include <devkit/io/frame.h>
 
@@ -30,102 +29,176 @@
 #include <fstream>
 
 #include <GL/glu.h>
+//
+//template <typename E, typename C>
+//	requires(std::is_enum_v<E>)
+//void imguiPropertyPanel(C& container, dk::common::id_t<E>) {
+//	// Get enum names
+//	static std::array<const char*, magic_enum::enum_count<E>()> names = [] {
+//		std::array<const char*, magic_enum::enum_count<E>()> res{};
+//		for (int i = 0; i < magic_enum::enum_count<E>(); ++i)
+//			res[i] = magic_enum::enum_name(magic_enum::enum_cast<E>(i).value()).data();
+//		return res;
+//		}();
+//
+//	// Get current value
+//	E current = container.property<E>();
+//	int currentInt = static_cast<int>(current);
+//
+//	// Show combo box
+//	ImGui::TableNextRow();
+//	ImGui::TableSetColumnIndex(0);
+//	ImGui::Text(magic_enum::enum_type_name<E>().data());
+//	ImGui::TableSetColumnIndex(1);
+//	std::string comboLabel = std::format("##{}_selector", magic_enum::enum_type_name<E>().data());
+//	ImGui::SetNextItemWidth(-1);
+//	if (ImGui::Combo(comboLabel.c_str(), &currentInt, names.data(), magic_enum::enum_count<E>()))
+//	{
+//		E en = magic_enum::enum_cast<E>(currentInt).value();
+//		container.property(en);
+//	}
+//}
+//
+//template <typename C>
+//glm::ivec2 imguiPropertyPanel(C& container, const char* name, const glm::ivec2& _current) {
+//	glm::ivec2 current = _current;
+//
+//	// Create array for ImGui input
+//	int values[2] = { current.x, current.y };
+//
+//	// Show input for ivec2
+//	ImGui::TableNextRow();
+//	ImGui::TableSetColumnIndex(0);
+//	ImGui::Text(name);
+//	ImGui::TableSetColumnIndex(1);
+//
+//	std::string inputLabel = std::format("##{}_selector", name);
+//	ImGui::SetNextItemWidth(-1);
+//	if (ImGui::InputInt2(inputLabel.c_str(), values)) {
+//		current = glm::ivec2(values[0], values[1]);
+//	}
+//	return current;
+//}
+//
+//template <typename C>
+//std::string imguiPropertyPanel(C& container, const char* name, const std::string& _current) {
+//	std::string current = _current;
+//
+//	// Create a buffer for ImGui input (ImGui needs a char buffer)
+//	static char buffer[256];
+//	std::strncpy(buffer, current.c_str(), sizeof(buffer) - 1);
+//	buffer[sizeof(buffer) - 1] = '\0'; // Ensure null termination
+//
+//	// Show input text box
+//	ImGui::TableNextRow();
+//	ImGui::TableSetColumnIndex(0);
+//	ImGui::Text(name);
+//	ImGui::TableSetColumnIndex(1);
+//
+//	std::string inputLabel = std::format("##{}_selector", name);
+//	ImGui::SetNextItemWidth(-1);
+//	if (ImGui::InputText(inputLabel.c_str(), buffer, sizeof(buffer))) {
+//		current = std::string(buffer);
+//	}
+//	return current;
+//}
+//
+//template <typename E, typename C>
+//	requires(!std::is_enum_v<E> && requires{ typename E::type; })
+//void imguiPropertyPanel(C& container, dk::common::id_t<E>) {
+//	E current = container.property<E>();
+//	E en = E(imguiPropertyPanel<C>(container, details::common::propertyName<E>(), (typename E::type)(current)));
+//	container.property(en);
+//}
+//
+//template <typename E, typename C>
+//void imguiPropertyPanel(C& container) {
+//	imguiPropertyPanel<E>(container, dk::common::id_t<E>{});
+//}
+//
+//void imguiPropertiesPanel(auto& container, float labelColumnWidth) {
+//	if (ImGui::BeginTable("Properties", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)) {
+//		ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed/*, labelColumnWidth*/);
+//		ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
+//
+//		container.foreachParam([](auto& c, auto id) { imguiPropertyPanel(c, id); });
+//
+//		ImGui::EndTable();
+//	}
+//}
 
-template <typename E, typename C>
-	requires(std::is_enum_v<E>)
-void imguiPropertyPanel(C& container, dk::common::id_t<E>) {
-	// Get enum names
-	static std::array<const char*, magic_enum::enum_count<E>()> names = [] {
-		std::array<const char*, magic_enum::enum_count<E>()> res{};
-		for (int i = 0; i < magic_enum::enum_count<E>(); ++i)
-			res[i] = magic_enum::enum_name(magic_enum::enum_cast<E>(i).value()).data();
-		return res;
-		}();
+void imguiEditValue(const char* id, float& value)
+{
+	ImGui::DragFloat(id, &value, 0.1f);
+}
 
-	// Get current value
-	E current = container.property<E>();
-	int currentInt = static_cast<int>(current);
+void imguiEditValue(const char* id, std::string& string)
+{
+	constexpr size_t bufferSize = 256;
+	char buffer[bufferSize];
+	std::snprintf(buffer, bufferSize, "%s", string.c_str());
 
-	// Show combo box
-	ImGui::TableNextRow();
-	ImGui::TableSetColumnIndex(0);
-	ImGui::Text(magic_enum::enum_type_name<E>().data());
-	ImGui::TableSetColumnIndex(1);
+	if (ImGui::InputText(id, buffer, bufferSize))
+		string = buffer;
+}
+
+template <typename T, glm::qualifier Q>
+void imguiEditValue(const char* id, glm::vec<2, T, Q>& vec)
+{
+	if constexpr (std::is_same_v<T, float>)
+		ImGui::DragFloat2(id, &vec.x, 0.1f);
+	else if constexpr (std::is_same_v<T, double>)
+		ImGui::DragScalarN(id, ImGuiDataType_Double, &vec.x, 2, 0.1);
+	else if constexpr (std::is_integral_v<T>)
+		ImGui::DragScalarN(id, ImGuiDataType_S32, &vec.x, 2, 1.0f);
+}
+
+template <typename E>
+	requires (std::is_enum_v<E>)
+void imguiEditValue(E& value)
+{
+	using namespace magic_enum;
+
+	auto names = enum_names<E>();
+	int current = static_cast<int>(value);
+	int index = enum_index(value).value_or(0);
+
 	std::string comboLabel = std::format("##{}_selector", magic_enum::enum_type_name<E>().data());
-	ImGui::SetNextItemWidth(-1);
-	if (ImGui::Combo(comboLabel.c_str(), &currentInt, names.data(), magic_enum::enum_count<E>()))
-	{
-		E en = magic_enum::enum_cast<E>(currentInt).value();
-		container.property(en);
+
+	// Convert names to ImGui-compatible array
+	if (ImGui::BeginCombo(comboLabel.c_str(), names[index].data())) {
+		for (int i = 0; i < static_cast<int>(names.size()); ++i) {
+			bool selected = (i == index);
+			if (ImGui::Selectable(names[i].data(), selected)) {
+				value = enum_value<E>(i);
+			}
+			if (selected)
+				ImGui::SetItemDefaultFocus();
+		}
+		ImGui::EndCombo();
 	}
 }
 
 template <typename C>
-glm::ivec2 imguiPropertyPanel(C& container, const char* name, const glm::ivec2& _current) {
-	glm::ivec2 current = _current;
+void imguiEditConfig(C& config)
+{
+	config.for_each([&config](const auto& prop) { 
+		ImGui::Text(C::property_name(prop).data());
+		ImGui::SameLine();
 
-	// Create array for ImGui input
-	int values[2] = { current.x, current.y };
-
-	// Show input for ivec2
-	ImGui::TableNextRow();
-	ImGui::TableSetColumnIndex(0);
-	ImGui::Text(name);
-	ImGui::TableSetColumnIndex(1);
-
-	std::string inputLabel = std::format("##{}_selector", name);
-	ImGui::SetNextItemWidth(-1);
-	if (ImGui::InputInt2(inputLabel.c_str(), values)) {
-		current = glm::ivec2(values[0], values[1]);
-	}
-	return current;
-}
-
-template <typename C>
-std::string imguiPropertyPanel(C& container, const char* name, const std::string& _current) {
-	std::string current = _current;
-
-	// Create a buffer for ImGui input (ImGui needs a char buffer)
-	static char buffer[256];
-	std::strncpy(buffer, current.c_str(), sizeof(buffer) - 1);
-	buffer[sizeof(buffer) - 1] = '\0'; // Ensure null termination
-
-	// Show input text box
-	ImGui::TableNextRow();
-	ImGui::TableSetColumnIndex(0);
-	ImGui::Text(name);
-	ImGui::TableSetColumnIndex(1);
-
-	std::string inputLabel = std::format("##{}_selector", name);
-	ImGui::SetNextItemWidth(-1);
-	if (ImGui::InputText(inputLabel.c_str(), buffer, sizeof(buffer))) {
-		current = std::string(buffer);
-	}
-	return current;
-}
-
-template <typename E, typename C>
-	requires(!std::is_enum_v<E> && requires{ typename E::type; })
-void imguiPropertyPanel(C& container, dk::common::id_t<E>) {
-	E current = container.property<E>();
-	E en = E(imguiPropertyPanel<C>(container, details::common::propertyName<E>(), (typename E::type)(current)));
-	container.property(en);
-}
-
-template <typename E, typename C>
-void imguiPropertyPanel(C& container) {
-	imguiPropertyPanel<E>(container, dk::common::id_t<E>{});
-}
-
-void imguiPropertiesPanel(auto& container, float labelColumnWidth) {
-	if (ImGui::BeginTable("Properties", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)) {
-		ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed/*, labelColumnWidth*/);
-		ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
-
-		container.foreachParam([](auto& c, auto id) { imguiPropertyPanel(c, id); });
-
-		ImGui::EndTable();
-	}
+		dk::common::overload {
+			[&config](const dk::common::UniquePropertySpecialization auto& prop) {
+				auto value = prop.value;
+				imguiEditValue(C::property_name(prop).data(), value);
+				config(std::decay_t<decltype(prop)>(value));
+			},
+			[&config](const auto& prop) {
+				auto value = prop;
+				imguiEditValue(value);
+				config(std::decay_t<decltype(prop)>(value));
+			}
+		}(prop);
+	});
 }
 
 template <typename T>
@@ -269,24 +342,27 @@ class Example01 {
 public:
 	void run()
 	{
-		dk::gfx::VertexSink textVertexSink(dk::common::id<dk::gfx::Font::CharVertex>);
+		using namespace dk::gfx;
+		using namespace dk::io;
 
-		dk::gfx::Texture sceneOutTexture = [&] {
-			const auto windowSize = m_window.property<dk::io::properties::window::size>();
-			return dk::gfx::Texture::create(windowSize.x, windowSize.y, 4);
+		Texture sceneOutTexture = [&] {
+			const glm::ivec2 windowSize = m_window.config.get<Window::Size>();
+			return Texture::create(windowSize.x, windowSize.y, 4);
 		}();
-		dk::gfx::Texture sceneOutDepth = [&] {
-			const auto windowSize = m_window.property<dk::io::properties::window::size>();
-			return dk::gfx::Texture::create(windowSize.x, windowSize.y, 5);
+		Texture sceneOutDepth = [&] {
+			const glm::ivec2 windowSize = m_window.config.get<Window::Size>();
+			return Texture::create(windowSize.x, windowSize.y, 5);
 		}();
-		dk::gfx::FrameBuffer sceneFrameBuffer;
+		FrameBuffer sceneFrameBuffer;
 		sceneFrameBuffer.attachColor(sceneOutTexture, 0);
 		sceneFrameBuffer.attachDepth(sceneOutDepth);
+		sceneFrameBuffer.config(FrameBuffer::DepthTest::Enabled);
+		sceneFrameBuffer.config(FrameBuffer::DepthFunc::Lequal);
 
 		while (m_window.isOpen()) {
 			const auto& frame = m_window.beginFrame();
 			// Clear backbuffer
-			sceneFrameBuffer.clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0x1e1e1eff));
+			sceneFrameBuffer.clear(FrameBuffer::ClearMask::Color | FrameBuffer::ClearMask::Depth, DK_COLOR(0x1e1e1eff));
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color, DK_COLOR(0x1e1e1eff));
 			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0xffffffff));
 
@@ -303,6 +379,8 @@ public:
 				static AssetSelector<dk::gfx::Texture> planetTextureSelector("textures/planets/mars.png");
 				//auto& planetTexture = m_assets.get<dk::gfx::Texture>(assetPath("planet_texture"));
 				auto& planetTexture = planetTextureSelector.get(m_assets);
+				planetTexture.config(Texture::MinFilter::Linear);
+				planetTexture.config(Texture::MagFilter::Linear);
 				auto slot = m_shaders["planet"].textures().emptySlot();
 				m_shaders["planet"].uniformTexture("u_texture", planetTexture);
 				if (&planetTexture == &m_assets.get<dk::gfx::Texture>("textures/planets/earth.png")) {
@@ -329,7 +407,7 @@ public:
 			// Draw asteroids
 			m_shaders["asteroid"].uniforms() << m_ucCamera;
 			auto& asteroidTexture = m_assets.get<dk::gfx::Texture>(assetPath("asteroid_texture"));
-			asteroidTexture.property(dk::gfx::properties::min_filter::nearest_mipmap_linear);
+			asteroidTexture.config(Texture::MinFilter::NearestMipmapLinear);
 			m_shaders["asteroid"].uniformTexture("u_texture", asteroidTexture);
 			auto& asteroidMesh = *m_assets.get<dk::gfx::Scene>(assetPath("asteroid_model")).meshes().begin();
 			m_shaders["asteroid"].layout(asteroidMesh.vertices, dk::gfx::perInstance(m_meteors));
@@ -354,7 +432,7 @@ public:
 			if (dk::io::key::esc) m_window.close();
 			// Toggle fullscreen with the f key
 			if (dk::io::key::f(dk::io::currentInputState()) && !dk::io::key::f(dk::io::previousInputState()))
-				m_window.property(dk::common::toggle(m_window.property<dk::io::properties::window::mode>()));
+				m_window.config(dk::common::toggle(m_window.config.get<dk::io::Window::Mode>()));
 
 			if (ImGui::Begin("FrameBuffer")) {
 				sceneOutTexture.showAsImGuiImage();
@@ -378,6 +456,9 @@ public:
 
 	void setup()
 	{
+		using namespace dk::io;
+		using namespace dk::gfx;
+
 		// Parse ini file
 		auto ini = [] {
 			mINI::INIFile file(dk::common::executable_path().parent_path() / "examples.ini");
@@ -387,10 +468,14 @@ public:
 		}();
 
 		// Open window
-		m_window.property(dk::io::properties::window::theme::dark);
 		m_window.open(4);
-		m_window.property(dk::io::properties::window::vsync::disabled);
-		dk::gfx::backBuffer().property(dk::gfx::properties::multisampling::enabled);
+		m_window.config(Window::Resize::Enabled);
+		m_window.config(Window::Theme::Dark);
+		m_window.config(Window::VSync::Disabled);
+		dk::gfx::backBuffer().config(FrameBuffer::Multisample::Enabled);
+		dk::gfx::backBuffer().config(FrameBuffer::SampleShading::Enabled);
+		dk::gfx::backBuffer().config(FrameBuffer::DepthTest::Enabled);
+		dk::gfx::backBuffer().config(FrameBuffer::DepthFunc::Lequal);
 
 		// Register asset types
 		m_assets.root(ini["data"]["path"] , false);
@@ -407,7 +492,6 @@ public:
 			node = YAML::LoadFile(path);
 			spdlog::info("{}", YAML::Dump(node));
 		});
-		m_assets.type<dk::gfx::Font>("ttf", dk::gfx::Font::load);
 		using JsonFStream = dk::io::FileStream<nlohmann::json>;
 		m_assets.type<nlohmann::json>("json", JsonFStream::load, JsonFStream::update, JsonFStream::save);
 		
@@ -418,14 +502,8 @@ public:
 		m_shaders.insert("rgba", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rgba_vs.glsl", "/shaders/rgba_fs.glsl"));
 		m_shaders.insert("text", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/text_vs.glsl", "/shaders/text_fs.glsl"));
 		m_shaders.insert("planet", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/mesh_vs.glsl", "/shaders/textured_fs.glsl"));
-		m_shaders["planet"].property(dk::gfx::properties::depth_test::enabled);
 		m_shaders.insert("asteroid", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/instanced_mesh_vs.glsl", "/shaders/asteroid_fs.glsl"));
-		m_shaders["asteroid"].property(dk::gfx::properties::depth_test::enabled);
-		m_shaders["asteroid"].property(dk::gfx::properties::blend::disabled);
-		m_shaders["asteroid"].property(dk::gfx::properties::sample_shading::enabled);
 		m_shaders.insert("skybox", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/skybox_vs.glsl", "/shaders/skybox_fs.glsl"));
-		m_shaders["skybox"].property(dk::gfx::properties::depth_test::enabled);
-		m_shaders["skybox"].property(dk::gfx::properties::depth_func::lequal);
 
 		// Load skybox
 		m_skybox = std::make_unique<dk::gfx::Texture>(std::move(dk::gfx::Texture::loadCubeMap({
@@ -436,7 +514,7 @@ public:
 			(m_assets.root() / "textures/skyboxes/stars/front.png").string(),
 			(m_assets.root() / "textures/skyboxes/stars/back.png").string()
 		})));
-		m_skybox->property(dk::gfx::properties::min_filter::linear);
+		m_skybox->config(Texture::MinFilter::Linear);
 
 		// Bind camera
 		m_ucCamera.bind("u_camera.VP",        [&]() -> glm::mat4 { return m_camera.P() * m_camera.V(); });
@@ -492,11 +570,12 @@ private:
 	{
 		ImGui::Begin("Properties");
 		if (ImGui::CollapsingHeader("Backbuffer", ImGuiTreeNodeFlags_DefaultOpen))
-			imguiPropertiesPanel(dk::gfx::backBuffer(), 40.f);
+			imguiEditConfig(dk::gfx::backBuffer().config);
 		if (ImGui::CollapsingHeader("Window", ImGuiTreeNodeFlags_DefaultOpen))
-			imguiPropertiesPanel(m_window, 40.f);
-		if (ImGui::CollapsingHeader("Globe Texture", ImGuiTreeNodeFlags_DefaultOpen))
-			imguiPropertiesPanel(m_assets.get<dk::gfx::Texture>(assetPath("planet_texture")), 40.f);
+			imguiEditConfig(m_window.config);
+		//if (ImGui::CollapsingHeader("Globe Texture", ImGuiTreeNodeFlags_DefaultOpen))
+		//	imguiEditConfig(m_window.config);
+		//	imguiPropertiesPanel(m_assets.get<dk::gfx::Texture>(assetPath("planet_texture")), 40.f);
 		ImGui::DragFloat("##fov", &m_camera.fov, 0.01, 0, 3.1415);
 		ImGui::End();
 	}

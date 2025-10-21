@@ -8,30 +8,33 @@
 #include <devkit/gfx/texture.h>
 #include <devkit/gfx/viewport.h>
 
-namespace dk::gfx::properties {
-enum class multisampling { disabled, enabled };
-}
-
-namespace details::gfx {
-
-template <typename D>
-using FrameBufferProperties = dk::common::DeferredPropertyCollection<D, 
-	dk::gfx::properties::backface_culling,
-	dk::gfx::properties::depth_test,
-	dk::gfx::properties::depth_func,
-	dk::gfx::properties::multisampling>;
-
-}
-
 namespace dk::gfx {
 
 class FrameBuffer 
-	: public details::gfx::FrameBufferProperties<FrameBuffer> 
 {
 private:
 	using opt_texture_ref_t = std::optional<std::reference_wrapper<Texture>>;
 
 	struct backbuffer_t {};
+
+public:
+	enum class DepthTest      { Disabled, Enabled };
+	enum class DepthFunc      { Less, Never, Equal, Lequal, Greater, NotEqual, Gequal, Always };
+	enum class Blend          { Disabled, Enabled };
+	enum class SrcBlendFactor { One, Zero, SrcAlpha, OneMinusSrcAlpha };
+	enum class DstBlendFactor { Zero, One, SrcAlpha, OneMinusSrcAlpha };
+	enum class CullFace       { Disabled, Enabled };
+	enum class ScissorTest    { Disabled, Enabled };
+	enum class Multisample    { Disabled, Enabled };
+	enum class SampleShading  { Disabled, Enabled };
+	using      LineWidth      = common::UniqueProperty<float, "LineWidth">;
+	using      PointSize      = common::UniqueProperty<float, "PointSize">;
+
+	class Config : DK_CONFIG_SPECIALIZATION(FrameBuffer, 
+		DepthTest, DepthFunc, Blend, SrcBlendFactor, DstBlendFactor, CullFace, 
+		ScissorTest, Multisample, SampleShading, LineWidth, PointSize);
+
+	Config config;
 
 public:
 	enum class ClearMask { Color = 0x00004000, Depth = 0x00000100 };
@@ -76,6 +79,8 @@ private:
 
 	std::optional<Viewport>      m_viewport;
 
+	inline static std::unordered_map<const void*, Config> s_currentContextConfig{};
+
 	FrameBuffer(backbuffer_t);
 
 	void initializeOrUpdate();
@@ -83,6 +88,9 @@ private:
 	void makeActive();
 
 	friend FrameBuffer& backBuffer();
+
+	template<typename P> 
+	friend void setFrameBufferProperty(FrameBuffer&, const P&);
 };
 
 FrameBuffer& backBuffer();

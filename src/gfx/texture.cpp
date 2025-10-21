@@ -85,8 +85,6 @@ void dk::gfx::Texture::makeActive(int unit)
 
     // Bind texture
     glBindTexture(details::gfx::toUnderlying(m_type), m_handle);
-
-    callPropertySetters(true);
 }
 
 dk::gfx::Texture::Type dk::gfx::Texture::type() const
@@ -115,15 +113,6 @@ int toInternalFormat(int channels)
     if (channels == 5) return GL_DEPTH_COMPONENT;
 }
 
-bool isMipMapMinFilter(const dk::gfx::properties::min_filter& min_filter)
-{
-    if (min_filter == dk::gfx::properties::min_filter::linear_mipmap_linear) return true;
-    if (min_filter == dk::gfx::properties::min_filter::linear_mipmap_nearest) return true;
-    if (min_filter == dk::gfx::properties::min_filter::nearest_mipmap_linear) return true;
-    if (min_filter == dk::gfx::properties::min_filter::nearest_mipmap_nearest) return true;
-    return false;
-}
-
 dk::gfx::Texture::Texture()
     : AttachmentBase()
 { }
@@ -136,54 +125,61 @@ void dk::gfx::Texture::initializeOrUpdate()
         glBindTexture(details::gfx::toUnderlying(m_type), m_handle);
 
         // Set default filtering
-        glTexParameteri(details::gfx::toUnderlying(m_type), GL_TEXTURE_MIN_FILTER, details::gfx::toUnderlying(property<dk::gfx::properties::min_filter>()));
-        glTexParameteri(details::gfx::toUnderlying(m_type), GL_TEXTURE_MAG_FILTER, details::gfx::toUnderlying(property<dk::gfx::properties::mag_filter>()));
-        if (m_handle && isMipMapMinFilter(property<dk::gfx::properties::min_filter>()))
-            glGenerateMipmap(details::gfx::toUnderlying(m_type));
+        glTexParameteri(details::gfx::toUnderlying(m_type), GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(details::gfx::toUnderlying(m_type), GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     }
     else {
         glBindTexture(details::gfx::toUnderlying(m_type), m_handle);
     }
 
-    if (!m_resized)
-        return;
-    m_resized = false;
+    if (m_resized)
+    {
+        m_resized = false;
 
-    if (!m_opt_pixels.has_value()) { 
-        // Create empty texture
-#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-#endif
-        glTexImage2D(details::gfx::toUnderlying(m_type), 0, toInternalFormat(m_channels), (unsigned)m_size.x, (unsigned)m_size.y, 0, toInternalFormat(m_channels), GL_UNSIGNED_BYTE, nullptr);
-        return;
-    }
-    std::visit(dk::common::overload {
-        // Load normal texture
-        [this](const std::vector<uint8_t>& pixels) {
+        if (!m_opt_pixels.has_value()) { 
+            // Create empty texture
 #if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 #endif
-            glTexImage2D(GL_TEXTURE_2D, 0, toInternalFormat(m_channels), (unsigned)m_size.x, (unsigned)m_size.y, 0, toInternalFormat(m_channels), GL_UNSIGNED_BYTE, pixels.data());
-        },
-        // Load cube map
-        [this](const std::array<std::vector<uint8_t>, 6>& faces) {
-            for (int i = 0; i < faces.size(); ++i) {
+            glTexImage2D(details::gfx::toUnderlying(m_type), 0, toInternalFormat(m_channels), (unsigned)m_size.x, (unsigned)m_size.y, 0, toInternalFormat(m_channels), GL_UNSIGNED_BYTE, nullptr);
+            return;
+        }
+        std::visit(dk::common::overload {
+            // Load normal texture
+            [this](const std::vector<uint8_t>& pixels) {
 #if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
                 glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 #endif
-                glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
-                    0, toInternalFormat(m_channels), (unsigned)m_size.x, (unsigned)m_size.y, 0, toInternalFormat(m_channels), GL_UNSIGNED_BYTE, faces.at(i).data()
-                );
+                glTexImage2D(GL_TEXTURE_2D, 0, toInternalFormat(m_channels), (unsigned)m_size.x, (unsigned)m_size.y, 0, toInternalFormat(m_channels), GL_UNSIGNED_BYTE, pixels.data());
+            },
+            // Load cube map
+            [this](const std::array<std::vector<uint8_t>, 6>& faces) {
+                for (int i = 0; i < faces.size(); ++i) {
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+                    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+                    glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
+                        0, toInternalFormat(m_channels), (unsigned)m_size.x, (unsigned)m_size.y, 0, toInternalFormat(m_channels), GL_UNSIGNED_BYTE, faces.at(i).data()
+                    );
+                }
             }
-        }
-    }, m_opt_pixels.value());
+        }, m_opt_pixels.value());
+    }
+
+    // Call property setters
+    config.for_each([&](const auto& prop) {
+        if (!config.dirty(prop))
+            return;
+        spdlog::debug("Texture.{}={}", Config::property_name(prop), std::format("{}", prop));
+        setTextureProperty(*this, prop);
+        });
+    config.reset_dirty();
 }
 
 void dk::gfx::Texture::attachAs(FrameBuffer& buffer, unsigned underlyingAttachmentIndex)
 {
     initializeOrUpdate();
     glFramebufferTexture2D(GL_FRAMEBUFFER, underlyingAttachmentIndex, details::gfx::toUnderlying(m_type), m_handle, 0);
-    callPropertySetters(true);
 }
 
 dk::gfx::TextureUnit::SlotRef::SlotRef(TextureUnit& unit, int slot)
@@ -244,39 +240,41 @@ void dk::gfx::TextureUnit::makeActive()
     }
 }
 
-template <>
-void details::common::setProperty(dk::gfx::Texture& texture, const dk::gfx::properties::min_filter& min_filter)
+template<>
+void dk::gfx::setTextureProperty(dk::gfx::Texture& texture, const Texture::MinFilter& minFilter)
 {
-    glTexParameteri(details::gfx::toUnderlying(texture.type()), GL_TEXTURE_MIN_FILTER, details::gfx::toUnderlying(min_filter));
-    if (texture.m_handle && isMipMapMinFilter(min_filter)) {
+    const auto [underlying, isMipmap] = [&] {
+        switch (minFilter)
+        {
+        case Texture::MinFilter::Nearest             : return std::make_pair(GL_NEAREST               , false);
+        case Texture::MinFilter::Linear              : return std::make_pair(GL_LINEAR                , false);
+        case Texture::MinFilter::LinearMipmapLinear  : return std::make_pair(GL_LINEAR_MIPMAP_LINEAR  , true);
+        case Texture::MinFilter::LinearMipmapNearest : return std::make_pair(GL_LINEAR_MIPMAP_NEAREST , true);
+        case Texture::MinFilter::NearestMipmapLinear : return std::make_pair(GL_NEAREST_MIPMAP_LINEAR , true);
+        case Texture::MinFilter::NearestMipmapNearest: return std::make_pair(GL_NEAREST_MIPMAP_NEAREST, true);
+        default: throw std::runtime_error("unknown min filter value");
+        }
+    }();
+
+    glTexParameteri(details::gfx::toUnderlying(texture.type()), GL_TEXTURE_MIN_FILTER, underlying);
+    if (texture.m_handle && isMipmap)
         glBindTexture(details::gfx::toUnderlying(texture.type()), texture.m_handle);
         glGenerateMipmap(details::gfx::toUnderlying(texture.type()));
-    }
 }
 
 template <>
-void details::common::setProperty(dk::gfx::Texture& texture, const dk::gfx::properties::mag_filter& mag_filter)
+void dk::gfx::setTextureProperty(dk::gfx::Texture& texture, const Texture::MagFilter& magFilter)
 {
-    glTexParameteri(details::gfx::toUnderlying(texture.type()), GL_TEXTURE_MAG_FILTER, details::gfx::toUnderlying(mag_filter));
-}
+    const auto underlying = [&] {
+        switch (magFilter)
+        {
+        case Texture::MagFilter::Nearest : return GL_NEAREST;
+        case Texture::MagFilter::Linear  : return GL_LINEAR;
+        default: throw std::runtime_error("unknown min filter value");
+        }
+    }();
 
-int details::gfx::toUnderlying(dk::gfx::properties::min_filter min_filter)
-{
-    switch (min_filter)
-    {
-    case dk::gfx::properties::min_filter::nearest                : return GL_NEAREST;
-    case dk::gfx::properties::min_filter::linear                 : return GL_LINEAR;
-    case dk::gfx::properties::min_filter::linear_mipmap_linear   : return GL_LINEAR_MIPMAP_LINEAR;
-    case dk::gfx::properties::min_filter::linear_mipmap_nearest  : return GL_LINEAR_MIPMAP_NEAREST;
-    case dk::gfx::properties::min_filter::nearest_mipmap_linear  : return GL_NEAREST_MIPMAP_LINEAR;
-    case dk::gfx::properties::min_filter::nearest_mipmap_nearest : return GL_NEAREST_MIPMAP_NEAREST;
-    default: return 0;
-    }
-}
-
-int details::gfx::toUnderlying(dk::gfx::properties::mag_filter mag_filter)
-{
-    return toUnderlying(dk::gfx::properties::min_filter(mag_filter));
+    glTexParameteri(details::gfx::toUnderlying(texture.type()), GL_TEXTURE_MAG_FILTER, underlying);
 }
 
 int details::gfx::toUnderlying(const dk::gfx::Texture::Type& type)

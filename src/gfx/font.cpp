@@ -32,8 +32,8 @@ void dk::gfx::Font::Atlas::textureFromTTF()
     stbtt_PackEnd(packContext);
 
     m_texture = Texture::create(m_atlasSize.x, m_atlasSize.y, std::move(atlasBitmap), 1);
-    m_texture.property(dk::gfx::properties::min_filter::linear);
-    m_texture.property(dk::gfx::properties::mag_filter::linear);
+    m_texture.config(dk::gfx::Texture::MinFilter::Linear);
+    m_texture.config(dk::gfx::Texture::MagFilter::Linear);
 }
 
 dk::gfx::Font::Atlas::Atlas(Font& font, float size, int atlasWidth, int atlasHeight)
