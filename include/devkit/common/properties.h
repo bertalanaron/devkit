@@ -1,151 +1,197 @@
 #pragma once
 #include <devkit/common/utils.h>
 
-#define DK_DECL_DERIVED_PROP(name, ns, base, ...)                \
-	struct name : ns::base {                                     \
-		using type = ns::base;                                   \
-        using ns::base::base;                                    \
-        name() : ns::base(__VA_ARGS__) { }                       \
-		name(const ns::base& v) : ns::base(v) { }                \
-		inline static std::string Name = #name;                  \
-    }                                                            \
-	/* end of macro */
-#define DK_DECL_NUMERIC_PROPERTY(name, base, defaultValue)       \
-	struct name  {                                               \
-		using type = base;                                       \
-		type value = defaultValue;                               \
-		name(base v) : value(v) { }								 \
-		name& operator=(base v) { value = v; return *this; }	 \
-		operator base() const { return value; }					 \
-		inline static std::string Name = #name;                  \
-	}															 \
-	/* end of macro */
-
-namespace details::common {
-
-template <typename D, typename Property>
-void setProperty(D& object, const Property& property);
-
-template <typename P>
-	requires(std::is_enum_v<P>)
-constexpr const char* propertyName() {
-	return magic_enum::enum_type_name<P>().data();
-}
-
-template <typename P>
-	requires(!std::is_enum_v<P>)
-constexpr const char* propertyName() {
-	return P::Name.data();
-}
-
-}
-
 namespace dk::common {
 
-template <typename D, typename... Es>
-class DeferredPropertyCollection {
-private:
-	struct storage_t {
-		using setter_t = std::function<void(const std::any&)>;
+template <typename T, string_literal Name>
+struct UniqueProperty {
+	using type = T;
 
-		std::any data;
-		setter_t setter;
-		bool     updated;
-	};
-	
-public:
-	template <dk::common::OfList<Es...> E>
-	void property(E prop) 
-	{
-		// Return if data hasn't changed
-		auto it = m_properties.find(typeid(E));
-		if (it != m_properties.end() && std::any_cast<E>(it->second.data) == prop)
-			return;
-			
-		// Insert or update property 
-		m_properties[typeid(E)] = storage_t{
-			.data = prop,
-			.setter = [=](const std::any& data) {
-				E prop = std::any_cast<E>(data);
-				details::common::setProperty<D, E>(*static_cast<D*>(this), prop); 
-			},
-			.updated = true
-		};
-	}
+	inline static constexpr auto property_name = Name;
 
-	template <dk::common::OfList<Es...>... Ess>
-	void properties(Ess... props)
-	{
-		(property(props), ...);
-	}
+	type value;
 
-	template <dk::common::OfList<Es...> E>
-	E property() const
-	{
-		auto it = m_properties.find(typeid(E));
-		if (it != m_properties.end())
-			return std::any_cast<E>(it->second.data);
-		return {};
-	}
+	UniqueProperty() = default;
 
-	// @brief Calls the provided functor with a reference to the container and an id type of each parameter
-	template <typename F>
-	void foreachParam(F f) 
-	{
-		(f(static_cast<D&>(*this), id_t<Es>{}), ...);
-		//foreachParamImpl<F, Es...>(f);
-	}
+	UniqueProperty(T&& _value)
+		: value(std::forward<decltype(_value)>(_value))
+	{ }
 
-protected:
-	void callPropertySetters(bool force = false) {
-		for (auto& [_, storage] : m_properties) {
-			if (!force && !storage.updated)
-				continue;
-			storage.setter(storage.data);
-			storage.updated = false;
-		}
-	}
+	template <typename... Ts>
+		requires (std::is_constructible_v<T, Ts...>)
+	UniqueProperty(Ts&&... initializers)
+		: value(std::forward<decltype(initializers)>(initializers)...)
+	{ }
 
-	//template <typename E>
-	//	requires(requires { typename E::type; })
-	//auto getId_t() {
-	//	return id_t<typename E::type>{};
-	//}
+	UniqueProperty& operator=(T&& _value)
+	{ value = std::forward<decltype(_value)>(_value); }
 
-	//template <typename E>
-	//	requires(not requires { typename E::type; })
-	//auto getId_t() {
-	//	return id_t<E>{};
-	//}
+	bool operator==(const UniqueProperty&) const = default;
 
-	//template <typename F, typename... Ess>
-	//void foreachParamImpl(F f) {
-	//	(f(static_cast<D&>(*this), getId_t<Ess>()), ...);
-	//}
-
-	template <dk::common::OfList<Es...> E>
-	void propertyChanged(E prop) 
-	{
-		// Update if exists
-		auto it = m_properties.find(typeid(E));
-		if (it != m_properties.end()) {
-			it->second.data = prop;
-			return;
-		}
-
-		// Insert or update property 
-		m_properties[typeid(E)] = storage_t{
-			.data = prop,
-			.setter = [=](const std::any& data) {
-				E prop = std::any_cast<E>(data);
-				details::common::setProperty<D, E>(*static_cast<D*>(this), prop); 
-			},
-			.updated = false
-		};
-	}
-
-private:
-	std::unordered_map<std::type_index, storage_t> m_properties;
+	operator T&() { return value; }
+	operator const T&() const { return value; }
 };
 
+template <typename T>
+struct is_unique_property : std::false_type {};
+
+template <typename U, string_literal Name>
+struct is_unique_property<UniqueProperty<U, Name>> : std::true_type {};
+
+template <typename T>
+concept UniquePropertySpecialization = is_unique_property<std::remove_cvref_t<T>>::value;
+
+template <typename T, string_literal Name>
+struct std::formatter<UniqueProperty<T, Name>> : std::formatter<T> {
+	template <typename FormatContext>
+	auto format(const dk::common::UniqueProperty<T, Name>& prop, FormatContext& ctx) const {
+		return std::formatter<T>::format(prop.value, ctx);
+	}
+};
+
+template <typename T, string_literal Name>
+inline void to_json(nlohmann::json& j, const UniqueProperty<T, Name>& p) 
+{ to_json(j, p.value); }
+
+template <typename T, string_literal Name>
+inline void from_json(const nlohmann::json& j, UniqueProperty<T, Name>& p) 
+{ from_json(j, p.value); }
+
+template <typename... Properties>
+class ConfigurationBase {
+private:
+	static_assert(is_each_unique<Properties...>, 
+		"Each property must have a unique type");
+
+	using value_type  = std::tuple<Properties...>;
+	using dirty_flags = std::bitset<sizeof...(Properties)>;
+
+	template <typename Property>
+	inline static constexpr std::size_t property_index = index_of<Property, Properties...>;
+
+public:
+	ConfigurationBase() = default;
+
+	template <OfList<Properties...>... Ts>
+	ConfigurationBase(Ts&&... properties)
+	{ set(std::forward<decltype(properties)>(properties)...); }
+
+	template <OfList<Properties...> Property>
+	void operator()(const Property& value)
+	{
+		constexpr auto index = property_index<Property>;
+		auto& elem = std::get<index>(m_value);
+		const bool changed = !(elem == value);
+		elem = std::forward<decltype(value)>(value);
+		if (changed)
+			m_dirty.set(index, true);
+	}
+
+	template <OfList<Properties...> Property>
+	void set(const Property& value)
+	{
+		constexpr auto index = property_index<Property>;
+		auto& elem = std::get<index>(m_value);
+		const bool changed = !(elem == value);
+		elem = std::forward<decltype(value)>(value);
+		if (changed)
+			m_dirty.set(index, true);
+	}
+
+	template <OfList<Properties...>... Ts>
+	void operator()(const Ts&... values)
+	{ (this->operator()(std::forward<decltype(values)>(values)), ...); }
+
+	template <OfList<Properties...>... Ts>
+	void set(const Ts&... values)
+	{ (this->set(std::forward<decltype(values)>(values)), ...); }
+
+	template <OfList<Properties...> Property>
+	const auto& get() const
+	{
+		constexpr auto index = property_index<Property>;
+		return std::get<index>(m_value);
+	}
+
+	template <OfList<Properties...> First, OfList<Properties...> Second, OfList<Properties...>... Rest>
+	auto get() const -> std::tuple<First, Second, Rest...>
+	{ return std::make_tuple(get<First>(), get<Second>(), get<Rest>()...); }
+
+	template <typename F>
+	void for_each(F&& callable) const 
+	{ 
+		static_assert((std::is_invocable_v<F, Properties> && ...),
+			"Callable must be invokable with each property type.");
+
+		for_each_in_tuple(m_value, callable); 
+	}
+
+	template <OfList<Properties...> P>
+	bool dirty() const { return m_dirty.test(property_index<P>); }
+
+	template <OfList<Properties...> P>
+	bool dirty(const P&) const { return m_dirty.test(property_index<P>); }
+
+	template <OfList<Properties...> P>
+	void reset_dirty() { m_dirty.reset(property_index<P>); }
+
+	void reset_dirty() { m_dirty.reset(); }
+
+	template <OfList<Properties...> E>
+		requires (std::is_enum_v<E>)
+	static std::string_view property_name(const E&)
+	{ return magic_enum::enum_type_name<E>(); }
+
+	template <OfList<Properties...> P>
+		requires requires { { P::property_name }; }
+	static std::string_view property_name(const P&)
+	{ return P::property_name; }
+
+private:
+	dirty_flags m_dirty;
+	value_type  m_value;
+};
+
+template <typename... Properties>
+inline void to_json(nlohmann::json& j, const ConfigurationBase<Properties...>& config)
+{
+	config.for_each([&j](const auto& p) { 
+		j[ConfigurationBase<Properties...>::property_name(p)] = nlohmann::json(p);
+	});
 }
+
+template <typename... Properties>
+inline void from_json(const nlohmann::json& j, ConfigurationBase<Properties...>& config)
+{
+	config.for_each([&j,&config](const auto& p) { 
+		using P = std::decay_t<decltype(p)>;
+		config(std::move(j[ConfigurationBase<Properties...>::property_name(p)].template get<P>()));
+	});
+}
+
+} // namespace dk::common
+
+#define DK_CONFIG_SPECIALIZATION(owner, ...)                        \
+	 private common::ConfigurationBase<__VA_ARGS__> {               \
+	private:                                                        \
+	using Base = common::ConfigurationBase<__VA_ARGS__>;	        \
+																	\
+	public:															\
+		using ConfigurationBase::operator();						\
+		using ConfigurationBase::set;								\
+		using ConfigurationBase::get;								\
+		using ConfigurationBase::for_each;							\
+		using ConfigurationBase::property_name;                     \
+																	\
+		inline friend void to_json(nlohmann::json& j, const Config& config) \
+		{ to_json(j, (const Base&)config); }						\
+																	\
+		inline friend void from_json(const nlohmann::json& j, Config& config) \
+		{ from_json(j, (Base&)config); }							\
+																	\
+	private:														\
+		using ConfigurationBase::ConfigurationBase;					\
+																	\
+		friend class owner;                                         \
+	} 																\
+	/* end of macro */

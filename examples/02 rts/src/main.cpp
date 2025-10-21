@@ -209,12 +209,11 @@ public:
 		m_assets.synchronize();
 
 		// Setup window
-		m_window.properties(
-			dk::io::properties::window::title("Algo Tester"), 
-			dk::io::properties::window::theme::dark, 
-			dk::io::properties::window::size(1280, 720));
+		m_window.config(dk::io::Window::Title("Algo Tester"));
+		m_window.config(dk::io::Window::Theme::Dark);
 		m_window.open(4);
-		dk::gfx::backBuffer().property(dk::gfx::properties::multisampling::enabled);
+		dk::gfx::backBuffer().config(dk::gfx::FrameBuffer::Multisample::Enabled);
+		dk::gfx::backBuffer().config(dk::gfx::FrameBuffer::DepthTest::Enabled);
 
 		// Setup user inputs
 		m_inputManager.define("shift"             , dk::io::modkey::none + dk::io::button::left);
@@ -223,12 +222,7 @@ public:
 
 		// Create shaders
 		m_shaders.insert("rgba", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rgba_vs.glsl", "/shaders/rgba_fs.glsl"));
-		m_shaders["rgba"].property(dk::gfx::properties::depth_test::enabled);
 		m_shaders.insert("text", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/text_vs.glsl", "/shaders/text_fs.glsl"));
-		m_shaders["text"].property(dk::gfx::properties::depth_test::enabled);
-		m_shaders["text"].property(dk::gfx::properties::blend::enabled);
-		m_shaders["text"].property(dk::gfx::properties::blend_func_src_factor::src_alpha);
-		m_shaders["text"].property(dk::gfx::properties::blend_func_dst_factor::one_minus_src_alpha);
 
 		// Setup camera
 		m_camera.lookat   = glm::vec3(0,0,-.1);
@@ -273,7 +267,7 @@ public:
 
 			// Toggle fullscreen with the f key
 			if (m_inputManager.activated("toggle_fullscreen"))
-				m_window.property(dk::common::toggle(m_window.property<dk::io::properties::window::mode>()));
+				m_window.config(dk::common::toggle(m_window.config.get<dk::io::Window::Mode>()));
 			// Close window with the esc key
 			if (dk::io::key::esc) m_window.close();
 

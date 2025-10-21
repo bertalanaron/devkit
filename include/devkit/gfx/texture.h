@@ -4,25 +4,6 @@
 #include <devkit/gfx/attachment_base.h>
 #include <devkit/gfx/api_resources.h>
 
-namespace dk::gfx::properties {
-
-enum class min_filter { nearest, linear, linear_mipmap_linear, linear_mipmap_nearest, nearest_mipmap_linear, nearest_mipmap_nearest };
-enum class mag_filter { nearest, linear };
-
-}
-
-namespace details::gfx {
-
-template <typename D>
-using TextureProperties = dk::common::DeferredPropertyCollection<D, 
-	dk::gfx::properties::min_filter,
-	dk::gfx::properties::mag_filter>;
-
-int toUnderlying(dk::gfx::properties::min_filter);
-int toUnderlying(dk::gfx::properties::mag_filter);
-
-}
-
 namespace dk::gfx {
 
 class FrameBuffer;
@@ -48,10 +29,16 @@ protected:
 
 class Texture
 	: public RenderTarget
-	, public details::gfx::TextureProperties<Texture>
 {
-protected:
-	using Initializer = std::optional<std::function<void(unsigned, Texture*)>>;
+
+public:
+	enum class MinFilter { Nearest, Linear, LinearMipmapLinear, LinearMipmapNearest, NearestMipmapLinear, NearestMipmapNearest };
+	enum class MagFilter { Nearest, Linear };
+
+	class Config : DK_CONFIG_SPECIALIZATION(Texture,
+		MinFilter, MagFilter);
+
+	Config config;
 
 public:
 	Texture(api::TextureType type, Channels channels)
@@ -62,6 +49,8 @@ public:
 	unsigned handle();
 
 protected:
+	using Initializer = std::optional<std::function<void(unsigned, Texture*)>>;
+
 	api::TextureType m_type;
 	api::Texture     m_apiHandle;
 	Channels         m_channels;
@@ -69,8 +58,10 @@ protected:
 
 	void bindToUnit(unsigned unit);
 
-	template <typename D, typename E>
-	friend void details::common::setProperty(D&, const E&);
+	void updateConfig();
+
+	template <typename P>
+	friend void setTextureProperty(Texture&, const P&);
 
 	friend class TextureUnit;
 };
@@ -100,14 +91,14 @@ private:
 	{ return { m_size, 1, 1 }; }
 };
 
-class Texture2D 
+class Texture2D
 	: public Texture
 {
 public:
 	Texture2D(Texture2D&&)            = default;
 	Texture2D& operator=(Texture2D&&) = default;
 
-	Texture2D() 
+	Texture2D()
 		: Texture(api::TextureType::Unset, Channels::R)
 	{ }
 
@@ -136,7 +127,7 @@ public:
 	Cubemap(Cubemap&&)            = default;
 	Cubemap& operator=(Cubemap&&) = default;
 
-	Cubemap() 
+	Cubemap()
 		: Texture(api::TextureType::Unset, Channels::R)
 	{ }
 

@@ -20,6 +20,7 @@
 #include <deque>
 #include <queue>
 #include <numbers>
+#include <bitset>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/async.h>
@@ -81,11 +82,34 @@ namespace dk::common {
 template <typename T, typename... Ts>
 concept OfList = (std::same_as<T, Ts> || ...);
 
+template <typename T, typename... Ts>
+constexpr bool is_of_list = false;
+
+template <typename T, typename... Ts>
+	requires OfList<T, Ts...>
+constexpr bool is_of_list<T, Ts...> = true;
+
 template <typename T>
 struct id_t { using type = T; };
 
 template <typename T>
 constexpr auto id = id_t<T>{};
+
+template <typename, template <typename...> typename>
+constexpr bool is_specialization_of = false;
+
+template <template <typename...> typename Base, typename... Args>
+constexpr bool is_specialization_of<Base<Args...>, Base> = true;
+
+template <typename...>
+constexpr bool is_each_unique = true;
+
+template <typename T, typename... Rest>
+constexpr bool is_each_unique<T, Rest...> =
+(!std::is_same_v<T, Rest> && ...) && is_each_unique<Rest...>;
+
+template <typename... Ts>
+constexpr bool is_each_unique<std::tuple<Ts...>> = is_each_unique<Ts...>;
 
 template <typename... Ts>
 using reverse_tuple = decltype(details::common::_reverse_tuple(std::tuple<Ts...>()));
@@ -96,6 +120,23 @@ constexpr auto reverse_args(const Ts&... args) {
 	constexpr auto N = sizeof...(Ts);
 	return details::common::_reverse_args_impl(original, details::common::_reverse_index_sequence(std::make_index_sequence<N>{}));
 }
+
+template <typename Tuple, typename F>
+constexpr void for_each_in_tuple(Tuple&& t, F&& f)
+{
+	std::apply([&f](auto&&... elems) { (f(std::forward<decltype(elems)>(elems)), ...); },
+		std::forward<decltype(t)>(t));
+}
+
+template <typename T, typename... Ts>
+	requires (is_each_unique<Ts...>)
+constexpr std::size_t index_of =
+	[]<std::size_t... Is>(std::index_sequence<Is...>) {
+		constexpr bool matches[] = { std::is_same_v<T, Ts>... };
+		for (std::size_t i = 0; i < sizeof...(Ts); ++i)
+			if (matches[i]) return i;
+		return static_cast<std::size_t>(-1);
+	}(std::index_sequence_for<Ts...>{});
 
 template <typename E>
 	requires(std::is_enum_v<E>)
@@ -112,6 +153,8 @@ struct string_literal {
 	}
 	constexpr string_literal() { };
 	char value[N]{};
+
+	operator std::string_view() const { return value; }
 };
 
 template <unsigned N>
@@ -401,6 +444,23 @@ const T& store_threadlocal_or(const T& fallback)
 }
 
 } // dk::dbg
+
+template <typename T, glm::qualifier Q>
+struct std::formatter<glm::vec<2, T, Q>> : std::formatter<T> {
+	auto format(const glm::vec<2, T, Q>& v, std::format_context& ctx) const {
+		return std::format_to(ctx.out(), "({},{})", v.x, v.y);
+	}
+};
+
+template <typename E>
+	requires (std::is_enum_v<E>)
+struct std::formatter<E> : std::formatter<std::string_view> {
+	template <typename FormatContext>
+	auto format(const E& enum_value, FormatContext& ctx) const {
+		auto enum_name = magic_enum::enum_name(enum_value);
+		return std::formatter<std::string_view>::format(enum_name, ctx);
+	}
+};
 
 namespace nlohmann {
 template <typename Enum>

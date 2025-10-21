@@ -8,44 +8,47 @@
 #include <devkit/gfx/texture.h>
 #include <devkit/gfx/viewport.h>
 
-namespace dk::gfx::properties {
-enum class multisampling { disabled, enabled };
-}
-
-namespace details::gfx {
-
-template <typename D>
-using FrameBufferProperties = dk::common::DeferredPropertyCollection<D, 
-	dk::gfx::properties::backface_culling,
-	dk::gfx::properties::depth_test,
-	dk::gfx::properties::depth_func,
-	dk::gfx::properties::multisampling>;
-
-}
-
 namespace dk::gfx {
 
 enum class Clear { Color = 0x00004000, Depth = 0x00000100 };
 
 inline Clear operator|(Clear a, Clear b) { return Clear((int)a | (int)b); }
 
-class FrameBuffer 
-	: public details::gfx::FrameBufferProperties<FrameBuffer> 
+class FrameBuffer
 {
 private:
 	struct Attachment {
 		void operator=(RenderTarget& _target)
 		{ target = &_target; }
 
-		glm::ivec3 size() const 
+		glm::ivec3 size() const
 		{
 			return (!target.has_value())
-				? glm::ivec3(0, 0, 0) 
-				: target.value()->targetSize();  
+				? glm::ivec3(0, 0, 0)
+				: target.value()->targetSize();
 		}
 
 		std::optional<RenderTarget*> target;
 	};
+
+public:
+	enum class DepthTest      { Disabled, Enabled };
+	enum class DepthFunc      { Less, Never, Equal, Lequal, Greater, NotEqual, Gequal, Always };
+	enum class Blend          { Disabled, Enabled };
+	enum class SrcBlendFactor { One, Zero, SrcAlpha, OneMinusSrcAlpha };
+	enum class DstBlendFactor { Zero, One, SrcAlpha, OneMinusSrcAlpha };
+	enum class CullFace       { Disabled, Enabled };
+	enum class ScissorTest    { Disabled, Enabled };
+	enum class Multisample    { Disabled, Enabled };
+	enum class SampleShading  { Disabled, Enabled };
+	using      LineWidth      = common::UniqueProperty<float, "LineWidth">;
+	using      PointSize      = common::UniqueProperty<float, "PointSize">;
+
+	class Config : DK_CONFIG_SPECIALIZATION(FrameBuffer,
+		DepthTest, DepthFunc, Blend, SrcBlendFactor, DstBlendFactor, CullFace,
+		ScissorTest, Multisample, SampleShading, LineWidth, PointSize);
+
+	Config config;
 
 public:
 	FrameBuffer();
@@ -74,12 +77,17 @@ public:
 	void render(Shader& shader, ElementBuffer& elementBuffer, Primitive primitive, unsigned count = 1);
 
 private:
-	api::FrameBuffer        m_apiHandle; 
+	api::FrameBuffer        m_apiHandle;
 	std::optional<Viewport> m_viewport;
+
+	inline static std::unordered_map<const void*, Config> s_currentContextConfig{};
 
 	void makeActive();
 
 	friend FrameBuffer& backBuffer();
+
+	template<typename P>
+	friend void setFrameBufferProperty(FrameBuffer&, const P&);
 };
 
 FrameBuffer& backBuffer();

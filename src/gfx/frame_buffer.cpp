@@ -54,7 +54,19 @@ void dk::gfx::FrameBuffer::makeActive()
 
 	const Viewport viewport = [&]{ return m_viewport.has_value() ? m_viewport.value() : Viewport(color[0].size()); }();
 	viewport.makeActive();
-	callPropertySetters(true);
+
+	// Bind properties to global gl context
+	config.for_each([&](const auto& prop) {
+		// Skip if value is currently active in the global context
+		auto& currentlyBound = s_currentContextConfig[(const void*)dk::io::GlobalState::currentWindowContext()];
+		if (prop == currentlyBound.get<std::decay_t<decltype(prop)>>())
+			return;
+		// Update gl context
+		//spdlog::debug("FrameBuffer.{}={}", Config::property_name(prop), std::format("{}", prop));
+		setFrameBufferProperty(*this, prop);
+		// Update gl context tracker used for skipping
+		currentlyBound.set<std::decay_t<decltype(prop)>>(prop);
+	});
 	
 	// Set color attachments
 	std::vector<unsigned> activeColorAttachmentIndices;
@@ -86,35 +98,95 @@ dk::gfx::FrameBuffer& dk::gfx::backBuffer()
 	return *fb_ptr;
 }
 
-template <>
-void details::common::setProperty(dk::gfx::FrameBuffer& container, const dk::gfx::properties::backface_culling& bc)
+#define __DK_TABLE_FRAMEBUFFER_TOGGLE_PROPERTY(F, ...)           \
+	/*                                  Type | GL Enum        */ \
+	F( __VA_ARGS__ __VA_OPT__(,) DepthTest   , GL_DEPTH_TEST   ) \
+	F( __VA_ARGS__ __VA_OPT__(,) Blend       , GL_BLEND        ) \
+	F( __VA_ARGS__ __VA_OPT__(,) CullFace    , GL_CULL_FACE    ) \
+	F( __VA_ARGS__ __VA_OPT__(,) ScissorTest , GL_SCISSOR_TEST ) \
+	F( __VA_ARGS__ __VA_OPT__(,) Multisample , GL_MULTISAMPLE  ) \
+	/* end of table */
+#define __DK_GL_ENABLEDISABLE(type, glEnum)                                                        \
+	if (value == std::decay_t<decltype(value)>::Enabled) glEnable(glEnum); else glDisable(glEnum); \
+	/* end of macro */
+#define __DK_FRAMEBUFFER_DECL_GLTOGGLE_PROPERTYSETTER(type, glEnum)                               \
+	template<> void dk::gfx::setFrameBufferProperty(FrameBuffer&, const FrameBuffer::type& value) \
+	{ __DK_GL_ENABLEDISABLE(type, glEnum); }                                                      \
+	/* end of macro */
+__DK_TABLE_FRAMEBUFFER_TOGGLE_PROPERTY(__DK_FRAMEBUFFER_DECL_GLTOGGLE_PROPERTYSETTER)
+
+template<>
+void dk::gfx::setFrameBufferProperty(FrameBuffer&, const FrameBuffer::DepthFunc& depthFunc)
+{ 
+	auto underlying = [&]{
+		switch (depthFunc) {
+		case FrameBuffer::DepthFunc::Less    : return GL_LESS;
+		case FrameBuffer::DepthFunc::Never   : return GL_NEVER;
+		case FrameBuffer::DepthFunc::Equal   : return GL_EQUAL;
+		case FrameBuffer::DepthFunc::Lequal  : return GL_LEQUAL;
+		case FrameBuffer::DepthFunc::Greater : return GL_GREATER;
+		case FrameBuffer::DepthFunc::NotEqual: return GL_NOTEQUAL;
+		case FrameBuffer::DepthFunc::Gequal  : return GL_GEQUAL;
+		case FrameBuffer::DepthFunc::Always  : return GL_ALWAYS;
+		default: return 0;
+		}
+	}();
+	glDepthFunc(underlying);
+}
+
+template <typename E>
+unsigned blendFactorToUnderlying(const E& value)
 {
-	if ((bool)bc)
-		glEnable(GL_CULL_FACE);
+	switch (value)
+	{
+	case E::One             : GL_ONE;
+	case E::Zero            : GL_ZERO;
+	case E::SrcAlpha        : GL_SRC_ALPHA;
+	case E::OneMinusSrcAlpha: GL_ONE_MINUS_SRC_ALPHA;
+	default: return 0;
+	}
+}
+
+template<>
+void dk::gfx::setFrameBufferProperty(FrameBuffer& frameBuffer, const FrameBuffer::SrcBlendFactor& srcFactor)
+{
+	glBlendFunc(blendFactorToUnderlying(srcFactor), 
+		        blendFactorToUnderlying(frameBuffer.config.get<FrameBuffer::DstBlendFactor>()));
+}
+
+template<>
+void dk::gfx::setFrameBufferProperty(FrameBuffer& frameBuffer, const FrameBuffer::DstBlendFactor& dstFactor)
+{
+	glBlendFunc(blendFactorToUnderlying(frameBuffer.config.get<FrameBuffer::SrcBlendFactor>()), 
+		        blendFactorToUnderlying(dstFactor));
+}
+
+template <>
+void dk::gfx::setFrameBufferProperty(FrameBuffer& frameBuffer, const FrameBuffer::SampleShading& sampleShading)
+{
+	if (!GLEW_ARB_sample_shading)
+	{
+		static bool logged = false;
+		if (!logged)
+		{
+			logged = true;
+			spdlog::warn("[gfx] Sample shading is not available");
+		}
+		return;
+	}
+
+	if (sampleShading == std::decay_t<decltype(sampleShading)>::Enabled) {
+		glEnable(GL_SAMPLE_SHADING);
+		glMinSampleShading(1.0);
+	}
 	else 
-		glDisable(GL_CULL_FACE);
+		glDisable(GL_SAMPLE_SHADING);
 }
 
 template <>
-void details::common::setProperty(dk::gfx::FrameBuffer& container, const dk::gfx::properties::depth_func& df)
-{
-	glDepthFunc(details::gfx::toUnderlying(df));
-}
+void dk::gfx::setFrameBufferProperty(FrameBuffer&, const FrameBuffer::LineWidth& lineWidth)
+{ glLineWidth(lineWidth.value); }
 
 template <>
-void details::common::setProperty(dk::gfx::FrameBuffer& container, const dk::gfx::properties::depth_test& dt)
-{
-	if (dt == dk::gfx::properties::depth_test::enabled)
-		glEnable(GL_DEPTH_TEST);
-	else
-		glDisable(GL_DEPTH_TEST);
-}
-
-template <>
-void details::common::setProperty(dk::gfx::FrameBuffer& container, const dk::gfx::properties::multisampling& ms)
-{
-	if (ms == dk::gfx::properties::multisampling::enabled)
-		glEnable(GL_MULTISAMPLE);
-	else
-		glDisable(GL_MULTISAMPLE);
-}
+void dk::gfx::setFrameBufferProperty(FrameBuffer&, const FrameBuffer::PointSize& pointSize)
+{ glPointSize(pointSize.value); }

@@ -134,105 +134,6 @@ bool dk::gfx::ShaderSource::updated() const
     return m_updated;
 }
 
-template <>
-void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::depth_test& dt)
-{
-    if (dt == dk::gfx::properties::depth_test::enabled)
-        glEnable(GL_DEPTH_TEST);
-    else
-        glDisable(GL_DEPTH_TEST);
-}
-
-template <>
-void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::depth_mask& dm)
-{
-    if (dm == dk::gfx::properties::depth_mask::enabled)
-        glDepthMask(GL_TRUE);
-    else
-        glDepthMask(GL_FALSE);
-}
-
-unsigned details::gfx::toUnderlying(dk::gfx::properties::depth_func df)
-{
-    switch (df)
-    {
-    case dk::gfx::properties::depth_func::never:    return GL_NEVER;
-    case dk::gfx::properties::depth_func::less:     return GL_LESS;
-    case dk::gfx::properties::depth_func::equal:    return GL_EQUAL;
-    case dk::gfx::properties::depth_func::lequal:   return GL_LEQUAL;
-    case dk::gfx::properties::depth_func::greater:  return GL_GREATER; 
-    case dk::gfx::properties::depth_func::notequal: return GL_NOTEQUAL;
-    case dk::gfx::properties::depth_func::gequal:   return GL_GEQUAL;
-    case dk::gfx::properties::depth_func::always:   return GL_ALWAYS;
-    default:
-        break;
-    }
-}
-
-template <>
-void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::depth_func& df)
-{
-    glDepthFunc(details::gfx::toUnderlying(df));
-}
-
-template <>
-void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::backface_culling& bc)
-{
-    if (bc == dk::gfx::properties::backface_culling::enabled)
-        glEnable(GL_CULL_FACE);
-    else
-        glDisable(GL_CULL_FACE);
-}
-
-unsigned details::gfx::toUnderlying(dk::gfx::properties::blend_func_src_factor bfs)
-{
-    switch (bfs)
-    {
-    case dk::gfx::properties::blend_func_src_factor::one:                 return GL_ONE;
-    case dk::gfx::properties::blend_func_src_factor::zero:                return GL_ZERO;
-    case dk::gfx::properties::blend_func_src_factor::src_alpha:           return GL_ALPHA;
-    case dk::gfx::properties::blend_func_src_factor::one_minus_src_alpha: return GL_ONE_MINUS_SRC_ALPHA;
-    default: return 0;
-    }
-}
-
-unsigned details::gfx::toUnderlying(dk::gfx::properties::blend_func_dst_factor bfs)
-{
-    switch (bfs)
-    {
-    case dk::gfx::properties::blend_func_dst_factor::zero:                return GL_ZERO;
-    case dk::gfx::properties::blend_func_dst_factor::one:                 return GL_ONE;
-    case dk::gfx::properties::blend_func_dst_factor::src_alpha:           return GL_ALPHA;
-    case dk::gfx::properties::blend_func_dst_factor::one_minus_src_alpha: return GL_ONE_MINUS_SRC_ALPHA;
-    default: return 0;
-    }
-}
-
-template <>
-void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::blend& b)
-{
-    if (b == dk::gfx::properties::blend::enabled)
-        glEnable(GL_BLEND);
-    else
-        glDisable(GL_BLEND);
-}
-
-template <>
-void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::blend_func_src_factor& srcf)
-{
-    GLint currentDst;
-    glGetIntegerv(GL_BLEND_DST_RGB, &currentDst);
-    glBlendFunc(details::gfx::toUnderlying(srcf), currentDst);
-}
-
-template <>
-void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::blend_func_dst_factor& dstf)
-{
-    GLint currentSrc;
-    glGetIntegerv(GL_BLEND_SRC_RGB, &currentSrc);
-    glBlendFunc(currentSrc, details::gfx::toUnderlying(dstf));
-}
-
 void dk::gfx::Shader::makeActive()
 {
     if (!m_program)
@@ -240,8 +141,6 @@ void dk::gfx::Shader::makeActive()
     // Compile shaders and link if compiled successfully
     compile();
     glUseProgram(m_program);
-    
-    callPropertySetters(true);
 
     // Set vertex layout
     int attributeIndex = 0;
@@ -338,17 +237,3 @@ void dk::gfx::Shader::linkSources(std::optional<std::string> fragDataLocation)
 //    if (m_geometry != 0)
 //        glDetachShader(m_program, m_geometry);
 //}
-
-template <>
-void details::common::setProperty(dk::gfx::Shader& shader, const dk::gfx::properties::sample_shading& sampleShading)
-{
-    if (!GLEW_ARB_sample_shading)
-        return;
-
-    if (sampleShading == dk::gfx::properties::sample_shading::enabled) {
-        glEnable(GL_SAMPLE_SHADING);
-        glMinSampleShading(1.0);
-    }
-    else
-        glDisable(GL_SAMPLE_SHADING);
-}

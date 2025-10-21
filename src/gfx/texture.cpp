@@ -21,11 +21,25 @@ unsigned dk::gfx::Texture::handle()
         m_apiHandle.bind(m_type);
         m_initializer.value()(m_apiHandle.handle(), this);
         m_initializer.reset();
-        callPropertySetters(true);
+        updateConfig(true);
     }
-    
+
+    updateConfig();
+
     // Return api handle
     return m_apiHandle.handle();
+}
+
+void dk::gfx::Texture::updateConfig(bool force = false)
+{
+    // Call property setters
+    config.for_each([&](const auto& prop) {
+        if (!force && !config.dirty(prop))
+            return;
+        spdlog::debug("Texture.{}={}", Config::property_name(prop), std::format("{}", prop));
+        setTextureProperty(*this, prop);
+        });
+    config.reset_dirty();
 }
 
 void dk::gfx::Texture::bindToUnit(unsigned unit)
@@ -38,10 +52,10 @@ void dk::gfx::Texture::bindToUnit(unsigned unit)
     {
         m_initializer.value()(m_apiHandle.handle(), this);
         m_initializer.reset();
-        callPropertySetters(true);
+        updateConfig(true);
     }
 
-    callPropertySetters(false);
+    updateConfig();
 }
 
 void dk::gfx::Texture1D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
@@ -52,7 +66,7 @@ void dk::gfx::Texture1D::setAsTarget(api::Attachment attachment, unsigned colorI
     else
         glFramebufferTexture1D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_1D, m_apiHandle.handle(), level);
 
-    callPropertySetters(false);
+    updateConfig();
 }
 
 dk::gfx::Texture2D::Texture2D(const glm::ivec2& size, Channels channels)
@@ -138,7 +152,7 @@ void dk::gfx::Texture2D::setAsTarget(api::Attachment attachment, unsigned colorI
     else
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_2D, m_apiHandle.handle(), level);
 
-    callPropertySetters(false);
+    updateConfig();
 }
 
 dk::gfx::MultisampledTexture2D::MultisampledTexture2D(const glm::ivec2& size, unsigned samples, Channels channels)
@@ -165,14 +179,14 @@ void dk::gfx::MultisampledTexture2D::setAsTarget(api::Attachment attachment, uns
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_2D_MULTISAMPLE, m_apiHandle.handle(), level);
     else
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_2D_MULTISAMPLE, m_apiHandle.handle(), level);
-    
-    callPropertySetters(false);
+
+    updateConfig();
 }
 
 void loadCubemapFromFile(
-    const std::array<std::filesystem::path, 6>& paths, 
-    unsigned                                    handle, 
-    glm::ivec2&                                 size, 
+    const std::array<std::filesystem::path, 6>& paths,
+    unsigned                                    handle,
+    glm::ivec2&                                 size,
     int&                                        channels)
 {
     for (int i = 0; i < paths.size(); ++i) {
@@ -237,12 +251,12 @@ void dk::gfx::Cubemap::setAsTarget(api::Attachment attachment, unsigned colorInd
     throw std::runtime_error("cubemap cannot be attached as framebuffer output");
 }
 
-bool isMipMapMinFilter(const dk::gfx::properties::min_filter& min_filter)
+bool isMipMapMinFilter(const dk::gfx::Texture::MinFilter& minFilter)
 {
-    if (min_filter == dk::gfx::properties::min_filter::linear_mipmap_linear) return true;
-    if (min_filter == dk::gfx::properties::min_filter::linear_mipmap_nearest) return true;
-    if (min_filter == dk::gfx::properties::min_filter::nearest_mipmap_linear) return true;
-    if (min_filter == dk::gfx::properties::min_filter::nearest_mipmap_nearest) return true;
+    if (minFilter == dk::gfx::Texture::MinFilter::LinearMipmapLinear) return true;
+    if (minFilter == dk::gfx::Texture::MinFilter::LinearMipmapNearest) return true;
+    if (minFilter == dk::gfx::Texture::MinFilter::NearestMipmapLinear) return true;
+    if (minFilter == dk::gfx::Texture::MinFilter::NearestMipmapNearest) return true;
     return false;
 }
 
@@ -304,36 +318,38 @@ void dk::gfx::TextureUnit::makeActive()
     }
 }
 
-template <>
-void details::common::setProperty(dk::gfx::Texture& texture, const dk::gfx::properties::min_filter& min_filter)
+template<>
+void dk::gfx::setTextureProperty(dk::gfx::Texture& texture, const Texture::MinFilter& minFilter)
 {
-    glTexParameteri(dk::gfx::api::toUnderlying(texture.m_type), GL_TEXTURE_MIN_FILTER, details::gfx::toUnderlying(min_filter));
-    if (texture.handle() && isMipMapMinFilter(min_filter)) {
+    const auto [underlying, isMipmap] = [&] {
+        switch (minFilter)
+        {
+        case Texture::MinFilter::Nearest             : return std::make_pair(GL_NEAREST               , false);
+        case Texture::MinFilter::Linear              : return std::make_pair(GL_LINEAR                , false);
+        case Texture::MinFilter::LinearMipmapLinear  : return std::make_pair(GL_LINEAR_MIPMAP_LINEAR  , true);
+        case Texture::MinFilter::LinearMipmapNearest : return std::make_pair(GL_LINEAR_MIPMAP_NEAREST , true);
+        case Texture::MinFilter::NearestMipmapLinear : return std::make_pair(GL_NEAREST_MIPMAP_LINEAR , true);
+        case Texture::MinFilter::NearestMipmapNearest: return std::make_pair(GL_NEAREST_MIPMAP_NEAREST, true);
+        default: throw std::runtime_error("unknown min filter value");
+        }
+    }();
+
+    glTexParameteri(dk::gfx::api::toUnderlying(texture.m_type), GL_TEXTURE_MIN_FILTER, underlying);
+    if (isMipmap)
         glGenerateMipmap(dk::gfx::api::toUnderlying(texture.m_type));
-    }
 }
 
 template <>
-void details::common::setProperty(dk::gfx::Texture& texture, const dk::gfx::properties::mag_filter& mag_filter)
+void dk::gfx::setTextureProperty(dk::gfx::Texture& texture, const Texture::MagFilter& magFilter)
 {
-    glTexParameteri(dk::gfx::api::toUnderlying(texture.m_type), GL_TEXTURE_MAG_FILTER, details::gfx::toUnderlying(mag_filter));
-}
+    const auto underlying = [&] {
+        switch (magFilter)
+        {
+        case Texture::MagFilter::Nearest : return GL_NEAREST;
+        case Texture::MagFilter::Linear  : return GL_LINEAR;
+        default: throw std::runtime_error("unknown min filter value");
+        }
+    }();
 
-int details::gfx::toUnderlying(dk::gfx::properties::min_filter min_filter)
-{
-    switch (min_filter)
-    {
-    case dk::gfx::properties::min_filter::nearest                : return GL_NEAREST;
-    case dk::gfx::properties::min_filter::linear                 : return GL_LINEAR;
-    case dk::gfx::properties::min_filter::linear_mipmap_linear   : return GL_LINEAR_MIPMAP_LINEAR;
-    case dk::gfx::properties::min_filter::linear_mipmap_nearest  : return GL_LINEAR_MIPMAP_NEAREST;
-    case dk::gfx::properties::min_filter::nearest_mipmap_linear  : return GL_NEAREST_MIPMAP_LINEAR;
-    case dk::gfx::properties::min_filter::nearest_mipmap_nearest : return GL_NEAREST_MIPMAP_NEAREST;
-    default: return 0;
-    }
-}
-
-int details::gfx::toUnderlying(dk::gfx::properties::mag_filter mag_filter)
-{
-    return toUnderlying(dk::gfx::properties::min_filter(mag_filter));
+    glTexParameteri(details::gfx::toUnderlying(texture.m_type), GL_TEXTURE_MAG_FILTER, underlying);
 }
