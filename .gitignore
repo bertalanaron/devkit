@@ -2,4 +2,4 @@ build/
 cmake-build-debug/
 cmake-build-release/
 imgui.ini
-.idea
+.idea_codeql_detected_source_root
