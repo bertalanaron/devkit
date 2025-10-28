@@ -117,7 +117,7 @@ TEST(AssetFetcher, custom_loader) {
 		[](auto& fetcher, const std::filesystem::path& path) {
 			const auto vs_path = fetcher.root() / std::format("{}_vs.glsl", path.string());
 			const auto fs_path = fetcher.root() / std::format("{}_fs.glsl", path.string());
-			return Shader(fetcher.assets().getMultipleWeak<ShaderSource>(vs_path, fs_path));
+			return Shader(fetcher.assets.getMultipleWeak<ShaderSource>(vs_path, fs_path));
 		});
 	
 	// Fetch shader using the proxy

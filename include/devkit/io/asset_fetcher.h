@@ -15,7 +15,7 @@ public:
 	// @param manager Reference to the AssetManager
 	// @param root Subdirectory path relative to the manager's root
 	AssetFetcher(AssetManager& manager, const path_t& root)
-		: m_manager(manager)
+		: assets(manager)
 		, m_root(root.relative_path())
 		, m_loader(std::nullopt)
 	{ }
@@ -25,7 +25,7 @@ public:
 	// @param root Subdirectory path relative to the manager's root
 	// @param loader Custom function to build asset from multiple sources
 	AssetFetcher(AssetManager& manager, const path_t& root, loader_fn_t loader)
-		: m_manager(manager)
+		: assets(manager)
 		, m_root(root.relative_path())
 		, m_loader(std::move(loader))
 	{ }
@@ -52,7 +52,7 @@ public:
 		}
 		
 		// Otherwise, use the manager's get method
-		return m_manager.get<T>(fullPath);
+		return assets.get<T>(fullPath);
 	}
 
 	// @brief Get the root path of this fetcher
@@ -62,14 +62,10 @@ public:
 		return m_root;
 	}
 
-	// @brief Access to the underlying AssetManager
-	AssetManager& assets()
-	{
-		return m_manager;
-	}
+	// Public reference to the underlying AssetManager
+	AssetManager& assets;
 
 private:
-	AssetManager& m_manager;
 	path_t m_root;
 	std::optional<loader_fn_t> m_loader;
 	std::unordered_map<path_t, T> m_customAssets;
