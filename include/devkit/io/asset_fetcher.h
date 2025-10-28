@@ -3,6 +3,7 @@
 #include <functional>
 #include <filesystem>
 #include <unordered_map>
+#include <optional>
 
 namespace dk::io {
 
