@@ -8,6 +8,7 @@ set(GFX_PUBLIC_SOURCES
     src/gfx/vertex_buffer_test.cpp)
 set(IO_SOURCES
     src/io/asset_manager_test.cpp
+    src/io/asset_fetcher_test.cpp
     src/io/input_combination_tests.cpp
     src/io/window_test.cpp)
 set(SOURCES ${IO_SOURCES} ${GFX_PUBLIC_SOURCES} ${COMMON_PUBLIC_SOURCES})
