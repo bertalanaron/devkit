@@ -352,8 +352,8 @@ public:
 		sceneFrameBuffer.config(FrameBuffer::DepthTest::Enabled);
 		sceneFrameBuffer.config(FrameBuffer::DepthFunc::Lequal);
 		sceneFrameBuffer.config(FrameBuffer::Multisample::Enabled);
-		sceneFrameBuffer.color[0] = MultisampledTexture2D(m_window.config.get<Window::Size>(), 4, Channels::RGB);
-		sceneFrameBuffer.depth    = MultisampledTexture2D(m_window.config.get<Window::Size>(), 4, Channels::Depth);
+		sceneFrameBuffer.color[0] = RenderBuffer(m_window.config.get<Window::Size>(), 8, Channels::RGB);
+		sceneFrameBuffer.depth    = RenderBuffer(m_window.config.get<Window::Size>(), 8, Channels::Depth);
 
 		FrameBuffer sceneResolver;
 		sceneResolver.color[0] = Texture2D(m_window.config.get<Window::Size>(), Channels::RGB);
@@ -448,8 +448,8 @@ public:
 				sceneResolver.color[0].get<Texture2D>().resize({ size.x, size.y - titleBarHeight });
 				sceneResolver.depth.get<Texture2D>().resize({ size.x, size.y - titleBarHeight });
 				sceneResolver.setViewport(Viewport({ size.x, size.y - titleBarHeight }));
-				sceneFrameBuffer.color[0].get<MultisampledTexture2D>().resize({ size.x, size.y - titleBarHeight });
-				sceneFrameBuffer.depth.get<MultisampledTexture2D>().resize({ size.x, size.y - titleBarHeight });
+				sceneFrameBuffer.color[0].get<RenderBuffer>().resize({ size.x, size.y - titleBarHeight });
+				sceneFrameBuffer.depth.get<RenderBuffer>().resize({ size.x, size.y - titleBarHeight });
 				sceneFrameBuffer.setViewport(Viewport({ size.x, size.y - titleBarHeight }));
 				//sceneFrameBuffer.resize(glm::ivec2(size.x, size.y));
 			} ImGui::End();

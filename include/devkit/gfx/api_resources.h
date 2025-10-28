@@ -68,6 +68,18 @@ private:
 	friend class Resource<Texture>;
 };
 
+class RenderBuffer
+	: public Resource<RenderBuffer>
+{
+public:
+	void bind();
+
+private:
+	unsigned initialize();
+
+	friend class Resource<RenderBuffer>;
+};
+
 class FrameBuffer
 	: public Resource<FrameBuffer>
 {

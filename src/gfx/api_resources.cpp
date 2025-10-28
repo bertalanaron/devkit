@@ -112,6 +112,19 @@ unsigned dk::gfx::api::Texture::initialize()
 	return tex;
 }
 
+void dk::gfx::api::RenderBuffer::bind()
+{
+	auto rbuff = handle();
+	glBindRenderbuffer(GL_RENDERBUFFER, rbuff);
+}
+
+unsigned dk::gfx::api::RenderBuffer::initialize()
+{
+	GLuint rbuff = 0;
+	glGenRenderbuffers(1, &rbuff);
+	return rbuff;
+}
+
 dk::gfx::api::FrameBuffer::FrameBuffer(dk::gfx::api::FrameBuffer::backbuffer_t)
 	: Resource()
 	, m_isBackbuffer(true)

@@ -3,6 +3,29 @@
 
 #include <GL/glew.h>
 
+const dk::gfx::RenderTarget& dk::gfx::FrameBuffer::Attachment::get() const {
+	return std::visit(common::overload{
+		[](const std::reference_wrapper<RenderTarget>& data) -> const RenderTarget& { return data.get(); },
+		[](const std::unique_ptr<RenderTarget>& data) -> const RenderTarget& { return *data.get(); },
+		[](const std::monostate) -> const RenderTarget& { return *((const RenderTarget*)nullptr); }
+	}, m_data);
+}
+
+dk::gfx::RenderTarget& dk::gfx::FrameBuffer::Attachment::get() {
+	return std::visit(common::overload{
+		[](std::reference_wrapper<RenderTarget>& data) -> RenderTarget& { return data.get(); },
+		[](std::unique_ptr<RenderTarget>& data) -> RenderTarget& { return *data.get(); },
+		[](std::monostate) -> RenderTarget& { return *((RenderTarget*)nullptr); }
+	}, m_data);
+}
+
+glm::ivec3 dk::gfx::FrameBuffer::Attachment::size() const
+{
+	if (std::holds_alternative<std::monostate>(m_data))
+		return { 0, 0, 0 };
+	return get().targetSize();
+}
+
 dk::gfx::FrameBuffer::FrameBuffer()
 	: color(io::GlobalState::hardware().glMaxColorAttachments)
 { }

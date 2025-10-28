@@ -21,11 +21,6 @@ class FrameBuffer
 {
 private:
 	class Attachment {
-	private:
-		using data_t = std::variant<std::monostate, 
-			std::reference_wrapper<RenderTarget>, 
-			std::unique_ptr<RenderTarget>>;
-
 	public:
 		template <std::derived_from<RenderTarget> T>
 		void operator=(T& renderTarget)
@@ -38,21 +33,9 @@ private:
 			m_data.emplace<2>(std::move(ptr)); 
 		}
 
-		RenderTarget& get() {
-			return std::visit(common::overload {
-				[](std::reference_wrapper<RenderTarget>& data) -> RenderTarget& { return data.get(); },
-				[](std::unique_ptr<RenderTarget>& data) -> RenderTarget& { return *data.get(); },
-				[](std::monostate) -> RenderTarget& { return *((RenderTarget*)nullptr); }
-			}, m_data);
-		}
+		RenderTarget& get();
 
-		const RenderTarget& get() const {
-			return std::visit(common::overload {
-				[](const std::reference_wrapper<RenderTarget>& data) -> const RenderTarget& { return data.get(); },
-				[](const std::unique_ptr<RenderTarget>& data) -> const RenderTarget& { return *data.get(); },
-				[](const std::monostate) -> const RenderTarget& { return *((const RenderTarget*)nullptr); }
-			}, m_data);
-		}
+		const RenderTarget& get() const;
 
 		template <std::derived_from<RenderTarget> T>
 		T& get() { return *dynamic_cast<T*>(&get()); }
@@ -66,14 +49,13 @@ private:
 		bool has_value() const
 		{ return !std::holds_alternative<std::monostate>(m_data); }
 
-		glm::ivec3 size() const
-		{
-			if (std::holds_alternative<std::monostate>(m_data))
-				return { 0, 0, 0 };
-			return get().targetSize();
-		}
+		glm::ivec3 size() const;
 
 	private:
+		using data_t = std::variant<std::monostate, 
+			std::reference_wrapper<RenderTarget>, 
+			std::unique_ptr<RenderTarget>>;
+
 		data_t m_data;
 	};
 
@@ -136,6 +118,18 @@ private:
 	inline static std::unordered_map<const void*, Config> s_currentContextConfig{};
 
 	void makeActive();
+
+	template <std::invocable<RenderBuffer&> F>
+	void for_each_target(F&& callback)
+	{
+		for (int i = 0; i < color.size(); ++i)
+			if (color[i].has_value())
+				callback(color[i].get());
+		if (depth.has_value())
+			callback(depth.get());
+		if (stencil.has_value())
+			callback(stencil.get());
+	}
 
 	friend FrameBuffer& backBuffer();
 

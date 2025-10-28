@@ -368,3 +368,53 @@ void dk::gfx::setTextureProperty(dk::gfx::Texture& texture, const Texture::MagFi
 
     glTexParameteri(dk::gfx::api::toUnderlying(texture.m_type), GL_TEXTURE_MAG_FILTER, underlying);
 }
+
+dk::gfx::RenderBuffer::RenderBuffer(const glm::ivec2& size, unsigned samples, Channels channels)
+    : m_valid(true)
+    , m_size(size)
+    , m_samples(samples)
+    , m_channels(channels)
+{
+    m_initializer = [=](unsigned handle, RenderBuffer* renderbuffer) {
+        if (m_samples == 1)
+            glRenderbufferStorage(GL_RENDERBUFFER, api::internalFormat(renderbuffer->m_channels), 
+                renderbuffer->size().x, renderbuffer->size().y);
+        else
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, renderbuffer->m_samples, api::internalFormat(renderbuffer->m_channels), 
+                renderbuffer->size().x, renderbuffer->size().y);
+        };
+}
+
+void dk::gfx::RenderBuffer::resize(const glm::ivec2& size) {
+    m_size = size;
+    m_initializer = [=](unsigned handle, RenderBuffer* renderbuffer) {
+        if (m_samples == 1)
+            glRenderbufferStorage(GL_RENDERBUFFER, api::internalFormat(renderbuffer->m_channels), 
+                renderbuffer->size().x, renderbuffer->size().y);
+        else
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, renderbuffer->m_samples, api::internalFormat(renderbuffer->m_channels), 
+                renderbuffer->size().x, renderbuffer->size().y);
+    };
+}
+
+void dk::gfx::RenderBuffer::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
+{
+    updateOrInitializeAndBind();
+    if (attachment == api::Attachment::Color0)
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_RENDERBUFFER, m_apiHandle.handle());
+    else
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_RENDERBUFFER, m_apiHandle.handle());
+}
+
+void dk::gfx::RenderBuffer::updateOrInitializeAndBind()
+{
+    m_apiHandle.bind();
+
+    // Call initializer with handle
+    if (m_initializer.has_value())
+    {
+        m_initializer.value()(m_apiHandle.handle(), this);
+        m_initializer.reset();
+        return;
+    }
+}

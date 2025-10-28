@@ -30,7 +30,6 @@ protected:
 class Texture
 	: public RenderTarget
 {
-
 public:
 	enum class MinFilter { Nearest, Linear, LinearMipmapLinear, LinearMipmapNearest, NearestMipmapLinear, NearestMipmapNearest };
 	enum class MagFilter { Nearest, Linear };
@@ -169,27 +168,36 @@ private:
 	unsigned samples() const override { return m_samples; }
 };
 
-
-//class FrameBuffer {
-//private:
-//	struct Attachment {
-//		void operator=(RenderTarget& _target)
-//		{ target = &_target; }
-//
-//		std::optional<RenderTarget*> target;
-//	};
-//
-//public:
-//	std::vector<Attachment> color;
-//	Attachment              depth;
-//	Attachment              stencil;
-//};
-
-
 class RenderBuffer
 	: public RenderTarget
 {
+public:
+	RenderBuffer()                          = default;
+	RenderBuffer(RenderBuffer&&)            = default;
+	RenderBuffer& operator=(RenderBuffer&&) = default;
 
+	RenderBuffer(const glm::ivec2& size, unsigned samples = 1, Channels channels = Channels::RGBA);
+
+	glm::ivec2 size() const { return m_size; }
+
+	void resize(const glm::ivec2& size);
+
+private:
+	using Initializer = std::optional<std::function<void(unsigned, RenderBuffer*)>>;
+	
+	bool              m_valid = false;
+	api::RenderBuffer m_apiHandle;
+	Initializer       m_initializer;
+	Channels          m_channels;
+	glm::ivec2        m_size;
+	unsigned          m_samples;
+
+	void setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level) override;
+
+	glm::ivec3 targetSize() const override
+	{ return { m_size.x, m_size.y, 1 }; }
+
+	void updateOrInitializeAndBind();
 };
 
 class TextureUnit {
