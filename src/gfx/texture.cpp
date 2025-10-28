@@ -15,30 +15,38 @@ unsigned dk::gfx::Texture::handle()
             "cannot get handle of texture with unset type "
             "(don't use the default constructor of any texture type)");
 
-    // Call initializer with handle
-    if (m_initializer.has_value())
-    {
-        m_apiHandle.bind(m_type);
-        m_initializer.value()(m_apiHandle.handle(), this);
-        m_initializer.reset();
-        updateConfig(true);
-    }
-
-    updateConfig();
+    updateOrInitializeAndBind();
 
     // Return api handle
     return m_apiHandle.handle();
 }
 
-void dk::gfx::Texture::updateConfig(bool force)
+void dk::gfx::Texture::updateOrInitializeAndBind()
 {
+    m_apiHandle.bind(m_type);
+
+    // Call initializer with handle
+    if (m_initializer.has_value())
+    {
+        m_initializer.value()(m_apiHandle.handle(), this);
+        m_initializer.reset();
+
+        // Call property setters
+        config.for_each([&](const auto& prop) {
+            setTextureProperty(*this, prop);
+        });
+        config.reset_dirty();
+
+        return;
+    }
+    
     // Call property setters
     config.for_each([&](const auto& prop) {
-        if (!force && !config.dirty(prop))
+        if (!config.dirty(prop))
             return;
         spdlog::debug("Texture.{}={}", Config::property_name(prop), std::format("{}", prop));
         setTextureProperty(*this, prop);
-        });
+    });
     config.reset_dirty();
 }
 
@@ -46,27 +54,16 @@ void dk::gfx::Texture::bindToUnit(unsigned unit)
 {
     // Attach to texture unit
     glActiveTexture(GL_TEXTURE0 + unit);
-    m_apiHandle.bind(m_type);
-    // Call initializer with handle
-    if (m_initializer.has_value())
-    {
-        m_initializer.value()(m_apiHandle.handle(), this);
-        m_initializer.reset();
-        updateConfig(true);
-    }
-
-    updateConfig();
+    updateOrInitializeAndBind();
 }
 
 void dk::gfx::Texture1D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
 {
-    m_apiHandle.bind(m_type);
+    updateOrInitializeAndBind();
     if (attachment == api::Attachment::Color0)
         glFramebufferTexture1D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_1D, m_apiHandle.handle(), level);
     else
         glFramebufferTexture1D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_1D, m_apiHandle.handle(), level);
-
-    updateConfig();
 }
 
 dk::gfx::Texture2D::Texture2D(const glm::ivec2& size, Channels channels)
@@ -77,7 +74,7 @@ dk::gfx::Texture2D::Texture2D(const glm::ivec2& size, Channels channels)
         throw std::runtime_error("texture size exceeds hardware maximum");
 
     // Emplace initializer which sets up texture buffer
-    m_initializer.emplace([&](unsigned handle, Texture* texture) {
+    m_initializer.emplace([=](unsigned handle, Texture* texture) {
 #if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 #endif
@@ -144,15 +141,24 @@ dk::gfx::Texture2D dk::gfx::Texture2D::loadFromFileAndInitialize(const std::stri
     return texture;
 }
 
+void dk::gfx::Texture2D::resize(const glm::ivec2& size)
+{
+    m_size = size;
+    m_initializer.emplace([channels=m_channels,size=size](unsigned handle, Texture* texture) {
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+        glTexImage2D(GL_TEXTURE_2D, 0, api::internalFormat(channels), (unsigned)size.x, (unsigned)size.y, 0, api::toUnderlying(channels), GL_UNSIGNED_BYTE, nullptr);
+    });
+}
+
 void dk::gfx::Texture2D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
 {
-    m_apiHandle.bind(m_type);
+    updateOrInitializeAndBind();
     if (attachment == api::Attachment::Color0)
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_2D, m_apiHandle.handle(), level);
     else
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_2D, m_apiHandle.handle(), level);
-
-    updateConfig();
 }
 
 dk::gfx::MultisampledTexture2D::MultisampledTexture2D(const glm::ivec2& size, unsigned samples, Channels channels)
@@ -172,15 +178,24 @@ dk::gfx::MultisampledTexture2D::MultisampledTexture2D(const glm::ivec2& size, un
     });
 }
 
+void dk::gfx::MultisampledTexture2D::resize(const glm::ivec2& size)
+{
+    m_size = size;
+    m_initializer.emplace([channels=m_channels,size=size,samples=m_samples](unsigned handle, Texture* texture) {
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, api::internalFormat(channels), (unsigned)size.x, (unsigned)size.y, GL_TRUE);
+    });
+}
+
 void dk::gfx::MultisampledTexture2D::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
 {
-    m_apiHandle.bind(m_type);
+    updateOrInitializeAndBind();
     if (attachment == api::Attachment::Color0)
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_TEXTURE_2D_MULTISAMPLE, m_apiHandle.handle(), level);
     else
         glFramebufferTexture2D(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_TEXTURE_2D_MULTISAMPLE, m_apiHandle.handle(), level);
-
-    updateConfig();
 }
 
 void loadCubemapFromFile(

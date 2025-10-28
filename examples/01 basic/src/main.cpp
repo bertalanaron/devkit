@@ -348,18 +348,25 @@ public:
 
 		//dk::gfx::VertexSink textVertexSink(dk::common::id<dk::gfx::Font::CharVertex>);
 
-		Texture2D sceneColorTex = Texture2D(m_window.config.get<Window::Size>(), Channels::RGBA);
-		Texture2D sceneDepthTex = Texture2D(m_window.config.get<Window::Size>(), Channels::Depth);
-
 		dk::gfx::FrameBuffer sceneFrameBuffer;
-		sceneFrameBuffer.color[0] = sceneColorTex;
-		sceneFrameBuffer.depth    = sceneDepthTex;
+		sceneFrameBuffer.config(FrameBuffer::DepthTest::Enabled);
+		sceneFrameBuffer.config(FrameBuffer::DepthFunc::Lequal);
+		sceneFrameBuffer.config(FrameBuffer::Multisample::Enabled);
+		sceneFrameBuffer.color[0] = MultisampledTexture2D(m_window.config.get<Window::Size>(), 4, Channels::RGB);
+		sceneFrameBuffer.depth    = MultisampledTexture2D(m_window.config.get<Window::Size>(), 4, Channels::Depth);
+
+		FrameBuffer sceneResolver;
+		sceneResolver.color[0] = Texture2D(m_window.config.get<Window::Size>(), Channels::RGB);
+		sceneResolver.depth    = Texture2D(m_window.config.get<Window::Size>(), Channels::Depth);
 
 		while (m_window.isOpen()) {
 			const auto& frame = m_window.beginFrame();
 			// Clear backbuffer
-			sceneFrameBuffer.clear(dk::gfx::Clear::Color | dk::gfx::Clear::Depth, dk::colors::gray);
+			//sceneFrameBuffer.clear(dk::gfx::Clear::Color | dk::gfx::Clear::Depth, dk::colors::gray);
 			dk::gfx::backBuffer().clear(dk::gfx::Clear::Color | dk::gfx::Clear::Depth, dk::colors::gray);
+
+			sceneFrameBuffer.render(FrameBuffer::DemoScene{});
+			sceneResolver.blit(sceneFrameBuffer);
 
 			m_assets.synchronize();
 
@@ -386,14 +393,14 @@ public:
 				else {
 					m_shaders["planet"].uniforms().set("u_useSpecular", (int)false);
 				}
-				ImGui::End();
-			}
+				
+			} ImGui::End();
 
 			const auto texturedVertexFlags = dk::gfx::VertexFlags::Position | dk::gfx::VertexFlags::Normal | dk::gfx::VertexFlags::TexCoords;
 			auto& planetMesh = m_assets.get<dk::gfx::Scene>("/models/planet_scene.fbx")["/planet"][0](texturedVertexFlags);
 			m_shaders["planet"].layout(planetMesh);
 			dk::gfx::backBuffer().render(m_shaders["planet"], planetMesh.indices, dk::gfx::Primitive::Triangles);
-			sceneFrameBuffer.render(m_shaders["planet"], planetMesh.indices, dk::gfx::Primitive::Triangles);
+			//sceneFrameBuffer.render(m_shaders["planet"], planetMesh.indices, dk::gfx::Primitive::Triangles);
 
 			// Bind uniforms and textures
 			m_shaders["rgba"].uniforms()     << m_ucCamera;
@@ -413,7 +420,7 @@ public:
 			m_shaders["asteroid"].uniforms().set("u_t", t);
 			// Render
 			dk::gfx::backBuffer().render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors.size());
-			sceneFrameBuffer.render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors.size());
+			//sceneFrameBuffer.render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors.size());
 
 			// Draw skybox
 			m_shaders["skybox"].uniforms()   << m_ucCamera;
@@ -421,7 +428,7 @@ public:
 			auto& unitCubeMesh = m_assets.get<dk::gfx::Scene>("/models/planet_scene.fbx")["/skybox"][0]();
 			m_shaders["skybox"].layout(unitCubeMesh.vertices);
 			dk::gfx::backBuffer().render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
-			sceneFrameBuffer.render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
+			//sceneFrameBuffer.render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
 
 			// Close window with esc
 			if (dk::io::key::esc) m_window.close();
@@ -430,11 +437,22 @@ public:
 				m_window.config(dk::common::toggle(m_window.config.get<dk::io::Window::Mode>()));
 
 			if (ImGui::Begin("FrameBuffer")) {
+				ImGui::GetStyle().WindowPadding = ImVec2(0, 0);
+
+				auto& sceneColorTex = sceneResolver.color[0].get<Texture2D>();
 				ImGui::Image((ImTextureID)(intptr_t)sceneColorTex.handle(), ImVec2(sceneColorTex.size().x, sceneColorTex.size().y), ImVec2(0, 1), ImVec2(1, 0));
+
 				ImVec2 size = ImGui::GetWindowSize();
+				float titleBarHeight = ImGui::GetStyle().FramePadding.y * 2 + ImGui::GetTextLineHeightWithSpacing(); 
+
+				sceneResolver.color[0].get<Texture2D>().resize({ size.x, size.y - titleBarHeight });
+				sceneResolver.depth.get<Texture2D>().resize({ size.x, size.y - titleBarHeight });
+				sceneResolver.setViewport(Viewport({ size.x, size.y - titleBarHeight }));
+				sceneFrameBuffer.color[0].get<MultisampledTexture2D>().resize({ size.x, size.y - titleBarHeight });
+				sceneFrameBuffer.depth.get<MultisampledTexture2D>().resize({ size.x, size.y - titleBarHeight });
+				sceneFrameBuffer.setViewport(Viewport({ size.x, size.y - titleBarHeight }));
 				//sceneFrameBuffer.resize(glm::ivec2(size.x, size.y));
-				ImGui::End();
-			}
+			} ImGui::End();
 
 			m_colorSink 
 				<< dk::gfx::draw(dk::geom::circle2{dk::geom::Origin2, 40.0}, DK_COLOR(0x222222ff), dk::geom::plane::Y(), -dk::geom::axis::X)
@@ -564,16 +582,17 @@ private:
 
 	void showGUI()
 	{
-		ImGui::Begin("Properties");
-		if (ImGui::CollapsingHeader("Backbuffer", ImGuiTreeNodeFlags_DefaultOpen))
-			imguiEditConfig(dk::gfx::backBuffer().config);
-		if (ImGui::CollapsingHeader("Window", ImGuiTreeNodeFlags_DefaultOpen))
-			imguiEditConfig(m_window.config);
-		//if (ImGui::CollapsingHeader("Globe Texture", ImGuiTreeNodeFlags_DefaultOpen))
-		//	imguiEditConfig(m_window.config);
-		//	imguiPropertiesPanel(m_assets.get<dk::gfx::Texture2D>(assetPath("planet_texture")), 40.f);
-		ImGui::DragFloat("##fov", &m_camera.fov, 0.01, 0, 3.1415);
-		ImGui::End();
+		if (ImGui::Begin("Properties"))
+		{
+			if (ImGui::CollapsingHeader("Backbuffer", ImGuiTreeNodeFlags_DefaultOpen))
+				imguiEditConfig(dk::gfx::backBuffer().config);
+			if (ImGui::CollapsingHeader("Window", ImGuiTreeNodeFlags_DefaultOpen))
+				imguiEditConfig(m_window.config);
+			//if (ImGui::CollapsingHeader("Globe Texture", ImGuiTreeNodeFlags_DefaultOpen))
+			//	imguiEditConfig(m_window.config);
+			//	imguiPropertiesPanel(m_assets.get<dk::gfx::Texture2D>(assetPath("planet_texture")), 40.f);
+			ImGui::DragFloat("##fov", &m_camera.fov, 0.01, 0, 3.1415);
+		} ImGui::End();
 	}
 
 	void moveCamera(const dk::io::Frame& frame)

@@ -174,6 +174,8 @@ public:
         : m_elemSize(sizeof(T))
     { }
 
+    std::byte* data() { return m_data.data(); }
+
     const std::byte* data() const { return m_data.data(); }
 
     template <typename T>
@@ -333,6 +335,12 @@ public:
     {
         if (newCapacity > capacity())
             m_data.reserve(newCapacity * elem_size());
+    }
+
+    void resize(size_t newSize)
+    {
+        m_data.resize(newSize * elem_size());
+        m_size = newSize;
     }
 
     typeless_ref at(size_t index)

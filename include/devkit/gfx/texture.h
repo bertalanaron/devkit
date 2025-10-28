@@ -58,7 +58,7 @@ protected:
 
 	void bindToUnit(unsigned unit);
 
-	void updateConfig(bool force = false);
+	void updateOrInitializeAndBind();
 
 	template <typename P>
 	friend void setTextureProperty(Texture&, const P&);
@@ -111,6 +111,8 @@ public:
 
 	glm::ivec2 size() const { return m_size; }
 
+	void resize(const glm::ivec2& size);
+
 private:
 	glm::ivec2 m_size;
 
@@ -150,6 +152,10 @@ public:
 	MultisampledTexture2D& operator=(MultisampledTexture2D&&) = default;
 
 	MultisampledTexture2D(const glm::ivec2& size, unsigned samples, Channels channels = Channels::RGBA);
+
+	glm::ivec2 size() const { return m_size; }
+
+	void resize(const glm::ivec2& size);
 
 private:
 	glm::ivec2 m_size;

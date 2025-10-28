@@ -19,6 +19,31 @@ void dk::gfx::FrameBuffer::clear(Clear mask, const glm::vec4& color)
 	glClear((unsigned)mask);
 }
 
+void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Mask mask, int inputColorIndex, int outputColorIndex, Texture::MagFilter filter)
+{
+	makeActive();
+
+	const auto filter_api = [&] {
+		switch (filter)
+		{
+		case Texture::MagFilter::Nearest : return GL_NEAREST;
+		case Texture::MagFilter::Linear  : return GL_LINEAR;
+		default: throw std::runtime_error("unknown filter value");
+		}
+	}();
+
+	unsigned mask_api = 0u;
+	if ((unsigned)mask & (unsigned)Mask::Color)   mask_api |= GL_COLOR_BUFFER_BIT;
+	if ((unsigned)mask & (unsigned)Mask::Depth)   mask_api |= GL_DEPTH_BUFFER_BIT;
+	if ((unsigned)mask & (unsigned)Mask::Stencil) mask_api |= GL_STENCIL_BUFFER_BIT;
+
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
+
+	glBlitFramebuffer(0, 0, input.color[inputColorIndex].get().targetSize().x, input.color[inputColorIndex].get().targetSize().y, 
+		0, 0, color[outputColorIndex].get().targetSize().x, color[outputColorIndex].get().targetSize().y, mask_api, filter_api);
+}
+
 void dk::gfx::FrameBuffer::render(Shader& shader, VertexBuffer& vertexBuffer, Primitive primitive, unsigned count)
 {
 	makeActive();
@@ -71,19 +96,20 @@ void dk::gfx::FrameBuffer::makeActive()
 	// Set color attachments
 	std::vector<unsigned> activeColorAttachmentIndices;
 	for (int i = 0; i < color.size(); ++i) {
-		if (!color[i].target.has_value())
+		if (!color[i].has_value())
 			continue;
 
-		color[i].target.value()->setAsTarget(api::Attachment::Color0, i);
+		color[i].get().setAsTarget(api::Attachment::Color0, i);
 
-		activeColorAttachmentIndices.push_back(i);
+		activeColorAttachmentIndices.push_back(GL_COLOR_ATTACHMENT0 + i);
 	}
 	if (color.size() > 0)
 		glDrawBuffers(activeColorAttachmentIndices.size(), activeColorAttachmentIndices.data());
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
 
-	// Set depth attachment
-	if (depth.target.has_value())
-		depth.target.value()->setAsTarget(api::Attachment::Depth);
+	// Set depth attachment	
+	if (depth.has_value())
+		depth.get().setAsTarget(api::Attachment::Depth);
 }
 
 dk::gfx::FrameBuffer& dk::gfx::backBuffer() 
@@ -190,3 +216,49 @@ void dk::gfx::setFrameBufferProperty(FrameBuffer&, const FrameBuffer::LineWidth&
 template <>
 void dk::gfx::setFrameBufferProperty(FrameBuffer&, const FrameBuffer::PointSize& pointSize)
 { glPointSize(pointSize.value); }
+
+
+#include "demo_scene.h"
+
+void dk::gfx::FrameBuffer::render(DemoScene)
+{
+	struct Scene {
+		std::shared_ptr<ShaderSource> vertShader;
+		std::shared_ptr<ShaderSource> fragShader;
+		std::unique_ptr<Shader>       shader;
+
+		VertexBuffer                  vertexBuffer;
+		Camera                        camera;
+
+		Scene()
+		{
+			// Setup shader
+			vertShader = std::make_shared<ShaderSource>(std::string(g_vssource));
+			fragShader = std::make_shared<ShaderSource>(std::string(g_fssource));
+			shader = std::make_unique<Shader>(vertShader, fragShader);
+
+			// Setup vertex and element buffers
+			std::vector<Vertex<glm::vec3, glm::vec3>> vertices = {__DK_DEMOSCENE_MONKEY_VERTICES};
+			vertexBuffer = VertexFlags::Position | VertexFlags::Normal;
+			vertexBuffer.modify().resize(vertices.size());
+			std::memcpy(vertexBuffer.modify().data(), vertices.data(), vertexBuffer.get().elem_size() * vertexBuffer.get().size());
+
+			// Setup layout
+			shader->layout(vertexBuffer);
+		}
+	};
+
+	static std::unordered_map<void*, Scene> s_scenes{};
+	auto& scene = s_scenes[(void*)this];
+
+	// Setup uniforms
+	scene.camera.position = glm::vec3(0, -3, 0.01);
+	scene.camera.asp = aspectRatio();
+	scene.shader->uniforms().set("u_camera.VP",        scene.camera.P() * scene.camera.V());
+	scene.shader->uniforms().set("u_camera.position",  scene.camera.position);
+	scene.shader->uniforms().set("u_camera.direction", scene.camera.lookat - scene.camera.position);
+
+	// Execute draw calls
+	clear(Clear::Color | Clear::Depth, DK_COLOR(0x333333ff));
+	render(*scene.shader, scene.vertexBuffer, Primitive::Triangles);
+}

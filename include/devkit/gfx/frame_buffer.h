@@ -14,21 +14,67 @@ enum class Clear { Color = 0x00004000, Depth = 0x00000100 };
 
 inline Clear operator|(Clear a, Clear b) { return Clear((int)a | (int)b); }
 
+enum class Mask { Color = BIT(0), Depth = BIT(1), Stencil = BIT(2) };
+inline Mask operator|(Mask a, Mask b) { return Mask((int)a | (int)b); }
+
 class FrameBuffer
 {
 private:
-	struct Attachment {
-		void operator=(RenderTarget& _target)
-		{ target = &_target; }
+	class Attachment {
+	private:
+		using data_t = std::variant<std::monostate, 
+			std::reference_wrapper<RenderTarget>, 
+			std::unique_ptr<RenderTarget>>;
+
+	public:
+		template <std::derived_from<RenderTarget> T>
+		void operator=(T& renderTarget)
+		{ m_data = std::ref(renderTarget); }
+
+		template <std::derived_from<RenderTarget> T>
+		void operator=(T&& renderTarget)
+		{ 
+			std::unique_ptr<RenderTarget> ptr = std::make_unique<T>(std::move(renderTarget));
+			m_data.emplace<2>(std::move(ptr)); 
+		}
+
+		RenderTarget& get() {
+			return std::visit(common::overload {
+				[](std::reference_wrapper<RenderTarget>& data) -> RenderTarget& { return data.get(); },
+				[](std::unique_ptr<RenderTarget>& data) -> RenderTarget& { return *data.get(); },
+				[](std::monostate) -> RenderTarget& { return *((RenderTarget*)nullptr); }
+			}, m_data);
+		}
+
+		const RenderTarget& get() const {
+			return std::visit(common::overload {
+				[](const std::reference_wrapper<RenderTarget>& data) -> const RenderTarget& { return data.get(); },
+				[](const std::unique_ptr<RenderTarget>& data) -> const RenderTarget& { return *data.get(); },
+				[](const std::monostate) -> const RenderTarget& { return *((const RenderTarget*)nullptr); }
+			}, m_data);
+		}
+
+		template <std::derived_from<RenderTarget> T>
+		T& get() { return *dynamic_cast<T*>(&get()); }
+
+		template <std::derived_from<RenderTarget> T>
+		const T& get() const { return *dynamic_cast<const T*>(&get()); }
+
+		bool owns() const 
+		{ return std::holds_alternative<std::unique_ptr<RenderTarget>>(m_data); }
+
+		bool has_value() const
+		{ return !std::holds_alternative<std::monostate>(m_data); }
 
 		glm::ivec3 size() const
 		{
-			return (!target.has_value())
-				? glm::ivec3(0, 0, 0)
-				: target.value()->targetSize();
+			if (std::holds_alternative<std::monostate>(m_data))
+				return { 0, 0, 0 };
+			return get().targetSize();
 		}
 
-		std::optional<RenderTarget*> target;
+	private:
+		data_t m_data;
 	};
 
 public:
@@ -50,6 +96,8 @@ public:
 
 	Config config;
 
+	struct DemoScene { };
+
 public:
 	FrameBuffer();
 	FrameBuffer(api::FrameBuffer::backbuffer_t);
@@ -68,6 +116,9 @@ public:
 	// Has to be run on the render thread.
 	void clear(Clear mask, const glm::vec4& color = dk::colors::black);
 
+	void blit(FrameBuffer& input, Mask mask = Mask::Color, int inputColorIndex = 0, int outputColorIndex = 0, 
+		      Texture::MagFilter filter = Texture::MagFilter::Linear);
+
 	// @brief Draw data bound in the shader using it's layout(...) method. Use a vertex buffer for indexing. 
 	// Has to be run on the render thread.
 	void render(Shader& shader, VertexBuffer& vertexBuffer, Primitive primitive, unsigned count = 1);
@@ -75,6 +126,8 @@ public:
 	// @brief Draw data bound in the shader using it's layout(...) method. Use an element buffer for indexing. 
 	// Has to be run on the render thread.
 	void render(Shader& shader, ElementBuffer& elementBuffer, Primitive primitive, unsigned count = 1);
+
+	void render(DemoScene);
 
 private:
 	api::FrameBuffer        m_apiHandle;
