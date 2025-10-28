@@ -2,6 +2,7 @@
 #include <devkit/io/asset_manager.h>
 #include <functional>
 #include <filesystem>
+#include <unordered_map>
 
 namespace dk::io {
 
