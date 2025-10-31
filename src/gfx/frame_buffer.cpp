@@ -3,6 +3,8 @@
 
 #include <GL/glew.h>
 
+void logFramebufferWarning(GLenum status);
+
 const dk::gfx::RenderTarget& dk::gfx::FrameBuffer::Attachment::get() const {
 	return std::visit(common::overload{
 		[](const std::reference_wrapper<RenderTarget>& data) -> const RenderTarget& { return data.get(); },
@@ -42,29 +44,83 @@ void dk::gfx::FrameBuffer::clear(Clear mask, const glm::vec4& color)
 	glClear((unsigned)mask);
 }
 
+unsigned toUnderlying(dk::gfx::Texture::MagFilter filter)
+{
+	switch (filter)
+	{
+	case dk::gfx::Texture::MagFilter::Nearest : return GL_NEAREST;
+	case dk::gfx::Texture::MagFilter::Linear  : return GL_LINEAR;
+	default: throw std::runtime_error("unknown filter value");
+	}
+}
+
+unsigned toUnderlying(dk::gfx::Mask mask)
+{
+	unsigned result = 0u;
+	if ((unsigned)mask & (unsigned)dk::gfx::Mask::Color)   result |= GL_COLOR_BUFFER_BIT;
+	if ((unsigned)mask & (unsigned)dk::gfx::Mask::Depth)   result |= GL_DEPTH_BUFFER_BIT;
+	if ((unsigned)mask & (unsigned)dk::gfx::Mask::Stencil) result |= GL_STENCIL_BUFFER_BIT;
+	return result;
+}
+
 void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Mask mask, int inputColorIndex, int outputColorIndex, Texture::MagFilter filter)
 {
 	makeActive();
 
-	const auto filter_api = [&] {
-		switch (filter)
-		{
-		case Texture::MagFilter::Nearest : return GL_NEAREST;
-		case Texture::MagFilter::Linear  : return GL_LINEAR;
-		default: throw std::runtime_error("unknown filter value");
-		}
-	}();
-
-	unsigned mask_api = 0u;
-	if ((unsigned)mask & (unsigned)Mask::Color)   mask_api |= GL_COLOR_BUFFER_BIT;
-	if ((unsigned)mask & (unsigned)Mask::Depth)   mask_api |= GL_DEPTH_BUFFER_BIT;
-	if ((unsigned)mask & (unsigned)Mask::Stencil) mask_api |= GL_STENCIL_BUFFER_BIT;
+	const auto filter_api = toUnderlying(filter);
+	const auto mask_api = toUnderlying(mask);
 
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
 
 	glBlitFramebuffer(0, 0, input.color[inputColorIndex].get().targetSize().x, input.color[inputColorIndex].get().targetSize().y, 
 		0, 0, color[outputColorIndex].get().targetSize().x, color[outputColorIndex].get().targetSize().y, mask_api, filter_api);
+}
+
+void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Rect srcRect, Rect dstRect, Mask mask, int inputColorIndex, int outputColorIndex, Texture::MagFilter filter)
+{
+	makeActive();
+
+	const auto filter_api = toUnderlying(filter);
+	const auto mask_api = toUnderlying(mask);
+
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
+
+	glBlitFramebuffer(srcRect.offset.x, srcRect.offset.y, srcRect.size.x, srcRect.size.y, 
+		dstRect.offset.x, dstRect.offset.y, dstRect.size.x, dstRect.size.y, mask_api, filter_api);
+}
+
+void dk::gfx::FrameBuffer::render(Shader& shader)
+{
+	struct PostProcessHandler {
+		VertexBuffer vertexBuffer;
+
+		PostProcessHandler()
+			: vertexBuffer(common::id<Vertex<glm::vec3, glm::vec2>>)
+		{
+			auto& cont = vertexBuffer.modify();
+			cont.push_back(Vertex(glm::vec3(-1, -1, 0), glm::vec2(0, 0)));
+			cont.push_back(Vertex(glm::vec3( 1, -1, 0), glm::vec2(1, 0)));
+			cont.push_back(Vertex(glm::vec3( 1,  1, 0), glm::vec2(1, 1)));
+			cont.push_back(Vertex(glm::vec3( 1,  1, 0), glm::vec2(1, 1)));
+			cont.push_back(Vertex(glm::vec3(-1,  1, 0), glm::vec2(0, 1)));
+			cont.push_back(Vertex(glm::vec3(-1, -1, 0), glm::vec2(0, 0)));
+		}
+	};
+
+	static std::unordered_map<void*, PostProcessHandler> s_handlers{};
+	auto& handler = s_handlers[(void*)this];
+
+	shader.layout(handler.vertexBuffer);
+	render(shader, handler.vertexBuffer, Primitive::Triangles);
+}
+
+void dk::gfx::FrameBuffer::render(Texture2D& texture)
+{
+	static Shader s_shader(ShaderSource::postProcessVertexSource(), ShaderSource::passthoughTextureFragmentSource());
+	s_shader.uniformTexture("u_texture", texture);
+	render(s_shader);
 }
 
 void dk::gfx::FrameBuffer::render(Shader& shader, VertexBuffer& vertexBuffer, Primitive primitive, unsigned count)
@@ -133,6 +189,10 @@ void dk::gfx::FrameBuffer::makeActive()
 	// Set depth attachment	
 	if (depth.has_value())
 		depth.get().setAsTarget(api::Attachment::Depth);
+
+	// Check framebuffer status and log warnings if necessary
+	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	logFramebufferWarning(status);
 }
 
 dk::gfx::FrameBuffer& dk::gfx::backBuffer() 
@@ -240,10 +300,41 @@ template <>
 void dk::gfx::setFrameBufferProperty(FrameBuffer&, const FrameBuffer::PointSize& pointSize)
 { glPointSize(pointSize.value); }
 
+#include <GL/glu.h>
+
+void logFramebufferWarning(GLenum status) {
+	const auto warning = [=] -> std::pair<bool, std::string>{
+		switch (status) {
+		case GL_FRAMEBUFFER_COMPLETE: 
+			return { false, "" };
+		case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+			return { true, "Framebuffer incomplete: Incomplete attachment" };
+		case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+			return { true, "Framebuffer incomplete: Missing attachment" };
+		case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+			return { true, "Framebuffer incomplete: Incomplete draw buffer" };
+		case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+			return { true, "Framebuffer incomplete: Incomplete read buffer" };
+		case GL_FRAMEBUFFER_UNSUPPORTED:
+			return { true, "Framebuffer incomplete: Unsupported configuration" };
+		case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+			return { true, "Framebuffer incomplete: Incomplete multisample buffer" };
+		case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+			return { true, "Framebuffer incomplete: Incomplete layer targets" };
+		default:
+			return { true, "Unknown framebuffer status" };
+		}
+	}();
+
+	if (warning.first)
+	{
+		spdlog::warn("{}", warning.second);
+	}
+}
 
 #include "demo_scene.h"
 
-void dk::gfx::FrameBuffer::render(DemoScene)
+void dk::gfx::FrameBuffer::render(DemoScene ds)
 {
 	struct Scene {
 		std::shared_ptr<ShaderSource> vertShader;
@@ -275,11 +366,12 @@ void dk::gfx::FrameBuffer::render(DemoScene)
 	auto& scene = s_scenes[(void*)this];
 
 	// Setup uniforms
+	const auto& cam = ds.camera.value_or(scene.camera);
 	scene.camera.position = glm::vec3(0, -3, 0.01);
 	scene.camera.asp = aspectRatio();
-	scene.shader->uniforms().set("u_camera.VP",        scene.camera.P() * scene.camera.V());
-	scene.shader->uniforms().set("u_camera.position",  scene.camera.position);
-	scene.shader->uniforms().set("u_camera.direction", scene.camera.lookat - scene.camera.position);
+	scene.shader->uniforms().set("u_camera.VP",        cam.P() * cam.V());
+	scene.shader->uniforms().set("u_camera.position",  cam.position);
+	scene.shader->uniforms().set("u_camera.direction", cam.lookat - cam.position);
 
 	// Execute draw calls
 	clear(Clear::Color | Clear::Depth, DK_COLOR(0x333333ff));

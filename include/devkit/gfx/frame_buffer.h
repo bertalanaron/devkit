@@ -7,6 +7,7 @@
 #include <devkit/gfx/mesh.h>
 #include <devkit/gfx/texture.h>
 #include <devkit/gfx/viewport.h>
+#include <devkit/gfx/camera.h>
 
 namespace dk::gfx {
 
@@ -16,6 +17,11 @@ inline Clear operator|(Clear a, Clear b) { return Clear((int)a | (int)b); }
 
 enum class Mask { Color = BIT(0), Depth = BIT(1), Stencil = BIT(2) };
 inline Mask operator|(Mask a, Mask b) { return Mask((int)a | (int)b); }
+
+struct Rect {
+	glm::ivec2 offset;
+	glm::ivec2 size;
+};
 
 class FrameBuffer
 {
@@ -78,12 +84,15 @@ public:
 
 	Config config;
 
-	struct DemoScene { };
+	struct DemoScene {
+		std::optional<Camera> camera;
+	};
 
 public:
 	FrameBuffer();
 	FrameBuffer(api::FrameBuffer::backbuffer_t);
-	FrameBuffer(FrameBuffer&&) = default;
+	FrameBuffer(FrameBuffer&&)            = default;
+	FrameBuffer& operator=(FrameBuffer&&) = default;
 
 	std::vector<Attachment> color;
 	Attachment              depth;
@@ -98,9 +107,6 @@ public:
 	// Has to be run on the render thread.
 	void clear(Clear mask, const glm::vec4& color = dk::colors::black);
 
-	void blit(FrameBuffer& input, Mask mask = Mask::Color, int inputColorIndex = 0, int outputColorIndex = 0, 
-		      Texture::MagFilter filter = Texture::MagFilter::Linear);
-
 	// @brief Draw data bound in the shader using it's layout(...) method. Use a vertex buffer for indexing. 
 	// Has to be run on the render thread.
 	void render(Shader& shader, VertexBuffer& vertexBuffer, Primitive primitive, unsigned count = 1);
@@ -109,7 +115,22 @@ public:
 	// Has to be run on the render thread.
 	void render(Shader& shader, ElementBuffer& elementBuffer, Primitive primitive, unsigned count = 1);
 
+	// @brief Render a demo scene (containing the blender monkey). Use for debugging framebuffer setups 
 	void render(DemoScene);
+
+	// @brief Copy entire buffer(s) (selected by color indices and mask) from another framebuffer to this
+	void blit(FrameBuffer& input, Mask mask = Mask::Color, int inputColorIndex = 0, int outputColorIndex = 0, 
+		Texture::MagFilter filter = Texture::MagFilter::Linear);
+
+	// @brief Copy a part of buffer(s) (selected by color indices and mask) from another framebuffer to this
+	void blit(FrameBuffer& input, Rect srcRect, Rect dstRect, Mask mask = Mask::Color, int inputColorIndex = 0, int outputColorIndex = 0, 
+		Texture::MagFilter filter = Texture::MagFilter::Linear);
+
+	// @brief Render a full screen quad using a post processing shader
+	void render(Shader& postProcess);
+
+	// @brief Render texture as a fullscreen quad
+	void render(Texture2D& texture);
 
 private:
 	api::FrameBuffer        m_apiHandle;

@@ -52,9 +52,8 @@ private:
 enum class Attachment { Color0, Depth, Stencil, DepthAndStencil };
 unsigned toUnderlying(Attachment attachment);
 
-enum class TextureType { Unset, Texture1D, Texture2D, Texture3D, Cubemap, MultisampledTexture2D };
+enum class TextureType { Unset, Texture1D, Texture2D, Texture3D, Cubemap, MultisampledTexture2D, Texture2DArray };
 unsigned toUnderlying(TextureType type);
-bool canAttachToFrameBuffer(TextureType type);
 
 class Texture
 	: public Resource<Texture>

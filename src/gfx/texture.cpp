@@ -82,7 +82,16 @@ dk::gfx::Texture2D::Texture2D(const glm::ivec2& size, Channels channels)
     });
 }
 
-stbi_uc* loadTexture2DFromFile(const std::filesystem::path& path, glm::ivec2& size, unsigned& channels)
+dk::gfx::Channels channelCountToEnum(int channels)
+{
+    if (channels == 1) return dk::gfx::Channels::R;
+    if (channels == 2) return dk::gfx::Channels::RG;
+    if (channels == 3) return dk::gfx::Channels::RGB;
+    if (channels == 4) return dk::gfx::Channels::RGBA;
+    throw std::runtime_error("invalid channel count");
+}
+
+stbi_uc* loadTexture2DFromFile(const std::filesystem::path& path, glm::ivec2& size, dk::gfx::Channels& channels)
 {
     // Load file using stb_image
     int channelCount = 1;
@@ -95,35 +104,18 @@ stbi_uc* loadTexture2DFromFile(const std::filesystem::path& path, glm::ivec2& si
         return nullptr;
     }
 
-    // Get api enum for channels
-    channels = [=]() {
-        if (channelCount == 1) return GL_RED;
-        if (channelCount == 2) return GL_RG;
-        if (channelCount == 3) return GL_RGB;
-        if (channelCount == 4) return GL_RGBA;
-    }();
-
+    channels = channelCountToEnum(channelCount);
     return pixels;
-}
-
-dk::gfx::Channels channelCountToEnum(int channels)
-{
-    if (channels == 1) return dk::gfx::Channels::R;
-    if (channels == 2) return dk::gfx::Channels::RG;
-    if (channels == 3) return dk::gfx::Channels::RGB;
-    if (channels == 4) return dk::gfx::Channels::RGBA;
-    throw std::runtime_error("invalid channel count");
 }
 
 dk::gfx::Texture2D::Texture2D(const std::filesystem::path& path)
     : Texture(api::TextureType::Texture2D, Channels::R)
 {
-    unsigned channels = 0;
-    auto pixels = loadTexture2DFromFile(path, m_size, channels);
+    auto pixels = loadTexture2DFromFile(path, m_size, m_channels);
 
     // Emplace initializer which parses image data from file upon resource initialization
     if (pixels)
-        m_initializer.emplace([path=path,channels,pixels](unsigned handle, Texture* tex) {
+        m_initializer.emplace([path=path,channels=api::toUnderlying(m_channels),pixels](unsigned handle, Texture* tex) {
             Texture2D* texture = dynamic_cast<Texture2D*>(tex);
 #if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
             glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
@@ -143,6 +135,9 @@ dk::gfx::Texture2D dk::gfx::Texture2D::loadFromFileAndInitialize(const std::stri
 
 void dk::gfx::Texture2D::resize(const glm::ivec2& size)
 {
+    if (size == m_size)
+        return;
+
     m_size = size;
     m_initializer.emplace([channels=m_channels,size=size](unsigned handle, Texture* texture) {
 #if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
@@ -180,6 +175,9 @@ dk::gfx::MultisampledTexture2D::MultisampledTexture2D(const glm::ivec2& size, un
 
 void dk::gfx::MultisampledTexture2D::resize(const glm::ivec2& size)
 {
+    if (size == m_size)
+        return;
+
     m_size = size;
     m_initializer.emplace([channels=m_channels,size=size,samples=m_samples](unsigned handle, Texture* texture) {
 #if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
@@ -261,18 +259,157 @@ dk::gfx::Cubemap::Cubemap(const std::array<std::filesystem::path, 6>& paths)
     });
 }
 
-void dk::gfx::Cubemap::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
-{
-    throw std::runtime_error("cubemap cannot be attached as framebuffer output");
+dk::gfx::Texture2DArray::Texture2DArray(const glm::ivec2& size, int layers, Channels channels)
+    : Texture(api::TextureType::Texture2DArray, channels)
+    , m_size(size)
+    , m_layers(layers)
+{ 
+    // Validate layer count
+    if (layers < 1 || layers > io::GlobalState::hardware().glMaxTextureLayers)
+        throw std::out_of_range("Layer count is out of range");
+
+    // Emplace initializer which parses image data from files upon resource initialization
+    m_initializer.emplace([=](unsigned handle, Texture* texture) {
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+        glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, api::internalFormat(channels), size.x, size.y, layers);
+    });
 }
 
-bool isMipMapMinFilter(const dk::gfx::Texture::MinFilter& minFilter)
+std::vector<stbi_uc*> loadTexturesFromFiles(const std::vector<std::filesystem::path>& files, dk::gfx::Channels& channels, glm::ivec2& size)
 {
-    if (minFilter == dk::gfx::Texture::MinFilter::LinearMipmapLinear) return true;
-    if (minFilter == dk::gfx::Texture::MinFilter::LinearMipmapNearest) return true;
-    if (minFilter == dk::gfx::Texture::MinFilter::NearestMipmapLinear) return true;
-    if (minFilter == dk::gfx::Texture::MinFilter::NearestMipmapNearest) return true;
-    return false;
+    std::vector<stbi_uc*> results;
+    int channelCount;
+    for (int i = 0; i < files.size(); ++i)
+    {
+        glm::ivec2 currSize;
+        int        currChannels;
+        const auto pathStr = files.at(i).string();
+        results.push_back(stbi_load(pathStr.c_str(), &currSize.x, &currSize.y, &currChannels, 0));
+
+        if (i == 0)
+        {
+            size         = currSize;
+            channelCount = currChannels;
+            continue;
+        }
+
+        if (currSize != size)
+            throw std::runtime_error("Files have mismatching sizes");
+        if (currChannels != channelCount)
+            throw std::runtime_error("Files have mismatching channels");
+    }
+
+    channels = channelCountToEnum(channelCount);
+    return results;
+}
+
+dk::gfx::Texture2DArray::Texture2DArray(const std::vector<std::filesystem::path>& files)
+    : Texture(api::TextureType::Texture2DArray, Channels::R)
+{
+    auto images = loadTexturesFromFiles(files, m_channels, m_size);
+    m_layers = images.size();
+
+    // Emplace initializer which uploads pixels to the gpu and frees pixel buffers
+    m_initializer.emplace([images=std::move(images)](unsigned handle, Texture* tex) {
+        Texture2DArray* texture = dynamic_cast<Texture2DArray*>(tex);
+
+        const auto size     = texture->m_size;
+        const auto channels = texture->m_channels;
+        glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, api::internalFormat(channels), size.x, size.y, texture->layers());
+
+        for (int i = 0; i < images.size(); ++i)
+        {
+            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, 0, 0, i, size.x, size.y, 1,  
+                api::toUnderlying(channels), GL_UNSIGNED_BYTE, images.at(i));
+
+            stbi_image_free(images.at(i));
+        }
+    });
+}
+
+void dk::gfx::Texture2DArray::resize(const glm::ivec2& size)
+{
+    if (size == m_size)
+        return;
+
+    m_size = size;
+    m_initializer.emplace([channels=m_channels,size=size](unsigned handle, Texture* texture) {
+#if defined(GL_UNPACK_ROW_LENGTH) && !defined(__EMSCRIPTEN__)
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+#endif
+        glTexStorage3D(GL_TEXTURE_2D_ARRAY, 1, api::internalFormat(channels), size.x, size.y, dynamic_cast<Texture2DArray*>(texture)->layers());
+    });
+}
+
+dk::gfx::Texture2DArray::Layer dk::gfx::Texture2DArray::operator[](int layer)
+{ 
+    if (layer < 0 || layer >= m_layers)
+        throw std::out_of_range("Layer index is out of range");
+    return Layer(*this, layer);
+}
+
+void dk::gfx::Texture2DArray::Layer::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
+{
+    m_array->updateOrInitializeAndBind();
+    if (attachment == api::Attachment::Color0)
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, m_array->m_apiHandle.handle(), level, m_layerIdx);
+    else
+        glFramebufferTextureLayer(GL_FRAMEBUFFER, api::toUnderlying(attachment), m_array->m_apiHandle.handle(), level, m_layerIdx);
+}
+
+dk::gfx::RenderBuffer::RenderBuffer(const glm::ivec2& size, Channels channels, unsigned samples)
+    : m_valid(true)
+    , m_size(size)
+    , m_samples(samples)
+    , m_channels(channels)
+{
+    m_initializer = [=](unsigned handle, RenderBuffer* renderbuffer) {
+        if (m_samples == 1)
+            glRenderbufferStorage(GL_RENDERBUFFER, api::internalFormat(renderbuffer->m_channels), 
+                renderbuffer->size().x, renderbuffer->size().y);
+        else
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, renderbuffer->m_samples, api::internalFormat(renderbuffer->m_channels), 
+                renderbuffer->size().x, renderbuffer->size().y);
+    };
+}
+
+void dk::gfx::RenderBuffer::resize(const glm::ivec2& size) {
+    if (size == m_size)
+        return;
+
+    m_size = size;
+    m_initializer = [=](unsigned handle, RenderBuffer* renderbuffer) {
+        if (m_samples == 1)
+            glRenderbufferStorage(GL_RENDERBUFFER, api::internalFormat(renderbuffer->m_channels), 
+                renderbuffer->size().x, renderbuffer->size().y);
+        else
+            glRenderbufferStorageMultisample(GL_RENDERBUFFER, renderbuffer->m_samples, api::internalFormat(renderbuffer->m_channels), 
+                renderbuffer->size().x, renderbuffer->size().y);
+    };
+}
+
+void dk::gfx::RenderBuffer::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
+{
+    updateOrInitializeAndBind();
+    if (attachment == api::Attachment::Color0)
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_RENDERBUFFER, m_apiHandle.handle());
+    else
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_RENDERBUFFER, m_apiHandle.handle());
+}
+
+void dk::gfx::RenderBuffer::updateOrInitializeAndBind()
+{
+    m_apiHandle.bind();
+
+    // Call initializer with handle
+    if (m_initializer.has_value())
+    {
+        m_initializer.value()(m_apiHandle.handle(), this);
+        m_initializer.reset();
+        return;
+    }
 }
 
 dk::gfx::TextureUnit::SlotRef::SlotRef(TextureUnit& unit, int slot)
@@ -367,54 +504,4 @@ void dk::gfx::setTextureProperty(dk::gfx::Texture& texture, const Texture::MagFi
     }();
 
     glTexParameteri(dk::gfx::api::toUnderlying(texture.m_type), GL_TEXTURE_MAG_FILTER, underlying);
-}
-
-dk::gfx::RenderBuffer::RenderBuffer(const glm::ivec2& size, unsigned samples, Channels channels)
-    : m_valid(true)
-    , m_size(size)
-    , m_samples(samples)
-    , m_channels(channels)
-{
-    m_initializer = [=](unsigned handle, RenderBuffer* renderbuffer) {
-        if (m_samples == 1)
-            glRenderbufferStorage(GL_RENDERBUFFER, api::internalFormat(renderbuffer->m_channels), 
-                renderbuffer->size().x, renderbuffer->size().y);
-        else
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, renderbuffer->m_samples, api::internalFormat(renderbuffer->m_channels), 
-                renderbuffer->size().x, renderbuffer->size().y);
-        };
-}
-
-void dk::gfx::RenderBuffer::resize(const glm::ivec2& size) {
-    m_size = size;
-    m_initializer = [=](unsigned handle, RenderBuffer* renderbuffer) {
-        if (m_samples == 1)
-            glRenderbufferStorage(GL_RENDERBUFFER, api::internalFormat(renderbuffer->m_channels), 
-                renderbuffer->size().x, renderbuffer->size().y);
-        else
-            glRenderbufferStorageMultisample(GL_RENDERBUFFER, renderbuffer->m_samples, api::internalFormat(renderbuffer->m_channels), 
-                renderbuffer->size().x, renderbuffer->size().y);
-    };
-}
-
-void dk::gfx::RenderBuffer::setAsTarget(api::Attachment attachment, unsigned colorIndex, unsigned level)
-{
-    updateOrInitializeAndBind();
-    if (attachment == api::Attachment::Color0)
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, api::toUnderlying(attachment) + colorIndex, GL_RENDERBUFFER, m_apiHandle.handle());
-    else
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, api::toUnderlying(attachment), GL_RENDERBUFFER, m_apiHandle.handle());
-}
-
-void dk::gfx::RenderBuffer::updateOrInitializeAndBind()
-{
-    m_apiHandle.bind();
-
-    // Call initializer with handle
-    if (m_initializer.has_value())
-    {
-        m_initializer.value()(m_apiHandle.handle(), this);
-        m_initializer.reset();
-        return;
-    }
 }

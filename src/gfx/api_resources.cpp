@@ -87,15 +87,9 @@ unsigned dk::gfx::api::toUnderlying(TextureType type)
 	case TextureType::Texture3D             : return GL_TEXTURE_3D;
 	case TextureType::Cubemap               : return GL_TEXTURE_CUBE_MAP;
 	case TextureType::MultisampledTexture2D : return GL_TEXTURE_2D_MULTISAMPLE;
+	case TextureType::Texture2DArray        : return GL_TEXTURE_2D_ARRAY;
 	default: return 0;
 	}
-}
-
-bool dk::gfx::api::canAttachToFrameBuffer(TextureType type)
-{
-	if (type == TextureType::Texture2D)             return true;
-	if (type == TextureType::MultisampledTexture2D) return true;
-	return false;
 }
 
 void dk::gfx::api::Texture::bind(TextureType textureType)

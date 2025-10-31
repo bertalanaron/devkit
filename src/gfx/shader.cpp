@@ -25,6 +25,50 @@ dk::gfx::ShaderSource dk::gfx::ShaderSource::load(const std::string& path)
     return ShaderSource(std::move(contents.str()));
 }
 
+std::weak_ptr<dk::gfx::ShaderSource> dk::gfx::ShaderSource::postProcessVertexSource()
+{
+    static const std::string source = R"(
+    #version 330 core
+
+    // Fullscreen triangle positions (in a VBO or generated in the shader)
+    layout(location = 0) in vec2 aPos;
+    layout(location = 1) in vec2 aTexCoord;
+
+    out vec2 UV;
+
+    void main()
+    {
+        UV = aTexCoord;
+        gl_Position = vec4(aPos, 0.0, 1.0);
+    }
+    )";
+
+    // TODO: improve this so it can handle multiple contexts (unless shared context is implemented first)
+    static auto shader = std::make_shared<ShaderSource>(std::string(source));
+    return shader;
+}
+
+std::weak_ptr<dk::gfx::ShaderSource> dk::gfx::ShaderSource::passthoughTextureFragmentSource()
+{
+    static const std::string source = R"(
+    #version 330 core
+
+    in vec2 UV;
+    out vec4 FragColor;
+
+    uniform sampler2D u_texture;
+
+    void main()
+    {
+        FragColor = texture(u_texture, UV);
+    }
+    )";
+
+    // TODO: improve this so it can handle multiple contexts (unless shared context is implemented first)
+    static auto shader = std::make_shared<ShaderSource>(std::string(source));
+    return shader;
+}
+
 void dk::gfx::ShaderSource::update(const std::string& path)
 {
     std::ifstream ifs(path);
