@@ -31,6 +31,8 @@ public:
 	struct HardwareVariantState {
 		int glMaxTextureImageUnits = 0;
 		int glMaxTextureSize       = 0;
+		int glMaxTextureLayers     = 0;
+		int glMaxColorAttachments  = 0;
 	};
 
 	struct State {
@@ -41,8 +43,8 @@ public:
 		glm::vec2  cursor;
 		int        cursorWarped = false;
 
-		unsigned glVersionMajor = 3;
-		unsigned glVersionMinor = 3;
+		unsigned glVersionMajor = 4;
+		unsigned glVersionMinor = 4;
 		unsigned glDepthSize    = 24;
 	};
 

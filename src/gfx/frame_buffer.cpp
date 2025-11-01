@@ -3,89 +3,124 @@
 
 #include <GL/glew.h>
 
+void logFramebufferWarning(GLenum status);
+
+const dk::gfx::RenderTarget& dk::gfx::FrameBuffer::Attachment::get() const {
+	return std::visit(common::overload{
+		[](const std::reference_wrapper<RenderTarget>& data) -> const RenderTarget& { return data.get(); },
+		[](const std::unique_ptr<RenderTarget>& data) -> const RenderTarget& { return *data.get(); },
+		[](const std::monostate) -> const RenderTarget& { return *((const RenderTarget*)nullptr); }
+	}, m_data);
+}
+
+dk::gfx::RenderTarget& dk::gfx::FrameBuffer::Attachment::get() {
+	return std::visit(common::overload{
+		[](std::reference_wrapper<RenderTarget>& data) -> RenderTarget& { return data.get(); },
+		[](std::unique_ptr<RenderTarget>& data) -> RenderTarget& { return *data.get(); },
+		[](std::monostate) -> RenderTarget& { return *((RenderTarget*)nullptr); }
+	}, m_data);
+}
+
+glm::ivec3 dk::gfx::FrameBuffer::Attachment::size() const
+{
+	if (std::holds_alternative<std::monostate>(m_data))
+		return { 0, 0, 0 };
+	return get().targetSize();
+}
+
 dk::gfx::FrameBuffer::FrameBuffer()
-{ 
-	// Get maximum number of color attachments
-	glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &m_maxColorAttachments);
-		
-	m_colorAttachments.resize(m_maxColorAttachments);
-}
+	: color(io::GlobalState::hardware().glMaxColorAttachments)
+{ }
 
-//dk::gfx::FrameBuffer::FrameBuffer(int width, int height, int channels, bool depth)
-//	: m_size(width, height)
-//{
-//	// Get maximum number of color attachments
-//	glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS, &m_maxColorAttachments);
-//	
-//	m_colorAttachments = std::vector<FrameBuffer::color_attachment_t>(m_maxColorAttachments);
-//	m_colorAttachments.at(0) = std::make_unique<Texture>(std::move(Texture::create(width, height, channels)));
-//	if (depth)
-//		m_depthAttachment = std::make_unique<RenderBuffer>();
-//}
+dk::gfx::FrameBuffer::FrameBuffer(dk::gfx::api::FrameBuffer::backbuffer_t)
+	: color(0)
+	, m_apiHandle(dk::gfx::api::FrameBuffer::backbuffer_t{})
+{ }
 
-//void dk::gfx::FrameBuffer::attachColor(Texture& texture, int attachmentIndex)
-//{
-//	if (attachmentIndex < 0 || attachmentIndex >= m_maxColorAttachments)
-//	{
-//		spdlog::error("Trying to attach to incorrect index: {}", attachmentIndex);
-//		return;
-//	}
-//	m_colorAttachments.at(attachmentIndex) = &texture;
-//}
-//
-//void dk::gfx::FrameBuffer::attachColor(RenderBuffer& renderBuffer, int attachmentIndex)
-//{
-//	if (attachmentIndex < 0 || attachmentIndex >= m_maxColorAttachments)
-//	{
-//		spdlog::error("Trying to attach to incorrect index: {}", attachmentIndex);
-//		return;
-//	}
-//	m_colorAttachments.at(attachmentIndex) = &renderBuffer;
-//}
-//
-//void dk::gfx::FrameBuffer::detachColor(int attachmentIndex)
-//{
-//	if (attachmentIndex < 0 || attachmentIndex >= m_maxColorAttachments)
-//	{
-//		spdlog::error("Trying to detach at incorrect index: {}", attachmentIndex);
-//		return;
-//	}
-//	m_colorAttachments.at(attachmentIndex) = std::monostate{};
-//}
-
-void dk::gfx::FrameBuffer::attachColor(AttachmentBase& target, int attachmentIndex)
-{
-	if (attachmentIndex < 0 || attachmentIndex >= m_maxColorAttachments)
-	{
-		spdlog::error("Trying to attach to incorrect index: {}", attachmentIndex);
-		return;
-	}
-	m_colorAttachments.at(attachmentIndex) = &target;
-}
-
-dk::gfx::FrameBuffer::opt_texture_ref_t dk::gfx::FrameBuffer::color(int attachmentIndex)
-{
-	auto ptr = m_colorAttachments[attachmentIndex];
-	if (!ptr)
-		return std::nullopt;
-
-	auto castPtr = dynamic_cast<Texture*>(ptr);
-	if (!castPtr)
-		return std::nullopt;
-
-	return *castPtr;
-}
-
-void dk::gfx::FrameBuffer::attachDepth(AttachmentBase& target)
-{
-	m_depthAttachment = &target;
-}
-
-void dk::gfx::FrameBuffer::clear(ClearMask mask, const glm::vec4& color)
+void dk::gfx::FrameBuffer::clear(Clear mask, const glm::vec4& color)
 {
 	makeActive();
 	glClearColor(color.r, color.g, color.b, color.a);
 	glClear((unsigned)mask);
+}
+
+unsigned toUnderlying(dk::gfx::Texture::MagFilter filter)
+{
+	switch (filter)
+	{
+	case dk::gfx::Texture::MagFilter::Nearest : return GL_NEAREST;
+	case dk::gfx::Texture::MagFilter::Linear  : return GL_LINEAR;
+	default: throw std::runtime_error("unknown filter value");
+	}
+}
+
+unsigned toUnderlying(dk::gfx::Mask mask)
+{
+	unsigned result = 0u;
+	if ((unsigned)mask & (unsigned)dk::gfx::Mask::Color)   result |= GL_COLOR_BUFFER_BIT;
+	if ((unsigned)mask & (unsigned)dk::gfx::Mask::Depth)   result |= GL_DEPTH_BUFFER_BIT;
+	if ((unsigned)mask & (unsigned)dk::gfx::Mask::Stencil) result |= GL_STENCIL_BUFFER_BIT;
+	return result;
+}
+
+void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Mask mask, int inputColorIndex, int outputColorIndex, Texture::MagFilter filter)
+{
+	makeActive();
+
+	const auto filter_api = toUnderlying(filter);
+	const auto mask_api = toUnderlying(mask);
+
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
+
+	glBlitFramebuffer(0, 0, input.color[inputColorIndex].get().targetSize().x, input.color[inputColorIndex].get().targetSize().y, 
+		0, 0, color[outputColorIndex].get().targetSize().x, color[outputColorIndex].get().targetSize().y, mask_api, filter_api);
+}
+
+void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Rect srcRect, Rect dstRect, Mask mask, int inputColorIndex, int outputColorIndex, Texture::MagFilter filter)
+{
+	makeActive();
+
+	const auto filter_api = toUnderlying(filter);
+	const auto mask_api = toUnderlying(mask);
+
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
+
+	glBlitFramebuffer(srcRect.offset.x, srcRect.offset.y, srcRect.size.x, srcRect.size.y, 
+		dstRect.offset.x, dstRect.offset.y, dstRect.size.x, dstRect.size.y, mask_api, filter_api);
+}
+
+void dk::gfx::FrameBuffer::render(Shader& shader)
+{
+	struct PostProcessHandler {
+		VertexBuffer vertexBuffer;
+
+		PostProcessHandler()
+			: vertexBuffer(common::id<Vertex<glm::vec3, glm::vec2>>)
+		{
+			auto& cont = vertexBuffer.modify();
+			cont.push_back(Vertex(glm::vec3(-1, -1, 0), glm::vec2(0, 0)));
+			cont.push_back(Vertex(glm::vec3( 1, -1, 0), glm::vec2(1, 0)));
+			cont.push_back(Vertex(glm::vec3( 1,  1, 0), glm::vec2(1, 1)));
+			cont.push_back(Vertex(glm::vec3( 1,  1, 0), glm::vec2(1, 1)));
+			cont.push_back(Vertex(glm::vec3(-1,  1, 0), glm::vec2(0, 1)));
+			cont.push_back(Vertex(glm::vec3(-1, -1, 0), glm::vec2(0, 0)));
+		}
+	};
+
+	static std::unordered_map<void*, PostProcessHandler> s_handlers{};
+	auto& handler = s_handlers[(void*)this];
+
+	shader.layout(handler.vertexBuffer);
+	render(shader, handler.vertexBuffer, Primitive::Triangles);
+}
+
+void dk::gfx::FrameBuffer::render(Texture2D& texture)
+{
+	static Shader s_shader(ShaderSource::postProcessVertexSource(), ShaderSource::passthoughTextureFragmentSource());
+	s_shader.uniformTexture("u_texture", texture);
+	render(s_shader);
 }
 
 void dk::gfx::FrameBuffer::render(Shader& shader, VertexBuffer& vertexBuffer, Primitive primitive, unsigned count)
@@ -96,8 +131,6 @@ void dk::gfx::FrameBuffer::render(Shader& shader, VertexBuffer& vertexBuffer, Pr
 		? glDrawArrays(details::gfx::toUnderlying(primitive), 0, vertexBuffer.size())
 		: glDrawArraysInstanced(details::gfx::toUnderlying(primitive), 0, vertexBuffer.size(), count);
 }
-
-#include <GL/glu.h>
 
 void dk::gfx::FrameBuffer::render(Shader& shader, ElementBuffer& elementBuffer, Primitive primitive, unsigned count)
 {
@@ -116,22 +149,28 @@ void dk::gfx::FrameBuffer::setViewport(const gfx::Viewport& viewport)
 
 float dk::gfx::FrameBuffer::aspectRatio() const
 {
-	return m_viewport.value_or(Viewport(m_colorAttachments[0]->size())).aspectRatio();
+	return [&]{ return m_viewport.has_value() ? m_viewport.value() : Viewport(color[0].size()); }().aspectRatio();
 }
 
-void dk::gfx::FrameBuffer::initializeOrUpdate()
+void dk::gfx::FrameBuffer::resize(const glm::ivec2& size)
 {
-	if (m_handle)
-		return;
-	glGenFramebuffers(1, &m_handle);
+	if (depth.has_value()) 
+		depth.get().resize(size);
+	if (stencil.has_value())
+		stencil.get().resize(size);
+	for (auto& c : color)
+	{
+		if (!c.has_value())
+			continue;
+		c.get().resize(size);
+	}
 }
 
 void dk::gfx::FrameBuffer::makeActive()
 {
-	initializeOrUpdate();
-	glBindFramebuffer(GL_FRAMEBUFFER, (m_handle == -1) ? 0 : m_handle);
+	m_apiHandle.bind();
 
-	const Viewport viewport = m_viewport.value_or(Viewport(m_colorAttachments[0]->size()));
+	const Viewport viewport = [&]{ return m_viewport.has_value() ? m_viewport.value() : Viewport(color[0].size()); }();
 	viewport.makeActive();
 
 	// Bind properties to global gl context
@@ -149,33 +188,25 @@ void dk::gfx::FrameBuffer::makeActive()
 	
 	// Set color attachments
 	std::vector<unsigned> activeColorAttachmentIndices;
-	for (int i = 0; i < m_colorAttachments.size(); ++i) {
-		if (!m_colorAttachments[i])
+	for (int i = 0; i < color.size(); ++i) {
+		if (!color[i].has_value())
 			continue;
 
-		auto& color         = m_colorAttachments.at(i);
-		unsigned attachment = GL_COLOR_ATTACHMENT0 + i;
+		color[i].get().setAsTarget(api::Attachment::Color0, i);
 
-		color->attachAs(*this, attachment);
-		activeColorAttachmentIndices.push_back(i);
+		activeColorAttachmentIndices.push_back(GL_COLOR_ATTACHMENT0 + i);
 	}
-	//if (m_colorAttachments.size() > 0)
-	//	glDrawBuffers(activeColorAttachmentIndices.size(), activeColorAttachmentIndices.data());
+	if (color.size() > 0)
+		glDrawBuffers(activeColorAttachmentIndices.size(), activeColorAttachmentIndices.data());
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
 
-	// Set depth attachment
-	if (m_depthAttachment)
-		m_depthAttachment->attachAs(*this, GL_DEPTH_ATTACHMENT);
+	// Set depth attachment	
+	if (depth.has_value())
+		depth.get().setAsTarget(api::Attachment::Depth);
 
-	// TODO:
-}
-
-dk::gfx::FrameBuffer::FrameBuffer(backbuffer_t)
-	: m_handle(-1)
-	, m_maxColorAttachments(1)
-	, m_colorAttachments(m_maxColorAttachments)
-{
-	attachColor(*(new NullAttachment()), 0);
-	attachDepth(*(new NullAttachment()));
+	// Check framebuffer status and log warnings if necessary
+	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	logFramebufferWarning(status);
 }
 
 dk::gfx::FrameBuffer& dk::gfx::backBuffer() 
@@ -186,7 +217,7 @@ dk::gfx::FrameBuffer& dk::gfx::backBuffer()
 	std::lock_guard lock(s_backbufferMut);
 	auto& fb_ptr = s_frameBuffers[io::GlobalState::currentWindowContext()];
 	if (!fb_ptr)
-		fb_ptr.reset(new FrameBuffer(FrameBuffer::backbuffer_t{}));
+		fb_ptr.reset(new FrameBuffer(api::FrameBuffer::backbuffer_t{}));
 	return *fb_ptr;
 }
 
@@ -282,3 +313,81 @@ void dk::gfx::setFrameBufferProperty(FrameBuffer&, const FrameBuffer::LineWidth&
 template <>
 void dk::gfx::setFrameBufferProperty(FrameBuffer&, const FrameBuffer::PointSize& pointSize)
 { glPointSize(pointSize.value); }
+
+#include <GL/glu.h>
+
+void logFramebufferWarning(GLenum status) {
+	const auto warning = [=] -> std::pair<bool, std::string>{
+		switch (status) {
+		case GL_FRAMEBUFFER_COMPLETE: 
+			return { false, "" };
+		case GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+			return { true, "Framebuffer incomplete: Incomplete attachment" };
+		case GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+			return { true, "Framebuffer incomplete: Missing attachment" };
+		case GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER:
+			return { true, "Framebuffer incomplete: Incomplete draw buffer" };
+		case GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER:
+			return { true, "Framebuffer incomplete: Incomplete read buffer" };
+		case GL_FRAMEBUFFER_UNSUPPORTED:
+			return { true, "Framebuffer incomplete: Unsupported configuration" };
+		case GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE:
+			return { true, "Framebuffer incomplete: Incomplete multisample buffer" };
+		case GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS:
+			return { true, "Framebuffer incomplete: Incomplete layer targets" };
+		default:
+			return { true, "Unknown framebuffer status" };
+		}
+	}();
+
+	if (warning.first)
+	{
+		spdlog::warn("{}", warning.second);
+	}
+}
+
+#include "demo_scene.h"
+
+void dk::gfx::FrameBuffer::render(DemoScene ds)
+{
+	struct Scene {
+		std::shared_ptr<ShaderSource> vertShader;
+		std::shared_ptr<ShaderSource> fragShader;
+		std::unique_ptr<Shader>       shader;
+
+		VertexBuffer                  vertexBuffer;
+		Camera                        camera;
+
+		Scene()
+		{
+			// Setup shader
+			vertShader = std::make_shared<ShaderSource>(std::string(g_vssource));
+			fragShader = std::make_shared<ShaderSource>(std::string(g_fssource));
+			shader = std::make_unique<Shader>(vertShader, fragShader);
+
+			// Setup vertex and element buffers
+			std::vector<Vertex<glm::vec3, glm::vec3>> vertices = {__DK_DEMOSCENE_MONKEY_VERTICES};
+			vertexBuffer = VertexFlags::Position | VertexFlags::Normal;
+			vertexBuffer.modify().resize(vertices.size());
+			std::memcpy(vertexBuffer.modify().data(), vertices.data(), vertexBuffer.get().elem_size() * vertexBuffer.get().size());
+
+			// Setup layout
+			shader->layout(vertexBuffer);
+		}
+	};
+
+	static std::unordered_map<void*, Scene> s_scenes{};
+	auto& scene = s_scenes[(void*)this];
+
+	// Setup uniforms
+	const auto& cam = ds.camera.value_or(scene.camera);
+	scene.camera.position = glm::vec3(0, -3, 0.01);
+	scene.camera.asp = aspectRatio();
+	scene.shader->uniforms().set("u_camera.VP",        cam.P() * cam.V());
+	scene.shader->uniforms().set("u_camera.position",  cam.position);
+	scene.shader->uniforms().set("u_camera.direction", cam.lookat - cam.position);
+
+	// Execute draw calls
+	clear(Clear::Color | Clear::Depth, DK_COLOR(0x333333ff));
+	render(*scene.shader, scene.vertexBuffer, Primitive::Triangles);
+}

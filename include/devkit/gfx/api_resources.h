@@ -49,4 +49,53 @@ private:
 	friend class Resource<VertexBufferObject>;
 };
 
-} // namespace dk::gfx
+enum class Attachment { Color0, Depth, Stencil, DepthAndStencil };
+unsigned toUnderlying(Attachment attachment);
+
+enum class TextureType { Unset, Texture1D, Texture2D, Texture3D, Cubemap, MultisampledTexture2D, Texture2DArray };
+unsigned toUnderlying(TextureType type);
+
+class Texture
+	: public Resource<Texture>
+{
+public:
+	void bind(TextureType textureType);
+
+private:
+	unsigned initialize();
+
+	friend class Resource<Texture>;
+};
+
+class RenderBuffer
+	: public Resource<RenderBuffer>
+{
+public:
+	void bind();
+
+private:
+	unsigned initialize();
+
+	friend class Resource<RenderBuffer>;
+};
+
+class FrameBuffer
+	: public Resource<FrameBuffer>
+{
+public:
+	struct backbuffer_t { };
+
+	FrameBuffer() = default;
+	FrameBuffer(backbuffer_t);
+
+	void bind();
+
+private:
+	bool m_isBackbuffer = false;
+
+	unsigned initialize();
+
+	friend class Resource<FrameBuffer>;
+};
+
+} // namespace dk::gfx::api

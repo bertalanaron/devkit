@@ -16,8 +16,8 @@ public:
 		m_assets.synchronize();
 
 		if (ImGui::Begin("Hi")) {
-			for (auto [path, texture] : m_assets.each<dk::gfx::Texture>()) {
-				auto imId = texture.imguiTextureId();
+			for (auto [path, texture] : m_assets.each<dk::gfx::Texture2D>()) {
+				auto imId = texture.handle();
 				ImGui::Image(imId, ImVec2(32, 32));
 			} 
 		} ImGui::End();
@@ -25,7 +25,7 @@ public:
 
 	void render(const dk::io::Frame& frame) override
 	{
-		dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color, dk::colors::black);
+		dk::gfx::backBuffer().clear(dk::gfx::Clear::Color, dk::colors::black);
 	}
 
 private:

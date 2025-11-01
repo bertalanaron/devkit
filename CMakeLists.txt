@@ -98,7 +98,8 @@ set(GFX_PRIVATE_SOURCES
     src/gfx/viewport.cpp
     src/gfx/context.h
     src/gfx/context.cpp
-    src/gfx/api_resources.cpp)
+    src/gfx/api_resources.cpp
+    src/gfx/demo_scene.h)
 # algo
 set(ALGO_PUBLIC_SOURCES
     include/devkit/algo.h

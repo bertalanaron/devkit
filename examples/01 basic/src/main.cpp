@@ -11,8 +11,11 @@
 #include <devkit/gfx/scene.h>
 #include <devkit/gfx/camera.h>
 #include <devkit/gfx/texture.h>
+//#include <devkit/gfx/font.h>
 #include <devkit/gfx/vertex_sink.h>
 #include <devkit/io/frame.h>
+
+#include <random>
 
 #include <imgui.h>
 
@@ -28,179 +31,6 @@
 
 #include <fstream>
 
-#include <GL/glu.h>
-//
-//template <typename E, typename C>
-//	requires(std::is_enum_v<E>)
-//void imguiPropertyPanel(C& container, dk::common::id_t<E>) {
-//	// Get enum names
-//	static std::array<const char*, magic_enum::enum_count<E>()> names = [] {
-//		std::array<const char*, magic_enum::enum_count<E>()> res{};
-//		for (int i = 0; i < magic_enum::enum_count<E>(); ++i)
-//			res[i] = magic_enum::enum_name(magic_enum::enum_cast<E>(i).value()).data();
-//		return res;
-//		}();
-//
-//	// Get current value
-//	E current = container.property<E>();
-//	int currentInt = static_cast<int>(current);
-//
-//	// Show combo box
-//	ImGui::TableNextRow();
-//	ImGui::TableSetColumnIndex(0);
-//	ImGui::Text(magic_enum::enum_type_name<E>().data());
-//	ImGui::TableSetColumnIndex(1);
-//	std::string comboLabel = std::format("##{}_selector", magic_enum::enum_type_name<E>().data());
-//	ImGui::SetNextItemWidth(-1);
-//	if (ImGui::Combo(comboLabel.c_str(), &currentInt, names.data(), magic_enum::enum_count<E>()))
-//	{
-//		E en = magic_enum::enum_cast<E>(currentInt).value();
-//		container.property(en);
-//	}
-//}
-//
-//template <typename C>
-//glm::ivec2 imguiPropertyPanel(C& container, const char* name, const glm::ivec2& _current) {
-//	glm::ivec2 current = _current;
-//
-//	// Create array for ImGui input
-//	int values[2] = { current.x, current.y };
-//
-//	// Show input for ivec2
-//	ImGui::TableNextRow();
-//	ImGui::TableSetColumnIndex(0);
-//	ImGui::Text(name);
-//	ImGui::TableSetColumnIndex(1);
-//
-//	std::string inputLabel = std::format("##{}_selector", name);
-//	ImGui::SetNextItemWidth(-1);
-//	if (ImGui::InputInt2(inputLabel.c_str(), values)) {
-//		current = glm::ivec2(values[0], values[1]);
-//	}
-//	return current;
-//}
-//
-//template <typename C>
-//std::string imguiPropertyPanel(C& container, const char* name, const std::string& _current) {
-//	std::string current = _current;
-//
-//	// Create a buffer for ImGui input (ImGui needs a char buffer)
-//	static char buffer[256];
-//	std::strncpy(buffer, current.c_str(), sizeof(buffer) - 1);
-//	buffer[sizeof(buffer) - 1] = '\0'; // Ensure null termination
-//
-//	// Show input text box
-//	ImGui::TableNextRow();
-//	ImGui::TableSetColumnIndex(0);
-//	ImGui::Text(name);
-//	ImGui::TableSetColumnIndex(1);
-//
-//	std::string inputLabel = std::format("##{}_selector", name);
-//	ImGui::SetNextItemWidth(-1);
-//	if (ImGui::InputText(inputLabel.c_str(), buffer, sizeof(buffer))) {
-//		current = std::string(buffer);
-//	}
-//	return current;
-//}
-//
-//template <typename E, typename C>
-//	requires(!std::is_enum_v<E> && requires{ typename E::type; })
-//void imguiPropertyPanel(C& container, dk::common::id_t<E>) {
-//	E current = container.property<E>();
-//	E en = E(imguiPropertyPanel<C>(container, details::common::propertyName<E>(), (typename E::type)(current)));
-//	container.property(en);
-//}
-//
-//template <typename E, typename C>
-//void imguiPropertyPanel(C& container) {
-//	imguiPropertyPanel<E>(container, dk::common::id_t<E>{});
-//}
-//
-//void imguiPropertiesPanel(auto& container, float labelColumnWidth) {
-//	if (ImGui::BeginTable("Properties", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg)) {
-//		ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed/*, labelColumnWidth*/);
-//		ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
-//
-//		container.foreachParam([](auto& c, auto id) { imguiPropertyPanel(c, id); });
-//
-//		ImGui::EndTable();
-//	}
-//}
-
-void imguiEditValue(const char* id, float& value)
-{
-	ImGui::DragFloat(id, &value, 0.1f);
-}
-
-void imguiEditValue(const char* id, std::string& string)
-{
-	constexpr size_t bufferSize = 256;
-	char buffer[bufferSize];
-	std::snprintf(buffer, bufferSize, "%s", string.c_str());
-
-	if (ImGui::InputText(id, buffer, bufferSize))
-		string = buffer;
-}
-
-template <typename T, glm::qualifier Q>
-void imguiEditValue(const char* id, glm::vec<2, T, Q>& vec)
-{
-	if constexpr (std::is_same_v<T, float>)
-		ImGui::DragFloat2(id, &vec.x, 0.1f);
-	else if constexpr (std::is_same_v<T, double>)
-		ImGui::DragScalarN(id, ImGuiDataType_Double, &vec.x, 2, 0.1);
-	else if constexpr (std::is_integral_v<T>)
-		ImGui::DragScalarN(id, ImGuiDataType_S32, &vec.x, 2, 1.0f);
-}
-
-template <typename E>
-	requires (std::is_enum_v<E>)
-void imguiEditValue(E& value)
-{
-	using namespace magic_enum;
-
-	auto names = enum_names<E>();
-	int current = static_cast<int>(value);
-	int index = enum_index(value).value_or(0);
-
-	std::string comboLabel = std::format("##{}_selector", magic_enum::enum_type_name<E>().data());
-
-	// Convert names to ImGui-compatible array
-	if (ImGui::BeginCombo(comboLabel.c_str(), names[index].data())) {
-		for (int i = 0; i < static_cast<int>(names.size()); ++i) {
-			bool selected = (i == index);
-			if (ImGui::Selectable(names[i].data(), selected)) {
-				value = enum_value<E>(i);
-			}
-			if (selected)
-				ImGui::SetItemDefaultFocus();
-		}
-		ImGui::EndCombo();
-	}
-}
-
-template <typename C>
-void imguiEditConfig(C& config)
-{
-	config.for_each([&config](const auto& prop) { 
-		ImGui::Text(C::property_name(prop).data());
-		ImGui::SameLine();
-
-		dk::common::overload {
-			[&config](const dk::common::UniquePropertySpecialization auto& prop) {
-				auto value = prop.value;
-				imguiEditValue(C::property_name(prop).data(), value);
-				config(std::decay_t<decltype(prop)>(value));
-			},
-			[&config](const auto& prop) {
-				auto value = prop;
-				imguiEditValue(value);
-				config(std::decay_t<decltype(prop)>(value));
-			}
-		}(prop);
-	});
-}
-
 template <typename T>
 class AssetSelector {
 public:
@@ -213,7 +43,7 @@ public:
 		const int MaxDropDownSize = 200;
 		std::string label = std::format("###Asset{}_{:x}", typeid(T).name(), reinterpret_cast<intptr_t>(this));
 		
-		ImGui::Image(assets.get<T>(m_selected).imguiTextureId(), ImVec2(18, 18));
+		ImGui::Image(assets.get<T>(m_selected).handle(), ImVec2(18, 18));
 		ImGui::SameLine();
 
 		ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, FLT_MAX));
@@ -231,7 +61,7 @@ public:
 					if (!relativePath.contains(m_searchString))
 						continue;
 					bool isSelected = (relativePath == m_selected);
-					ImGui::Image(asset.imguiTextureId(), ImVec2(18, 18));
+					ImGui::Image(asset.handle(), ImVec2(18, 18));
 					ImGui::SameLine();
 					if (ImGui::Selectable(relativePath.c_str(), isSelected)) {
 						m_selected = relativePath;
@@ -245,39 +75,6 @@ public:
 			ImGui::EndCombo();
 		}
 
-		//std::vector<FString> SomeOptions; // This would be a list of options
-		//const float MaxDropDownSize = 200.0f; // Max vertical size of the combo popup box.
-
-		//ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, FLT_MAX));
-		//if (ImGui::BeginCombo(ComboID, TCHAR_TO_ANSI(*SomeSelectedOptionString)))
-		//{
-		//	ImGui::InputTextWithHint("##SearchBox", "Search...", m_searchString.data(), IM_ARRAYSIZE(m_searchString.data()));
-		//	ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, MaxDropDownSize));
-		//	if (ImGui::BeginChild("##ComboOptionsChild", ImVec2(-FLT_MIN, 0.0f), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize))
-		//	{
-		//		ImGuiListClipper Clipper;
-		//		Clipper.Begin(SomeOptions.Num());
-		//		while (Clipper.Step())
-		//		{
-		//			for (int32_t i = Clipper.DisplayStart; i < Clipper.DisplayEnd; ++i)
-		//			{
-		//				const FString& SomeString = SomeOptions[i];
-		//				if (SomeString.IsEmpty())
-		//				{
-		//					continue;
-		//				}
-		//				if (ImGui::Selectable(SomeString, SomeString == SomeSelectedOptionString))
-		//				{
-		//					// Set selected item here etc.
-		//					ImGui::CloseCurrentPopup();
-		//				}
-		//			}
-		//		}
-		//	}
-		//	ImGui::EndChild();
-		//	ImGui::EndCombo();
-		//}
-
 		return assets.get<T>(m_selected);
 	}
 
@@ -286,327 +83,198 @@ private:
 	std::string m_searchString;
 };
 
+class PostProcessLayer {
+public:
+	PostProcessLayer()                              = default;
+	PostProcessLayer(PostProcessLayer&&)            = default;
+	PostProcessLayer& operator=(PostProcessLayer&&) = default;
 
-// render to multi sampled render buffer -> resolve to other frame buffer for post processing
+	PostProcessLayer(const std::string& textureUniform, const std::weak_ptr<dk::gfx::ShaderSource>& fragmentSource)
+		: m_textureUniform(textureUniform)
+	{ 
+		m_shader = std::make_unique<dk::gfx::Shader>(dk::gfx::ShaderSource::postProcessVertexSource(), fragmentSource);
+		m_frameBuffer.color[0] = dk::gfx::Texture2D(glm::ivec2(100, 100), dk::gfx::Channels::RGB);
+	}
 
-/*
+	dk::gfx::Texture2D& operator()(dk::gfx::Texture2D& input)
+	{
+		auto& outTex = m_frameBuffer.color[0].get<dk::gfx::Texture2D>();
+		outTex.resize(input.size());
+		m_shader->uniformTexture(m_textureUniform, input);
+		m_frameBuffer.render(*m_shader);
+		return outTex;
+	}
 
-struct PostProcessLayer {
-	void operator()(glm::ivec2 frameSize, Shader& shader);
+	dk::gfx::Shader& shader() { return *m_shader; }
 
+	dk::gfx::Texture2D& get()
+	{ return m_frameBuffer.color[0].get<dk::gfx::Texture2D>(); }
+
+private:
+	std::string                      m_textureUniform;
+	std::unique_ptr<dk::gfx::Shader> m_shader;
+	dk::gfx::FrameBuffer             m_frameBuffer;
+};
+
+class ResolverLayer {
+public:
+	ResolverLayer()                           = default;
+	ResolverLayer(ResolverLayer&&)            = default;
+	ResolverLayer& operator=(ResolverLayer&&) = default;
+
+	ResolverLayer(dk::gfx::Channels channels)
+	{ 
+		m_frameBuffer.color[0] = dk::gfx::Texture2D(glm::ivec2(100, 100), dk::gfx::Channels::RGB);
+	}
+
+	dk::gfx::Texture2D& operator()(dk::gfx::FrameBuffer& input, int colorIndex = 0)
+	{
+		auto&      outTex    = m_frameBuffer.color[0].get<dk::gfx::Texture2D>();
+		const auto inputSize = dk::geom::xy(input.color[0].size());
+
+		m_frameBuffer.setViewport(inputSize);
+		outTex.resize(inputSize);
+		
+		m_frameBuffer.blit(input);
+		return outTex;
+	}
+
+	dk::gfx::Texture2D& get()
+	{ return m_frameBuffer.color[0].get<dk::gfx::Texture2D>(); }
+
+private:
+	dk::gfx::Channels    m_channels;
+	dk::gfx::FrameBuffer m_frameBuffer;
 };
 
 
+using namespace dk::gfx;
+using namespace dk::io;
 
-const glm::ivec2 initialFrameSize(100, 100);
-dk::gfx::FrameBuffer fbScene;
-auto                 texScene = dk::gfx::Texture::create2DMultisample(initialFrameSize, dk::gfx::Channels::RGBA, 4);
-fbScene.outputs[0] = texScene;
-fbScene.outputs.attachRenderBuffers(dk::gfx::FrameBuffer::Depth | dk::gfx::FrameBuffer::Stencil);
-
-fbScene.outputs.attachRenderBuffer(dk::gfx::FrameBuffer::Depth24);
-fbScene.outputs.attachRenderBuffer(dk::gfx::FrameBuffer::Stencil8);
-fbScene.outputs[0].renderBuffer2DMultisample(initialFrameSize, dk::gfx::Channels::RGBA, 4);
-
-	//  throw if outputs[0] is empty otherwise setup renderbuffers based on that attachment
-
-fbScene.render(...);
-
-dk::gfx::Texture texBloomInputDownScaled = dk::gfx::Texture::create2D(initialFrameSize / 2, dk::gfx::Texture::RGBA);
-
-dk::gfx::FrameBuffer fbBloom;
-
-while (m_window.isOpen())
-{
-	const auto& frame = m_window.beginFrame();
-
-	fbScene.resize(frame.size());
-	fbBloom.resize(frame.size() / 2);
-
-	fbScene.render(...);
-
-	fbBloom.render(...);
-
-
-}
-
-dk::gfx::Texture     
-
-fb.inputs[0] = 
-
-*/
-
-
-
-class Example01 {
+class PlanetScene {
 public:
-	void run()
+	PlanetScene()                         = default;
+	PlanetScene(PlanetScene&&)            = default;
+	PlanetScene& operator=(PlanetScene&&) = default;
+
+	PlanetScene(AssetManager& assets, int asteroidCount)
+		: m_assets(&assets)
 	{
-		using namespace dk::gfx;
-		using namespace dk::io;
-
-		Texture sceneOutTexture = [&] {
-			const glm::ivec2 windowSize = m_window.config.get<Window::Size>();
-			return Texture::create(windowSize.x, windowSize.y, 4);
-		}();
-		Texture sceneOutDepth = [&] {
-			const glm::ivec2 windowSize = m_window.config.get<Window::Size>();
-			return Texture::create(windowSize.x, windowSize.y, 5);
-		}();
-		FrameBuffer sceneFrameBuffer;
-		sceneFrameBuffer.attachColor(sceneOutTexture, 0);
-		sceneFrameBuffer.attachDepth(sceneOutDepth);
-		sceneFrameBuffer.config(FrameBuffer::DepthTest::Enabled);
-		sceneFrameBuffer.config(FrameBuffer::DepthFunc::Lequal);
-
-		while (m_window.isOpen()) {
-			const auto& frame = m_window.beginFrame();
-			// Clear backbuffer
-			sceneFrameBuffer.clear(FrameBuffer::ClearMask::Color | FrameBuffer::ClearMask::Depth, DK_COLOR(0x1e1e1eff));
-			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color, DK_COLOR(0x1e1e1eff));
-			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0xffffffff));
-
-			m_assets.synchronize();
-
-			showGUI();
-			moveCamera(frame);
-
-			//ImGui::ShowDemoWindow();
-
-			// Draw scene
-			m_shaders["planet"].uniforms() << m_ucCamera;
-			if (ImGui::Begin("Planet texture")) {
-				static AssetSelector<dk::gfx::Texture> planetTextureSelector("textures/planets/mars.png");
-				//auto& planetTexture = m_assets.get<dk::gfx::Texture>(assetPath("planet_texture"));
-				auto& planetTexture = planetTextureSelector.get(m_assets);
-				planetTexture.config(Texture::MinFilter::Linear);
-				planetTexture.config(Texture::MagFilter::Linear);
-				auto slot = m_shaders["planet"].textures().emptySlot();
-				m_shaders["planet"].uniformTexture("u_texture", planetTexture);
-				if (&planetTexture == &m_assets.get<dk::gfx::Texture>("textures/planets/earth.png")) {
-					m_shaders["planet"].uniforms().set("u_useSpecular", (int)true);
-					m_shaders["planet"].uniformTexture("u_normal"  , m_assets.get<dk::gfx::Texture>("textures/planets/earth_normal_map.png"));
-					m_shaders["planet"].uniformTexture("u_specular", m_assets.get<dk::gfx::Texture>("textures/planets/earth_specular_map.png"));
-				}
-				else {
-					m_shaders["planet"].uniforms().set("u_useSpecular", (int)false);
-				}
-				ImGui::End();
-			}
-
-			const auto texturedVertexFlags = dk::gfx::VertexFlags::Position | dk::gfx::VertexFlags::Normal | dk::gfx::VertexFlags::TexCoords;
-			auto& planetMesh = m_assets.get<dk::gfx::Scene>("/models/planet_scene.fbx")["/planet"][0](texturedVertexFlags);
-			m_shaders["planet"].layout(planetMesh);
-			dk::gfx::backBuffer().render(m_shaders["planet"], planetMesh.indices, dk::gfx::Primitive::Triangles);
-			sceneFrameBuffer.render(m_shaders["planet"], planetMesh.indices, dk::gfx::Primitive::Triangles);
-
-			// Bind uniforms and textures
-			m_shaders["rgba"].uniforms()     << m_ucCamera;
-			//m_colorSink->draw(*m_shaders["rgba"], dk::gfx::backBuffer());
-
-			// Draw asteroids
-			m_shaders["asteroid"].uniforms() << m_ucCamera;
-			auto& asteroidTexture = m_assets.get<dk::gfx::Texture>(assetPath("asteroid_texture"));
-			asteroidTexture.config(Texture::MinFilter::NearestMipmapLinear);
-			m_shaders["asteroid"].uniformTexture("u_texture", asteroidTexture);
-			auto& asteroidMesh = *m_assets.get<dk::gfx::Scene>(assetPath("asteroid_model")).meshes().begin();
-			m_shaders["asteroid"].layout(asteroidMesh.vertices, dk::gfx::perInstance(m_meteors));
-			// Rotate around y axis
-			static float t = 0;
-			t += frame.dt<std::chrono::seconds>() / 10.0;
-
-			m_shaders["asteroid"].uniforms().set("u_t", t);
-			// Render
-			dk::gfx::backBuffer().render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors.size());
-			sceneFrameBuffer.render(m_shaders["asteroid"], asteroidMesh.indices, dk::gfx::Primitive::Triangles, m_meteors.size());
-
-			// Draw skybox
-			m_shaders["skybox"].uniforms()   << m_ucCamera;
-			m_shaders["skybox"].uniformTexture("u_skybox", *m_skybox);
-			auto& unitCubeMesh = m_assets.get<dk::gfx::Scene>("/models/planet_scene.fbx")["/skybox"][0]();
-			m_shaders["skybox"].layout(unitCubeMesh.vertices);
-			dk::gfx::backBuffer().render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
-			sceneFrameBuffer.render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
-
-			// Close window with esc
-			if (dk::io::key::esc) m_window.close();
-			// Toggle fullscreen with the f key
-			if (dk::io::key::f(dk::io::currentInputState()) && !dk::io::key::f(dk::io::previousInputState()))
-				m_window.config(dk::common::toggle(m_window.config.get<dk::io::Window::Mode>()));
-
-			if (ImGui::Begin("FrameBuffer")) {
-				sceneOutTexture.showAsImGuiImage();
-				ImVec2 size = ImGui::GetWindowSize();
-				//sceneFrameBuffer.resize(glm::ivec2(size.x, size.y));
-				ImGui::End();
-			}
-
-			m_colorSink 
-				<< dk::gfx::draw(dk::geom::circle2{dk::geom::Origin2, 40.0}, DK_COLOR(0x222222ff), dk::geom::plane::Y(), -dk::geom::axis::X)
-				<< dk::gfx::draw(dk::geom::circle2{dk::geom::Origin2, 4.2}, dk::colors::orangeRed, dk::geom::plane(glm::normalize(m_camera.lookat - m_camera.position)), m_camera.right());
-			m_colorSink.flush(m_shaders["rgba"], dk::gfx::backBuffer());
-
-			m_window.endFrame();
-		}
-
-		auto& camera = m_assets.get<nlohmann::json>("camera.json");
-		camera = nlohmann::json(m_camera);
-		//m_assets.saveAllIn(ABSOLUTE_RESOURCE_PATH);
+		m_asteroidTransforms = dk::common::id<Vertex<glm::mat4>>;
+		placeAsteroids(asteroidCount);
 	}
 
 	void setup()
 	{
-		using namespace dk::io;
-		using namespace dk::gfx;
+		// Setup shaders
+		m_shaders.insert("planet"  , m_assets->getMultipleWeak<ShaderSource>("/shaders/mesh_vs.glsl"          , "/shaders/textured_fs.glsl"));
+		m_shaders.insert("asteroid", m_assets->getMultipleWeak<ShaderSource>("/shaders/instanced_mesh_vs.glsl", "/shaders/asteroid_fs.glsl"));
+		m_shaders.insert("skybox"  , m_assets->getMultipleWeak<ShaderSource>("/shaders/skybox_vs.glsl"        , "/shaders/skybox_fs.glsl"));
 
-		// Parse ini file
-		auto ini = [] {
-			mINI::INIFile file(dk::common::executable_path().parent_path() / "examples.ini");
-			mINI::INIStructure ini;
-			file.read(ini);
-			return ini;
-		}();
+		auto& scene = m_assets->get<Scene>("/models/planet_scene.fbx");
 
-		// Open window
-		m_window.open(4);
-		m_window.config(Window::Resize::Enabled);
-		m_window.config(Window::Theme::Dark);
-		m_window.config(Window::VSync::Disabled);
-		dk::gfx::backBuffer().config(FrameBuffer::Multisample::Enabled);
-		dk::gfx::backBuffer().config(FrameBuffer::SampleShading::Enabled);
-		dk::gfx::backBuffer().config(FrameBuffer::DepthTest::Enabled);
-		dk::gfx::backBuffer().config(FrameBuffer::DepthFunc::Lequal);
+		// Set planet layout
+		auto& planetMesh = scene["/planet"][0](m_vertexFlags);
+		m_shaders["planet"].layout(planetMesh);
 
-		// Register asset types
-		m_assets.root(ini["data"]["path"] , false);
-		m_assets.watch("/textures/"       , false);
-		m_assets.watch("/textures/planets", true);
-		m_assets.watch("/models"          , false);
-		m_assets.watch("/fonts"           , false);
-		m_assets.watch("/shaders"         , true);
+		// Set asteroid texture
+		auto& asteroidTexture = m_assets->get<Texture2D>("/textures/Asteroid2b_Color.png");
+		asteroidTexture.config(Texture::MinFilter::NearestMipmapLinear);
+		m_shaders["asteroid"].uniformTexture("u_texture", asteroidTexture);
+		// Set asteroid layout
+		m_asteroidMesh = &*m_assets->get<Scene>("/models/asteroid_2b_lower.obj").meshes().begin();
+		m_shaders["asteroid"].layout(m_asteroidMesh->vertices, perInstance(m_asteroidTransforms));
 
-		m_assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
-		m_assets.type<dk::gfx::Scene>({ "obj", "fbx" }, dk::gfx::Scene::load, &dk::gfx::Scene::update, std::nullopt, dk::io::AssetManager::Deferred);
-		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load);
-		m_assets.type<YAML::Node>("yaml", YAML::LoadFile, [](YAML::Node& node, const std::string& path) { 
-			node = YAML::LoadFile(path);
-			spdlog::info("{}", YAML::Dump(node));
-		});
-		using JsonFStream = dk::io::FileStream<nlohmann::json>;
-		m_assets.type<nlohmann::json>("json", JsonFStream::load, JsonFStream::update, JsonFStream::save);
-		
-		// Discover assets
-		m_assets.synchronize();
+		// Set skybox texture
+		m_skybox = Cubemap({
+			(m_assets->root() / "textures/skyboxes/stars/right.png").string(),
+			(m_assets->root() / "textures/skyboxes/stars/left.png").string(),
+			(m_assets->root() / "textures/skyboxes/stars/top.png").string(),
+			(m_assets->root() / "textures/skyboxes/stars/bottom.png").string(),
+			(m_assets->root() / "textures/skyboxes/stars/front.png").string(),
+			(m_assets->root() / "textures/skyboxes/stars/back.png").string()
+			});
+		m_skybox.config(Texture::MinFilter::Linear);
+		m_shaders["skybox"].uniformTexture("u_skybox", m_skybox);
+		// Set skybox layout
+		auto& unitCubeMesh = scene["/skybox"][0]();
+		m_shaders["skybox"].layout(unitCubeMesh.vertices);
+	}
 
-		// Create shaders
-		m_shaders.insert("rgba", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rgba_vs.glsl", "/shaders/rgba_fs.glsl"));
-		m_shaders.insert("text", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/text_vs.glsl", "/shaders/text_fs.glsl"));
-		m_shaders.insert("planet", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/mesh_vs.glsl", "/shaders/textured_fs.glsl"));
-		m_shaders.insert("asteroid", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/instanced_mesh_vs.glsl", "/shaders/asteroid_fs.glsl"));
-		m_shaders.insert("skybox", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/skybox_vs.glsl", "/shaders/skybox_fs.glsl"));
+	void update(const Frame& frame, const Camera& camera, Texture2D& planetTexture)
+	{
+		// Set up camera uniforms
+		m_cameraUniforms.set("u_camera.VP",        camera.P() * camera.V());
+		m_cameraUniforms.set("u_camera.position",  camera.position);
+		m_cameraUniforms.set("u_camera.direction", camera.lookat - camera.position);
 
-		// Load skybox
-		m_skybox = std::make_unique<dk::gfx::Texture>(std::move(dk::gfx::Texture::loadCubeMap({
-			(m_assets.root() / "textures/skyboxes/stars/right.png").string(),
-			(m_assets.root() / "textures/skyboxes/stars/left.png").string(),
-			(m_assets.root() / "textures/skyboxes/stars/top.png").string(),
-			(m_assets.root() / "textures/skyboxes/stars/bottom.png").string(),
-			(m_assets.root() / "textures/skyboxes/stars/front.png").string(),
-			(m_assets.root() / "textures/skyboxes/stars/back.png").string()
-		})));
-		m_skybox->config(Texture::MinFilter::Linear);
+		// Setup planet shader textures
+		m_shaders["planet"].uniformTexture("u_texture", planetTexture);
+		planetTexture.config(Texture::MagFilter::Linear);
+		// Use specular and normal maps when earth is selected
+		if (&planetTexture == &m_assets->get<Texture2D>("textures/planets/earth.png")) {
+			m_shaders["planet"].uniforms().set("u_useSpecular", (int)true);
+			m_shaders["planet"].uniformTexture("u_normal"  , m_assets->get<Texture2D>("textures/planets/earth_normal_map.png"));
+			m_shaders["planet"].uniformTexture("u_specular", m_assets->get<Texture2D>("textures/planets/earth_specular_map.png"));
+		}
+		else {
+			m_shaders["planet"].uniforms().set("u_useSpecular", (int)false);
+		}
 
-		// Bind camera
-		m_ucCamera.bind("u_camera.VP",        [&]() -> glm::mat4 { return m_camera.P() * m_camera.V(); });
-		m_ucCamera.bind("u_camera.position",  [&]() -> glm::vec3 { return m_camera.position; });
-		m_ucCamera.bind("u_camera.direction", [&]() -> glm::vec3 { return m_camera.lookat - m_camera.position; });
-		// Create camera asset if doesn't exist
-		if (!m_assets.contains("camera.json"))
-			m_assets.create("camera.json", nlohmann::json(dk::gfx::Camera(m_camera)));
-		m_camera = m_assets.get<nlohmann::json>("camera.json");
+		auto& scene = m_assets->get<dk::gfx::Scene>("/models/planet_scene.fbx");
 
-		// Create meteor instances
-		m_meteors = dk::common::id<dk::gfx::Vertex<glm::mat4>>;
-		placeAsteroids(m_meteors);
+		// Setup planet shader
+		m_shaders["planet"].uniforms() << m_cameraUniforms;
 
-		// Create debug sink
-		m_colorSink = dk::common::id<dk::gfx::RGBAVertex>;
-		//*m_colorSink 
-		//	<< dk::gfx::draw(dk::geom::ray3(glm::vec3(10,10,0), glm::vec3(5,5,0) - glm::vec3(10,10,0)), dk::colors::yellow)
-		//	//<< dk::gfx::draw(m_camera, dk::colors::lime)
-		//	;
+		// Setup asteroids
+		m_shaders["asteroid"].uniforms() << m_cameraUniforms;
+		// Rotate around y axis
+		static float t = 0;
+		t += frame.dt<std::chrono::seconds>() / 10.0;
+		m_shaders["asteroid"].uniforms().set("u_t", t);
+
+		// Setup skybox
+		m_shaders["skybox"].uniforms() << m_cameraUniforms;
+	}
+
+	void render(FrameBuffer& output)
+	{
+		// Configure output framebuffer
+		output.config(FrameBuffer::DepthTest::Enabled);
+		output.config(FrameBuffer::DepthFunc::Lequal);
+		output.config(FrameBuffer::Multisample::Enabled);
+		output.config(FrameBuffer::SampleShading::Enabled);
+		output.config(FrameBuffer::CullFace::Enabled);
+
+		// Clear canvas
+		output.clear(Clear::Color | Clear::Depth, dk::colors::gray);
+
+		auto& scene = m_assets->get<dk::gfx::Scene>("/models/planet_scene.fbx");
+
+		// Render planet
+		auto& indices = scene["/planet"][0](m_vertexFlags).indices;
+		output.render(m_shaders["planet"], indices, dk::gfx::Primitive::Triangles);
+
+		// Render asteroids
+		output.render(m_shaders["asteroid"], m_asteroidMesh->indices, dk::gfx::Primitive::Triangles, m_asteroidTransforms.size());
+
+		// Render skybox
+		auto& unitCubeMesh = scene["/skybox"][0]();
+		output.render(m_shaders["skybox"], unitCubeMesh.indices, dk::gfx::Primitive::Triangles);
 	}
 
 private:
-	dk::io::AssetManager m_assets;
-	dk::io::Window       m_window;
+	AssetManager*     m_assets;
+	ShaderCollection  m_shaders;
+	VertexFlags       m_vertexFlags = VertexFlags::Position | VertexFlags::Normal | VertexFlags::TexCoords;
 
-	template <typename T>
-	using asset_map_t = std::unordered_map<std::string, std::unique_ptr<T>>;
+	UniformCollection m_cameraUniforms;
+	Cubemap           m_skybox;
 	
-	dk::gfx::Camera            m_camera;
-	dk::gfx::Camera::Orbit     m_orbit;
-	dk::gfx::UniformCollection m_ucCamera;
-	dk::gfx::ShaderCollection  m_shaders;
+	VertexBuffer      m_asteroidTransforms;
+	MeshMask*         m_asteroidMesh;
 
-	std::unique_ptr<dk::gfx::Texture> m_skybox;
-
-	dk::gfx::VertexBuffer m_meteors;
-	dk::gfx::VertexSink   m_colorSink;
-
-	template <typename T>
-	T conf(const std::string& path) const
-	{
-		auto& yaml = m_assets.get<YAML::Node>("assets.yaml");
-		return yaml[path].as<T>();
-	}
-
-	std::string assetPath(const std::string& assetName) const
-	{
-		return conf<std::string>(assetName);
-	}
-
-	void showGUI()
-	{
-		ImGui::Begin("Properties");
-		if (ImGui::CollapsingHeader("Backbuffer", ImGuiTreeNodeFlags_DefaultOpen))
-			imguiEditConfig(dk::gfx::backBuffer().config);
-		if (ImGui::CollapsingHeader("Window", ImGuiTreeNodeFlags_DefaultOpen))
-			imguiEditConfig(m_window.config);
-		//if (ImGui::CollapsingHeader("Globe Texture", ImGuiTreeNodeFlags_DefaultOpen))
-		//	imguiEditConfig(m_window.config);
-		//	imguiPropertiesPanel(m_assets.get<dk::gfx::Texture>(assetPath("planet_texture")), 40.f);
-		ImGui::DragFloat("##fov", &m_camera.fov, 0.01, 0, 3.1415);
-		ImGui::End();
-	}
-
-	void moveCamera(const dk::io::Frame& frame)
-	{
-		if (dk::io::button::left)
-			m_orbit.tilt(m_camera, (glm::vec2)frame.cursorDeltaP() * glm::vec2(.004, .004));
-		if (dk::io::wheel::up)
-			m_orbit.zoom(m_camera, 0.9);
-		if (dk::io::wheel::down)
-			m_orbit.zoom(m_camera, 1.1);
-
-		if (dk::io::key::d)
-			m_orbit.tilt(m_camera, { -0.005, 0 });
-		if (dk::io::key::a(dk::io::currentInputState()))
-			m_orbit.tilt(m_camera, { 0.005, 0 });
-		if (dk::io::key::w)
-			m_orbit.tilt(m_camera, { 0, 0.005 });
-		if (dk::io::key::s(dk::io::currentInputState()))
-			m_orbit.tilt(m_camera, { 0, -0.005 });
-
-		if (dk::io::key::j(dk::io::currentInputState()))
-			m_orbit.zoom(m_camera, 0.999);
-		if (dk::io::key::k(dk::io::currentInputState()))
-			m_orbit.zoom(m_camera, 1.001);
-
-		m_camera.asp = dk::gfx::backBuffer().aspectRatio();
-	}
-
-	void placeAsteroids(dk::gfx::VertexBuffer& asteroids) 
+	void placeAsteroids(int count) 
 	{
 		srand(0);
 		static float t = 0;
@@ -614,11 +282,11 @@ private:
 
 		float radius = 40.0;
 		float offset = 4.5f;
-		for(unsigned int i = 0; i < conf<int>("asteroid_count"); i++)
+		for(unsigned int i = 0; i < count; i++)
 		{
 			glm::mat4 model = glm::mat4(1.0f);
 			// 1. translation: displace along circle with 'radius' in range [-offset, offset]
-			float angle = (float)i / (float)conf<int>("asteroid_count") * 280.0f + t;
+			float angle = (float)i / (float)count * 280.0f + t;
 			float displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
 			float x = sin(angle) * radius + displacement;
 			displacement = (rand() % (int)(2 * offset * 100)) / 100.0f - offset;
@@ -636,20 +304,176 @@ private:
 			model = glm::rotate(model, rotAngle, glm::vec3(0.4f, 0.6f, 0.8f));
 
 			// 4. now add to list of matrices
-			asteroids.modify().push_back(dk::gfx::Vertex(model));
+			m_asteroidTransforms.modify().push_back(dk::gfx::Vertex(model));
 		}  
 	}
 };
 
+class AsteroidBeltApplication {
+public:
+	AsteroidBeltApplication()
+	{
+		// Parse ini file
+		m_ini = [] {
+			mINI::INIFile file(dk::common::executable_path().parent_path() / "examples.ini");
+			mINI::INIStructure ini;
+			file.read(ini);
+			return ini;
+		}();
+		
+		// Setup window
+		m_window.config(Window::Resize::Enabled);
+		m_window.config(Window::Theme::Dark);
+		m_window.config(Window::VSync::Disabled);
 
-int main(void) {
+		// Setup scene framebuffer
+		m_sceneBuffer.color[0] = RenderBuffer(m_window.config.get<Window::Size>(), Channels::RGB, Format::Unsigned16, 8);
+		m_sceneBuffer.depth    = RenderBuffer(m_window.config.get<Window::Size>(), Channels::Depth, Format::Depth24, 8);
+
+		// Watch for assets in directories
+		m_assets.root(ini("data", "path").value(), false);
+		m_assets.watch("/textures/"       , false);
+		m_assets.watch("/textures/planets", true);
+		m_assets.watch("/models"          , false);
+		m_assets.watch("/fonts"           , false);
+		m_assets.watch("/shaders"         , true);
+
+		// Register asset types
+		m_assets.type<ShaderSource>("glsl", ShaderSource::load, &ShaderSource::update);
+		m_assets.type<Scene>({ "obj", "fbx" }, Scene::load, &Scene::update, std::nullopt, AssetManager::Deferred);
+		m_assets.type<Texture2D>("png", Texture2D::load, std::nullopt, std::nullopt, AssetManager::Async);
+		m_assets.type<YAML::Node>("yaml", YAML::LoadFile, [](YAML::Node& node, const std::string& path) { 
+			node = YAML::LoadFile(path);
+			spdlog::info("{}", YAML::Dump(node));
+		});
+		using JsonFStream = dk::io::FileStream<nlohmann::json>;
+		m_assets.type<nlohmann::json>("json", JsonFStream::load, JsonFStream::update, JsonFStream::save);
+		m_assets.synchronize();
+
+		// Setup layers
+		m_resolveLayer     = ResolverLayer(Channels::RGB);
+		m_postProcessLayer = PostProcessLayer("u_texture", m_assets.getWeak<dk::gfx::ShaderSource>("/shaders/chromatic_aberration_fs.glsl"));
+
+		// Create camera asset if doesn't exist
+		if (!m_assets.contains("camera.json"))
+			m_assets.create("camera.json", nlohmann::json(dk::gfx::Camera(m_camera)));
+		m_camera = m_assets.get<nlohmann::json>("camera.json");
+
+		// Setup planet scene
+		m_scene = PlanetScene(m_assets, yaml<int>("asteroid_count"));
+		m_scene.setup();
+	}
+
+	void run()
+	{
+		// Open window
+		m_window.open(std::stoi(ini_or("graphics", "msaa", "1")));
+
+		while (m_window.isOpen())
+		{
+			const auto& frame = m_window.beginFrame();
+
+			static float t = 0;
+			t += frame.dt<std::chrono::seconds>();
+			m_postProcessLayer.shader().uniforms().set("u_t", t);
+
+			// Resize scene framebuffer and set viewport
+			m_sceneBuffer.resize(frame.viewport().size());
+
+			// Close window with esc
+			if (key::esc) m_window.close();
+			// Toggle fullscreen with the f key
+			if (key::f(currentInputState()) && !key::f(previousInputState()))
+				m_window.config(dk::common::toggle(m_window.config.get<Window::Mode>()));
+
+			moveCamera(frame);
+			
+			// Update assets
+			m_assets.synchronize();
+
+			// Select planet texture in an imgui window
+			static AssetSelector<Texture2D> planetTextureSelector("textures/planets/mars.png");
+			auto& planetTexture = planetTextureSelector.get(m_assets);
+
+			// Update and render scene
+			m_scene.update(frame, m_camera, planetTexture);
+			m_scene.render(m_sceneBuffer);
+
+			// Resolve scene and apply postprocessing step
+			auto& resolvedScene  = m_resolveLayer(m_sceneBuffer);
+			auto& processedScene = m_postProcessLayer(resolvedScene);
+
+			backBuffer().render(processedScene);
+
+			m_window.endFrame();
+		}
+	}
+
+private:
+	mINI::INIStructure m_ini;
+	Window             m_window;
+	AssetManager       m_assets;
+
+	PlanetScene        m_scene;
+
+	FrameBuffer        m_sceneBuffer;
+	ResolverLayer      m_resolveLayer;
+	PostProcessLayer   m_postProcessLayer;
+
+	Camera             m_camera;
+	Camera::Orbit      m_orbit;
+
+	void moveCamera(const dk::io::Frame& frame)
+	{
+		// Orbit around center with left mouse button
+		if (button::left) m_orbit.tilt(m_camera, (glm::vec2)frame.cursorDeltaP() * glm::vec2(.004, .004));
+		// Zoom in/out with mouse wheel
+		if (wheel::up)   m_orbit.zoom(m_camera, 0.9);
+		if (wheel::down) m_orbit.zoom(m_camera, 1.1);
+
+		// Tilt around center with w a s d keys
+		if (key::d) m_orbit.tilt(m_camera, { -0.005,      0 });
+		if (key::a) m_orbit.tilt(m_camera, {  0.005,      0 });
+		if (key::w) m_orbit.tilt(m_camera, {      0,  0.005 });
+		if (key::s) m_orbit.tilt(m_camera, {      0, -0.005 });
+		// Zoom in/out with the j k keys
+		if (key::j) m_orbit.zoom(m_camera, 0.999);
+		if (key::k) m_orbit.zoom(m_camera, 1.001);
+
+		// Set aspect ratio
+		m_camera.asp = dk::gfx::backBuffer().aspectRatio();
+	}
+
+	std::optional<std::string> ini(const std::string& label, const std::string& value)
+	{
+		if (!m_ini.has(label) || !m_ini[label].has(value))
+			return std::nullopt;
+		return m_ini[label][value];
+	}
+
+	std::string ini_or(
+		const std::string& label, 
+		const std::string& value, 
+		const std::string& fallback)
+	{
+		const auto result = ini(label, value);
+		if (result.has_value())
+			return result.value();
+		return fallback;
+	}
+
+	template <typename T>
+	T yaml(const std::string& path) const
+	{
+		auto& yaml = m_assets.get<YAML::Node>("assets.yaml");
+		return yaml[path].as<T>();
+	}
+};
+
+int main()
+{
 	spdlog::set_level(spdlog::level::trace);
 
-	spdlog::info("{}", nlohmann_extension::smart_dump(nlohmann::json(dk::io::modkey::ctrl + dk::io::key::s)));
-
-	Example01 app;
-	app.setup();
+	AsteroidBeltApplication app;
 	app.run();
-
-	return 0;
 }

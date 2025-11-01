@@ -20,6 +20,10 @@ public:
 	// @brief Load shader source from file at given path
 	static ShaderSource load(const std::string& path);
 
+	static std::weak_ptr<ShaderSource> postProcessVertexSource();
+
+	static std::weak_ptr<ShaderSource> passthoughTextureFragmentSource();
+
 	// @brief Update shader source from file at given path
 	void update(const std::string& path);
 

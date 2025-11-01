@@ -48,12 +48,12 @@ private:
 		std::vector<CharVertex> get(const std::string& text, const glm::vec4& color, const TextTransfrom& transform) const;
 
 	private:
-		Font&            m_font;
-		float            m_size;
-		void*            m_packContext = nullptr;
-		dk::gfx::Texture m_texture;
-		PackedCharData   m_chars[DK_GFX_FONT_NUMCHARS];
-		glm::ivec2       m_atlasSize;
+		Font&              m_font;
+		float              m_size;
+		void*              m_packContext = nullptr;
+		dk::gfx::Texture2D m_texture;
+		PackedCharData     m_chars[DK_GFX_FONT_NUMCHARS];
+		glm::ivec2         m_atlasSize;
 
 		void textureFromTTF();
 	};

@@ -55,8 +55,8 @@ void setupAssetManager(dk::io::AssetManager& assets, mINI::INIStructure& ini)
 
 	// Register types
 	//assets.type<dk::gfx::Scene>("fbx", dk::gfx::Scene::loadFromFile);
-	assets.type<dk::gfx::Texture>({ "png", "jpg" },
-		dk::gfx::Texture::load, std::nullopt, std::nullopt, dk::io::AssetManager::Async);
+	assets.type<dk::gfx::Texture2D>({ "png", "jpg" },
+		dk::gfx::Texture2D::load, std::nullopt, std::nullopt, dk::io::AssetManager::Async);
 	assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
 
 	// Setup directories to watch

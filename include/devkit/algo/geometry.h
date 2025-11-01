@@ -15,8 +15,11 @@ constexpr glm::dvec3 Z = { 0, 0, 1 };
 }
 
 inline glm::dvec2 xy(const glm::dvec3& vec) { return glm::dvec2(vec.x, vec.y); }
+inline glm::ivec2 xy(const glm::ivec3& vec) { return glm::ivec2(vec.x, vec.y); }
 inline glm::dvec2 xz(const glm::dvec3& vec) { return glm::dvec2(vec.x, vec.z); }
+inline glm::ivec2 xz(const glm::ivec3& vec) { return glm::ivec2(vec.x, vec.z); }
 inline glm::dvec2 yz(const glm::dvec3& vec) { return glm::dvec2(vec.y, vec.z); }
+inline glm::ivec2 yz(const glm::ivec3& vec) { return glm::ivec2(vec.y, vec.z); }
 
 // Forward declarations
 struct aabb3;

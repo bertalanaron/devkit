@@ -82,7 +82,7 @@ public:
 
 	void render(const dk::io::Frame& frame) override
 	{
-		dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, dk::colors::gray);
+		dk::gfx::backBuffer().clear(dk::gfx::Clear::Color | dk::gfx::Clear::Depth, dk::colors::gray);
 		//dk::gfx::backBuffer().config(dk::gfx::FrameBuffer::DepthTest::Enabled);
 
 		// Update camera
@@ -98,9 +98,9 @@ public:
 		m_navmeshGenerationDebugOut.draw(m_shaders["rgba"], dk::gfx::backBuffer());
 		
 		// Render terrain
-		m_shaders["terrain"].uniformTexture("u_grassTexture1", m_assets.get<dk::gfx::Texture>("/textures/terrain/grass1.png"));
-		m_shaders["terrain"].uniformTexture("u_grassTexture2", m_assets.get<dk::gfx::Texture>("/textures/terrain/grass2.png"));
-		m_shaders["terrain"].uniformTexture("u_rockTexture" , m_assets.get<dk::gfx::Texture>("/textures/terrain/rock.png"));
+		m_shaders["terrain"].uniformTexture("u_grassTexture1", m_assets.get<dk::gfx::Texture2D>("/textures/terrain/grass1.png"));
+		m_shaders["terrain"].uniformTexture("u_grassTexture2", m_assets.get<dk::gfx::Texture2D>("/textures/terrain/grass2.png"));
+		m_shaders["terrain"].uniformTexture("u_rockTexture" , m_assets.get<dk::gfx::Texture2D>("/textures/terrain/rock.png"));
 		m_state->terrain->render(dk::gfx::backBuffer(), m_shaders["terrain"]);
 
 		// Disable ui when testing

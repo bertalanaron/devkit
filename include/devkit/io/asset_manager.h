@@ -389,6 +389,9 @@ private:
 		Asset<T>* get(const path_t& absolutePath) const
 		{
 			DK_ASSERT((absolutePath.is_absolute(), "GenericHandler::get requires absolute path"));
+			auto assetPtr = dynamic_cast<Asset<T>*>(m_assets.at(absolutePath).get());
+			if (!assetPtr)
+				throw std::runtime_error("Dynamic cast failed. Asset is being cast to invalid type");
 			return dynamic_cast<Asset<T>*>(m_assets.at(absolutePath).get());
 		}
 

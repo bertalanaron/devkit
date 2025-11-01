@@ -53,8 +53,10 @@ void dk::io::GlobalState::tryInitialize()
 	}
 	SDL_GL_MakeCurrent(dummyWin, dummyCtx);
 	// Get info
-	glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &mutHardware().glMaxTextureImageUnits);
-	glGetIntegerv(GL_MAX_TEXTURE_SIZE       , &mutHardware().glMaxTextureSize);
+	glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS , &mutHardware().glMaxTextureImageUnits);
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE        , &mutHardware().glMaxTextureSize);
+	glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS   , &mutHardware().glMaxColorAttachments);
+	glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &mutHardware().glMaxTextureLayers);
 	// Destroy dummy context
 	SDL_GL_DestroyContext(dummyCtx);
 	SDL_DestroyWindow(dummyWin);

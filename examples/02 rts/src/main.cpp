@@ -200,11 +200,9 @@ public:
 		m_assets.stopWatching("/textures");
 		// Setup asset types
 		m_assets.type<dk::gfx::ShaderSource>("glsl", dk::gfx::ShaderSource::load, &dk::gfx::ShaderSource::update);
-		m_assets.type<dk::gfx::Texture>("png", dk::gfx::Texture::load);
-		m_assets.type<dk::gfx::Font>("ttf", dk::gfx::Font::load);
+		m_assets.type<dk::gfx::Texture2D>("png", dk::gfx::Texture2D::load);
 		m_assets.typeName<dk::gfx::ShaderSource>("ShaderSource");
-		m_assets.typeName<dk::gfx::Texture>("Texture");
-		m_assets.typeName<dk::gfx::Font>("Font");
+		m_assets.typeName<dk::gfx::Texture2D>("Texture");
 		// Load assets
 		m_assets.synchronize();
 
@@ -241,7 +239,7 @@ public:
 		while (m_window.isOpen()) {
 			const auto& frame = m_window.beginFrame();
 			m_assets.synchronize();
-			dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color | dk::gfx::FrameBuffer::ClearMask::Depth, DK_COLOR(0x333333ff));
+			dk::gfx::backBuffer().clear(dk::gfx::Clear::Color | dk::gfx::Clear::Depth, DK_COLOR(0x333333ff));
 			moveCamera(frame);
 
 			m_shaders["rgba"].uniforms() << m_ucCamera;
@@ -279,7 +277,6 @@ public:
 
 	AlgoTester()
 		: m_dbgVertexSink(dk::common::id<dk::gfx::RGBAVertex>)
-		, m_textSink(dk::common::id<dk::gfx::Font::CharVertex>)
 	{ 
 		dk::dbg::store<dk::gfx::VertexSink*, "funnel_dbg">() = &m_dbgVertexSink;
 	}
@@ -294,7 +291,6 @@ private:
 	using shaders_t = std::unordered_map<std::string, std::unique_ptr<dk::gfx::Shader>>;
 
 	dk::gfx::VertexSink        m_dbgVertexSink;
-	dk::gfx::VertexSink        m_textSink;
 	dk::gfx::Camera            m_camera;
 	dk::gfx::UniformCollection m_ucCamera;
 	//shaders_t                  m_shaders;

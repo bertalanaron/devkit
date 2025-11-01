@@ -31,7 +31,7 @@ void EditorClient::setup()
 	m_shaders.insert("terrain", m_assets.getMultipleWeak<dk::gfx::ShaderSource>("/shaders/rts/terrain_vs.glsl", "/shaders/rts/terrain_fs.glsl"));
 
 	// Set texture filtering
-	for (auto [path, texture] : m_assets.each<dk::gfx::Texture>("/textures/terrain"))
+	for (auto [path, texture] : m_assets.each<dk::gfx::Texture2D>("/textures/terrain"))
 	{
 		texture.config(dk::gfx::Texture::MinFilter::NearestMipmapLinear);
 		texture.config(dk::gfx::Texture::MagFilter::Linear);
