@@ -75,7 +75,6 @@ void dk::gfx::api::Texture::bind(TextureType textureType)
 {
 	auto tex = handle();
 	glBindTexture(toUnderlying(textureType), tex);
-	//glGenerateMipmap(toUnderlying(textureType));
 }
 
 unsigned dk::gfx::api::Texture::initialize()

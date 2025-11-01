@@ -139,9 +139,29 @@ unsigned internalFormat(Channels channels, Format format)
 
 }
 
-dk::gfx::Channels dk::gfx::channelsFromCount(int)
+dk::gfx::Channels dk::gfx::channelsFromCount(int channels)
 {
-    return Channels();
+    if (channels == 1) return Channels::R;
+    if (channels == 2) return Channels::RG;
+    if (channels == 3) return Channels::RGB;
+    if (channels == 4) return Channels::RGBA;
+    throw std::invalid_argument("Unknown channel count");
+}
+
+int dk::gfx::channelCount(dk::gfx::Channels channels)
+{
+    switch (channels) {
+    case Channels::R:             return 1;
+    case Channels::RG:            return 2;
+    case Channels::RGB:           return 3;
+    case Channels::RGBA:          return 4;
+    case Channels::BGR:           return 3;
+    case Channels::BGRA:          return 4;
+    case Channels::Depth:         return 1;
+    case Channels::Stencil:       return 1;
+    case Channels::DepthStencil:  return 2;
+    }
+    throw std::invalid_argument("Unknown channel layout");
 }
 
 unsigned dk::gfx::Texture::handle()
@@ -210,15 +230,6 @@ dk::gfx::Texture2D::Texture2D(const glm::ivec2& size, Channels channels, Format 
     });
 }
 
-dk::gfx::Channels channelCountToEnum(int channels)
-{
-    if (channels == 1) return dk::gfx::Channels::R;
-    if (channels == 2) return dk::gfx::Channels::RG;
-    if (channels == 3) return dk::gfx::Channels::RGB;
-    if (channels == 4) return dk::gfx::Channels::RGBA;
-    throw std::runtime_error("invalid channel count");
-}
-
 stbi_uc* loadTexture2DFromFile(const std::filesystem::path& path, glm::ivec2& size, dk::gfx::Channels& channels)
 {
     // Load file using stb_image
@@ -232,7 +243,7 @@ stbi_uc* loadTexture2DFromFile(const std::filesystem::path& path, glm::ivec2& si
         return nullptr;
     }
 
-    channels = channelCountToEnum(channelCount);
+    channels = dk::gfx::channelsFromCount(channelCount);
     return pixels;
 }
 
@@ -388,7 +399,7 @@ dk::gfx::Cubemap::Cubemap(const std::array<std::filesystem::path, 6>& paths)
         int        channels = 1;
         glm::ivec2 size = glm::ivec2(0, 0);
         loadCubemapFromFile(paths, handle, size, channels);
-        ((Cubemap*)texture)->m_channels = channelCountToEnum(channels);
+        ((Cubemap*)texture)->m_channels = channelsFromCount(channels);
         ((Cubemap*)texture)->m_size = size;
     });
 }
@@ -438,7 +449,7 @@ std::vector<stbi_uc*> loadTexturesFromFiles(const std::vector<std::filesystem::p
             throw std::runtime_error("Files have mismatching channels");
     }
 
-    channels = channelCountToEnum(channelCount);
+    channels = dk::gfx::channelsFromCount(channelCount);
     return results;
 }
 
