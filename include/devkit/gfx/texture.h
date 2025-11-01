@@ -100,7 +100,7 @@ public:
 	Texture2D(const std::filesystem::path& path);
 
 	// @breif Call after graphics context was initalized
-	static Texture2D loadFromFileAndInitialize(const std::string& path);
+	static Texture2D load(const std::string& path);
 
 	glm::ivec2 size() const { return m_size; }
 

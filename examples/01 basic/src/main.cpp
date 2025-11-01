@@ -341,7 +341,7 @@ public:
 		// Register asset types
 		m_assets.type<ShaderSource>("glsl", ShaderSource::load, &ShaderSource::update);
 		m_assets.type<Scene>({ "obj", "fbx" }, Scene::load, &Scene::update, std::nullopt, AssetManager::Deferred);
-		m_assets.type<Texture2D>("png", Texture2D::loadFromFileAndInitialize, std::nullopt, std::nullopt, AssetManager::Async);
+		m_assets.type<Texture2D>("png", Texture2D::load, std::nullopt, std::nullopt, AssetManager::Async);
 		m_assets.type<YAML::Node>("yaml", YAML::LoadFile, [](YAML::Node& node, const std::string& path) { 
 			node = YAML::LoadFile(path);
 			spdlog::info("{}", YAML::Dump(node));

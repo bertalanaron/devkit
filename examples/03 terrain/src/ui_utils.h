@@ -21,7 +21,7 @@ public:
 	virtual void update(const dk::io::Frame& frame) { };
 	virtual void render(const dk::io::Frame& frame) 
 	{ 
-		dk::gfx::backBuffer().clear(dk::gfx::FrameBuffer::ClearMask::Color, dk::colors::gray);
+		dk::gfx::backBuffer().clear(dk::gfx::Clear::Color, dk::colors::gray);
 	};
 
 	void stop()

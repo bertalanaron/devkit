@@ -265,10 +265,9 @@ dk::gfx::Texture2D::Texture2D(const std::filesystem::path& path)
         });
 }
 
-dk::gfx::Texture2D dk::gfx::Texture2D::loadFromFileAndInitialize(const std::string& path)
+dk::gfx::Texture2D dk::gfx::Texture2D::load(const std::string& path)
 {
     Texture2D texture(path);
-    //texture.handle();
     return texture;
 }
 
