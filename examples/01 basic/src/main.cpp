@@ -210,6 +210,7 @@ public:
 
 		// Setup planet shader textures
 		m_shaders["planet"].uniformTexture("u_difuse", planetTexture);
+		planetTexture.config(Texture::MagFilter::Linear);
 		// Use specular and normal maps when earth is selected
 		if (&planetTexture == &m_assets->get<Texture2D>("textures/planets/earth.png")) {
 			m_shaders["planet"].uniforms().set("u_useSpecular", (int)true);
@@ -326,11 +327,8 @@ public:
 		m_window.config(Window::VSync::Disabled);
 
 		// Setup scene framebuffer
-		m_texArrTest           = Texture2DArray({ 
-			"D:\\Projects\\devkit\\examples\\data\\textures\\planets\\mars.png", 
-			"D:\\Projects\\devkit\\examples\\data\\textures\\planets\\mercury.png" });
-		m_sceneBuffer.color[0] = Texture2D(m_window.config.get<Window::Size>(), Channels::RGB);
-		m_sceneBuffer.depth    = RenderBuffer(m_window.config.get<Window::Size>(), Channels::Depth);
+		m_sceneBuffer.color[0] = RenderBuffer(m_window.config.get<Window::Size>(), Channels::RGB, Format::Unsigned16, 8);
+		m_sceneBuffer.depth    = RenderBuffer(m_window.config.get<Window::Size>(), Channels::Depth, Format::Depth24, 8);
 
 		// Watch for assets in directories
 		m_assets.root(ini("data", "path").value(), false);
@@ -375,16 +373,15 @@ public:
 		{
 			const auto& frame = m_window.beginFrame();
 
-			m_postProcessLayer.shader().uniformTexture("u_texArr", m_texArrTest);
-
 			static float t = 0;
 			t += frame.dt<std::chrono::seconds>();
 			m_postProcessLayer.shader().uniforms().set("u_t", t);
 
 			// Resize scene framebuffer and set viewport
-			m_sceneBuffer.color[0].get<Texture2D>().resize(frame.viewport().size());
+			m_sceneBuffer.resize(frame.viewport().size());
+			//m_sceneBuffer.color[0].get<RenderBuffer>().resize(frame.viewport().size());
 			//m_sceneBuffer.depth.get<RenderBuffer>().resize(frame.viewport().size());
-			m_sceneBuffer.setViewport((glm::ivec2)(frame.viewport().size()));
+			//m_sceneBuffer.setViewport((glm::ivec2)(frame.viewport().size()));
 
 			// Close window with esc
 			if (key::esc) m_window.close();

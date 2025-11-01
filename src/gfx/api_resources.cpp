@@ -46,27 +46,6 @@ unsigned dk::gfx::api::VertexBufferObject::initialize()
 	return vbo;
 }
 
-unsigned dk::gfx::api::toUnderlying(dk::gfx::Channels channels)
-{
-	switch (channels)
-	{
-	case Channels::R           : return GL_RED;
-	case Channels::RG          : return GL_RG;
-	case Channels::RGB         : return GL_RGB;
-	case Channels::BGR         : return GL_BGR;
-	case Channels::RGBA        : return GL_RGBA;
-	case Channels::BGRA        : return GL_BGRA;
-	case Channels::Depth       : return GL_DEPTH_COMPONENT;
-	case Channels::DepthStencil: return GL_DEPTH_STENCIL;
-	default: throw std::runtime_error("unknown value");
-	}
-}
-
-unsigned dk::gfx::api::internalFormat(dk::gfx::Channels channels)
-{
-	return toUnderlying(channels);
-}
-
 unsigned dk::gfx::api::toUnderlying(Attachment attachment)
 {
 	switch (attachment)

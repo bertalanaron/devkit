@@ -8,7 +8,6 @@ in vec2 UV;
 out vec4 FragColor;
 
 uniform sampler2D u_texture;
-uniform sampler2DArray u_texArr;
 uniform float u_t;
 
 void main()
@@ -30,7 +29,7 @@ void main()
     vec2 offsetBlue    = vec2(cos(separation), sin(separation));
     
     // Sample colors from the texture with the adjusted offsets
-    vec4 red   = texture(u_texArr, vec3((UV - offsetRed).xy, 0), 0);
+    vec4 red   = texture(u_texture, UV - offsetRed);
     vec4 green = texture(u_texture, UV - offsetGreen);
     vec4 blue  = texture(u_texture, UV - offsetBlue);
     

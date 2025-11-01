@@ -152,6 +152,20 @@ float dk::gfx::FrameBuffer::aspectRatio() const
 	return [&]{ return m_viewport.has_value() ? m_viewport.value() : Viewport(color[0].size()); }().aspectRatio();
 }
 
+void dk::gfx::FrameBuffer::resize(const glm::ivec2& size)
+{
+	if (depth.has_value()) 
+		depth.get().resize(size);
+	if (stencil.has_value())
+		stencil.get().resize(size);
+	for (auto& c : color)
+	{
+		if (!c.has_value())
+			continue;
+		c.get().resize(size);
+	}
+}
+
 void dk::gfx::FrameBuffer::makeActive()
 {
 	m_apiHandle.bind();

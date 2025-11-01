@@ -103,6 +103,9 @@ public:
 	void setViewport(const gfx::Viewport& viewport);
 
 	float aspectRatio() const;
+
+	// @brief Resizes currently bound render targets
+	void resize(const glm::ivec2&);
 	
 	// Has to be run on the render thread.
 	void clear(Clear mask, const glm::vec4& color = dk::colors::black);
