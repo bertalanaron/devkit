@@ -209,7 +209,7 @@ public:
 		m_cameraUniforms.set("u_camera.direction", camera.lookat - camera.position);
 
 		// Setup planet shader textures
-		m_shaders["planet"].uniformTexture("u_difuse", planetTexture);
+		m_shaders["planet"].uniformTexture("u_texture", planetTexture);
 		planetTexture.config(Texture::MagFilter::Linear);
 		// Use specular and normal maps when earth is selected
 		if (&planetTexture == &m_assets->get<Texture2D>("textures/planets/earth.png")) {
