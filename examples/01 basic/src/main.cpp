@@ -1,3 +1,5 @@
+#include "../examples/common/src/example_application.h"
+
 #include <devkit/io/window.h>
 #include <devkit/gfx/frame_buffer.h>
 #include <devkit/algo/geometry.h>
@@ -187,12 +189,12 @@ public:
 
 		// Set skybox texture
 		m_skybox = Cubemap({
-			(m_assets->root() / "textures/skyboxes/stars/right.png").string(),
-			(m_assets->root() / "textures/skyboxes/stars/left.png").string(),
-			(m_assets->root() / "textures/skyboxes/stars/top.png").string(),
-			(m_assets->root() / "textures/skyboxes/stars/bottom.png").string(),
-			(m_assets->root() / "textures/skyboxes/stars/front.png").string(),
-			(m_assets->root() / "textures/skyboxes/stars/back.png").string()
+			(m_assets->root() / "textures/skybox/right.png").string(),
+			(m_assets->root() / "textures/skybox/left.png").string(),
+			(m_assets->root() / "textures/skybox/top.png").string(),
+			(m_assets->root() / "textures/skybox/bottom.png").string(),
+			(m_assets->root() / "textures/skybox/front.png").string(),
+			(m_assets->root() / "textures/skybox/back.png").string()
 			});
 		m_skybox.config(Texture::MinFilter::Linear);
 		m_shaders["skybox"].uniformTexture("u_skybox", m_skybox);
@@ -309,18 +311,12 @@ private:
 	}
 };
 
-class AsteroidBeltApplication {
+class AsteroidBeltApplication
+	: public ExampleApplicationBase
+{
 public:
 	AsteroidBeltApplication()
 	{
-		// Parse ini file
-		m_ini = [] {
-			mINI::INIFile file(dk::common::executable_path().parent_path() / "examples.ini");
-			mINI::INIStructure ini;
-			file.read(ini);
-			return ini;
-		}();
-		
 		// Setup window
 		m_window.config(Window::Resize::Enabled);
 		m_window.config(Window::Theme::Dark);
@@ -335,7 +331,6 @@ public:
 		m_assets.watch("/textures/"       , false);
 		m_assets.watch("/textures/planets", true);
 		m_assets.watch("/models"          , false);
-		m_assets.watch("/fonts"           , false);
 		m_assets.watch("/shaders"         , true);
 
 		// Register asset types
@@ -410,7 +405,6 @@ public:
 	}
 
 private:
-	mINI::INIStructure m_ini;
 	Window             m_window;
 	AssetManager       m_assets;
 
@@ -442,24 +436,6 @@ private:
 
 		// Set aspect ratio
 		m_camera.asp = dk::gfx::backBuffer().aspectRatio();
-	}
-
-	std::optional<std::string> ini(const std::string& label, const std::string& value)
-	{
-		if (!m_ini.has(label) || !m_ini[label].has(value))
-			return std::nullopt;
-		return m_ini[label][value];
-	}
-
-	std::string ini_or(
-		const std::string& label, 
-		const std::string& value, 
-		const std::string& fallback)
-	{
-		const auto result = ini(label, value);
-		if (result.has_value())
-			return result.value();
-		return fallback;
 	}
 
 	template <typename T>

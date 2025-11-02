@@ -41,9 +41,8 @@ public:
 
 public:
 	EditorClient(
-		const mINI::INIStructure&    ini,
 		std::unique_ptr<GameState>&& state = std::make_unique<GameState>())
-		: ClientBase(ini, std::move(state))
+		: ClientBase(std::move(state))
 		, m_navmeshGenerationDebugOut(dk::common::id<dk::gfx::RGBAVertex>)
 	{ }
 
@@ -64,7 +63,7 @@ public:
 		// Handle game instance creation and update
 		if (m_inputs.activated("run"))
 		{
-			m_gameClient.emplace(ini(), m_state->clone());
+			m_gameClient.emplace(m_state->clone());
 			m_execution = Execution::Testing;
 		}
 		if (m_gameClient)
