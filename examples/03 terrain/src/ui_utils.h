@@ -1,4 +1,6 @@
 #pragma once
+#include "../examples/common/src/example_application.h"
+
 #include "game_state.h"
 #include "view.h"
 
@@ -9,13 +11,13 @@
 #include <devkit/gfx/frame_buffer.h>
 #include <devkit/gfx/vertex_sink.h>
 
-class ClientBase {
+class ClientBase 
+	: public ExampleApplicationBase
+{
 public:
 	ClientBase(
-		mINI::INIStructure			 ini,
 		std::unique_ptr<GameState>&& state = std::make_unique<GameState>())
 		: m_state(std::move(state))
-		, m_ini(ini)
 	{ }
 
 	virtual void update(const dk::io::Frame& frame) { };
@@ -72,27 +74,6 @@ protected:
 
 	virtual void setup()    { };
 	virtual void teardown() { };
-
-	auto& ini()
-	{ return m_ini; }
-
-	std::optional<std::string> ini(const std::string& label, const std::string& value)
-	{
-		if (!m_ini.has(label) || !m_ini[label].has(value))
-			return std::nullopt;
-		return m_ini[label][value];
-	}
-
-	std::string ini_or(
-		const std::string& label, 
-		const std::string& value, 
-		const std::string& fallback)
-	{
-		const auto result = ini(label, value);
-		if (result.has_value())
-			return result.value();
-		return fallback;
-	}
 
 private:
 	bool m_stopRequested = false;

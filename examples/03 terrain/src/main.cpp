@@ -68,19 +68,11 @@ void setupAssetManager(dk::io::AssetManager& assets, mINI::INIStructure& ini)
 
 int main()
 {
-	// Load ini
-	auto ini = [] {
-		mINI::INIFile file(dk::common::executable_path().parent_path() / "examples.ini");
-		mINI::INIStructure ini;
-		file.read(ini);
-		return ini;
-	}();
-
 	// Set loglevel
 	spdlog::set_level(spdlog::level::trace);
 
 	// Initialize and run editor client
-	EditorClient editor(ini);
+	EditorClient editor;
 	editor.run();
 
 	return 0;
