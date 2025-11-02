@@ -6,6 +6,8 @@
 
 // TODO: Implement immutable textures (loaded images should probably be immutable by default)
 
+// TODO: Implement PBOs to access textures on the cpu
+
 namespace dk::gfx {
 
 class FrameBuffer;

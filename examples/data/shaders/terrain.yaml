@@ -1,0 +1,13 @@
+config: 
+  patch_vertices: 4
+
+vertex: |
+  #version 330
+
+tessellation_control: |
+  #version 440
+  
+  djissl
+  asf;ejf
+  afeajfsefd
+

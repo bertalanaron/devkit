@@ -178,6 +178,23 @@ bool dk::gfx::ShaderSource::updated() const
     return m_updated;
 }
 
+#define __DK_SHADERLOADER_TRY_ADD_SOURCE(name, Name)                  \
+    if (descriptor.name.has_value()) {                                \
+        std::visit([&](auto&& load) {                                 \
+            source(load(descriptor.name.value()), ShaderSource::Name);\
+        }, loader);                                                   \
+    }                                                                 \
+    /* end of macro */
+
+dk::gfx::Shader::Shader(const ShaderDescriptor& descriptor, load_source_function_t loader)
+{
+    __DK_SHADERLOADER_TRY_ADD_SOURCE(fragment               , Fragment              );
+    __DK_SHADERLOADER_TRY_ADD_SOURCE(vertex                 , Vertex                );
+    __DK_SHADERLOADER_TRY_ADD_SOURCE(geometry               , Geometry              );
+    __DK_SHADERLOADER_TRY_ADD_SOURCE(tessellation_evaluation, TessellationEvaluation);
+    __DK_SHADERLOADER_TRY_ADD_SOURCE(tessellation_control   , TessellationControl   );
+}
+
 void dk::gfx::Shader::makeActive()
 {
     if (!m_program)

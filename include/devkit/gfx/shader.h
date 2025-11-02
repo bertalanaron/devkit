@@ -10,9 +10,9 @@ namespace dk::gfx {
 
 class ShaderSource {
 public:
-	enum Type { Fragment, Vertex, Geometry, Unset };
-
-	ShaderSource(std::string&& source)
+	enum Type { Unset, Fragment, Vertex, Geometry, TessellationControl, TessellationEvaluation };
+	
+	ShaderSource(std::string source)
 		: m_source(std::move(source))
 		, m_updated(true)
 	{ }
@@ -55,11 +55,24 @@ private:
 
 namespace dk::gfx {
 
-class Shader {
-private:
-	using source_wptr_t     = std::weak_ptr<ShaderSource>;
-	using opt_source_wptr_t = std::optional<std::weak_ptr<ShaderSource>>;
+struct ShaderDescriptor {
+	std::optional<ShaderSource> fragment;
+	std::optional<ShaderSource> vertex;
+	std::optional<ShaderSource> geometry;
+	std::optional<ShaderSource> tessellation_evaluation;
+	std::optional<ShaderSource> tessellation_control;
+};
 
+
+terrain.shader
+```yaml
+vertex: >
+	
+""
+```
+
+
+class Shader {
 public:
 	struct LayoutElement {
 		const VertexAttributes* attributes;
@@ -68,46 +81,123 @@ public:
 		unsigned                divisor = 0;
 	};
 
+private:
+	using load_source_function_t = std::variant<
+		std::function<ShaderSource&(const std::filesystem::path&)>, 
+		std::function<ShaderSource&&(const std::filesystem::path&)>>;
+
 public:
-	Shader(source_wptr_t vertexSource, source_wptr_t fragmentSource, opt_source_wptr_t opt_geometrySource = std::nullopt)
-		: m_vertexSource(vertexSource)
-		, m_fragmentSource(fragmentSource)
-		, m_geometrySource(opt_geometrySource)
-	{ }
+	Shader()                    = default;
+	Shader(Shader&&)            = default;
+	Shader& operator=(Shader&&) = default;
+
+	Shader(const ShaderDescriptor&, load_source_function_t loader);
+
+	void source(ShaderSource& source, ShaderSource::Type type);
+
+	void source(std::pair<ShaderSource, ShaderSource::Type> source);
+
+	void source(ShaderSource&& source, ShaderSource::Type type);
+	
+	auto source(ShaderSource::Type type) -> std::optional<std::reference_wrapper<ShaderSource>>;
+
+private:
+	using source_t = std::variant<std::monostate, ShaderSource, ShaderSource*>;
+	constexpr inline static auto s_sourceTypeCount = magic_enum::enum_count<ShaderSource::Type>() - 1u; // -1 for Unset
+
+	std::array<source_t, s_sourceTypeCount> m_sources;
 
 	void makeActive();
 
-	UniformCollection& uniforms() { return m_uniforms; }
-
-	TextureUnit& textures() { return m_textures; }
-
-	void uniformTexture(const std::string& uniform, Texture& texture);
-
-	// @brief Set vertex layout including per instance data
-	void layout(std::convertible_to<LayoutElement> auto&&... elements)
-	{ m_layout = { std::move((LayoutElement)elements)... }; }
-
-private:
-	source_wptr_t     m_vertexSource;
-	source_wptr_t     m_fragmentSource;
-	opt_source_wptr_t m_geometrySource;
-
-	UniformCollection          m_uniforms;
-	TextureUnit                m_textures;
-	std::vector<LayoutElement> m_layout = {};
-
-	unsigned m_vertexVersion   = 0;
-	unsigned m_fragmentVersion = 0;
-	unsigned m_geometryVersion = 0;
-
-	unsigned m_program  = 0;
-
-	void compile();
-
-	void linkSources(std::optional<std::string> fragDataLocation = std::nullopt);
-
-	//void detach();
+	friend class FrameBuffer;
 };
+
+namespace shader_literals {
+
+std::pair<ShaderSource, ShaderSource::Type> operator"" _vert(const char* cstr, size_t len)
+{ return std::make_pair(ShaderSource(std::string(cstr)), ShaderSource::Vertex); }
+
+std::pair<ShaderSource, ShaderSource::Type> operator"" _frag(const char* cstr, size_t len)
+{ return std::make_pair(ShaderSource(std::string(cstr)), ShaderSource::Vertex); }
+
+}
+
+void f()
+{
+	Shader shader;
+
+	using namespace shader_literals;
+
+	shader.source(R"(
+		#version 330
+		as
+	)"_vert);
+
+	shader.source(R"(
+		#version 330
+
+		
+	)"_frag);
+
+	shader.source(*ShaderSource::passthoughTextureFragmentSource().lock(), ShaderSource::Fragment);
+
+	auto vert = shader.source(ShaderSource::TessellationControl);
+}
+
+//
+//class Shader {
+//private:
+//	using source_wptr_t     = std::weak_ptr<ShaderSource>;
+//	using opt_source_wptr_t = std::optional<std::weak_ptr<ShaderSource>>;
+//
+//public:
+//	struct LayoutElement {
+//		const VertexAttributes* attributes;
+//		unsigned                attributesMask; 
+//		std::function<void()>   bind;           // function to bind api resource of buffer
+//		unsigned                divisor = 0;
+//	};
+//
+//public:
+//	Shader(source_wptr_t vertexSource, source_wptr_t fragmentSource, opt_source_wptr_t opt_geometrySource = std::nullopt)
+//		: m_vertexSource(vertexSource)
+//		, m_fragmentSource(fragmentSource)
+//		, m_geometrySource(opt_geometrySource)
+//	{ }
+//
+//	void makeActive();
+//
+//	UniformCollection& uniforms() { return m_uniforms; }
+//
+//	TextureUnit& textures() { return m_textures; }
+//
+//	void uniformTexture(const std::string& uniform, Texture& texture);
+//
+//	// @brief Set vertex layout including per instance data
+//	void layout(std::convertible_to<LayoutElement> auto&&... elements)
+//	{ m_layout = { std::move((LayoutElement)elements)... }; }
+//
+//private:
+//	source_wptr_t     m_vertexSource;
+//	source_wptr_t     m_fragmentSource;
+//	opt_source_wptr_t m_geometrySource;
+//
+//	UniformCollection          m_uniforms;
+//	TextureUnit                m_textures;
+//	std::vector<LayoutElement> m_layout = {};
+//
+//	unsigned m_vertexVersion   = 0;
+//	unsigned m_fragmentVersion = 0;
+//	unsigned m_geometryVersion = 0;
+//
+//	unsigned m_program  = 0;
+//
+//	void compile();
+//
+//	void linkSources(std::optional<std::string> fragDataLocation = std::nullopt);
+//
+//	//void detach();
+//};
 
 inline Shader::LayoutElement perInstance(Shader::LayoutElement&& element, int divisor = 1) 
 {
