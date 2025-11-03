@@ -118,7 +118,12 @@ void dk::gfx::FrameBuffer::render(Shader& shader)
 
 void dk::gfx::FrameBuffer::render(Texture2D& texture)
 {
-	static Shader s_shader(ShaderSource::postProcessVertexSource(), ShaderSource::passthoughTextureFragmentSource());
+	static Shader s_shader = []{
+		Shader s;
+		s.source(ShaderSource::postProcessVertexSource());
+		s.source(ShaderSource::passthoughTextureFragmentSource());
+		return s;
+	}();
 	s_shader.uniformTexture("u_texture", texture);
 	render(s_shader);
 }
@@ -351,9 +356,9 @@ void logFramebufferWarning(GLenum status) {
 void dk::gfx::FrameBuffer::render(DemoScene ds)
 {
 	struct Scene {
-		std::shared_ptr<ShaderSource> vertShader;
-		std::shared_ptr<ShaderSource> fragShader;
-		std::unique_ptr<Shader>       shader;
+		ShaderSource vertShader = g_vssource;
+		ShaderSource fragShader = g_fssource;
+		Shader       shader;
 
 		VertexBuffer                  vertexBuffer;
 		Camera                        camera;
@@ -361,9 +366,8 @@ void dk::gfx::FrameBuffer::render(DemoScene ds)
 		Scene()
 		{
 			// Setup shader
-			vertShader = std::make_shared<ShaderSource>(std::string(g_vssource));
-			fragShader = std::make_shared<ShaderSource>(std::string(g_fssource));
-			shader = std::make_unique<Shader>(vertShader, fragShader);
+			shader.source(vertShader, ShaderSource::Vertex);
+			shader.source(fragShader, ShaderSource::Fragment);
 
 			// Setup vertex and element buffers
 			std::vector<Vertex<glm::vec3, glm::vec3>> vertices = {__DK_DEMOSCENE_MONKEY_VERTICES};
@@ -372,7 +376,7 @@ void dk::gfx::FrameBuffer::render(DemoScene ds)
 			std::memcpy(vertexBuffer.modify().data(), vertices.data(), vertexBuffer.get().elem_size() * vertexBuffer.get().size());
 
 			// Setup layout
-			shader->layout(vertexBuffer);
+			shader.layout(vertexBuffer);
 		}
 	};
 
@@ -383,11 +387,11 @@ void dk::gfx::FrameBuffer::render(DemoScene ds)
 	const auto& cam = ds.camera.value_or(scene.camera);
 	scene.camera.position = glm::vec3(0, -3, 0.01);
 	scene.camera.asp = aspectRatio();
-	scene.shader->uniforms().set("u_camera.VP",        cam.P() * cam.V());
-	scene.shader->uniforms().set("u_camera.position",  cam.position);
-	scene.shader->uniforms().set("u_camera.direction", cam.lookat - cam.position);
+	scene.shader.uniforms().set("u_camera.VP",        cam.P() * cam.V());
+	scene.shader.uniforms().set("u_camera.position",  cam.position);
+	scene.shader.uniforms().set("u_camera.direction", cam.lookat - cam.position);
 
 	// Execute draw calls
 	clear(Clear::Color | Clear::Depth, DK_COLOR(0x333333ff));
-	render(*scene.shader, scene.vertexBuffer, Primitive::Triangles);
+	render(scene.shader, scene.vertexBuffer, Primitive::Triangles);
 }

@@ -678,7 +678,8 @@ public:
 	template <typename T>
 	auto getMultiple(const std::convertible_to<path_t> auto&... paths)
 	{
-		return std::make_tuple(std::ref(get<T>(paths))...);
+		std::array<std::reference_wrapper<T>, sizeof...(paths)> arr = { std::ref(get<T>(paths))... };
+		return arr;
 	}
 
 	template <typename T>

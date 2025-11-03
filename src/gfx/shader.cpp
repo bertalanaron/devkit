@@ -3,16 +3,17 @@
 
 #include <GL/glew.h>
 
-constexpr int details::gfx::toUnderlying(dk::gfx::ShaderSource::Type type) 
+dk::gfx::api::ShaderType toApi(dk::gfx::ShaderSource::Type type)
 {
-	switch (type)
-	{
-	case dk::gfx::ShaderSource::Fragment: return 0x8B30;
-	case dk::gfx::ShaderSource::Vertex:   return 0x8B31;
-	case dk::gfx::ShaderSource::Geometry: return 0x8DD9;
-	default:
-		return -1;
-	}
+    using namespace dk::gfx;
+    switch(type) {
+    case ShaderSource::Type::Vertex                : return api::ShaderType::Vertex;
+    case ShaderSource::Type::Fragment              : return api::ShaderType::Fragment;
+    case ShaderSource::Type::Geometry              : return api::ShaderType::Geometry;
+    case ShaderSource::Type::TessellationControl   : return api::ShaderType::TessellationControl;
+    case ShaderSource::Type::TessellationEvaluation: return api::ShaderType::TessellationEvaluation;
+    }
+    throw std::invalid_argument("Unknown shader type");
 }
 
 dk::gfx::ShaderSource dk::gfx::ShaderSource::load(const std::string& path)
@@ -25,48 +26,44 @@ dk::gfx::ShaderSource dk::gfx::ShaderSource::load(const std::string& path)
     return ShaderSource(std::move(contents.str()));
 }
 
-std::weak_ptr<dk::gfx::ShaderSource> dk::gfx::ShaderSource::postProcessVertexSource()
+std::pair<dk::gfx::ShaderSource, dk::gfx::ShaderSource::Type> dk::gfx::ShaderSource::postProcessVertexSource()
 {
-    static const std::string source = R"(
-    #version 330 core
+    using namespace shader_literals;
 
-    // Fullscreen triangle positions (in a VBO or generated in the shader)
-    layout(location = 0) in vec2 aPos;
-    layout(location = 1) in vec2 aTexCoord;
+    return R"(
+        #version 330 core
 
-    out vec2 UV;
+        // Fullscreen triangle positions (in a VBO or generated in the shader)
+        layout(location = 0) in vec2 aPos;
+        layout(location = 1) in vec2 aTexCoord;
 
-    void main()
-    {
-        UV = aTexCoord;
-        gl_Position = vec4(aPos, 0.0, 1.0);
-    }
-    )";
+        out vec2 UV;
 
-    // TODO: improve this so it can handle multiple contexts (unless shared context is implemented first)
-    static auto shader = std::make_shared<ShaderSource>(std::string(source));
-    return shader;
+        void main()
+        {
+            UV = aTexCoord;
+            gl_Position = vec4(aPos, 0.0, 1.0);
+        }
+    )"_vs;
 }
 
-std::weak_ptr<dk::gfx::ShaderSource> dk::gfx::ShaderSource::passthoughTextureFragmentSource()
+std::pair<dk::gfx::ShaderSource, dk::gfx::ShaderSource::Type> dk::gfx::ShaderSource::passthoughTextureFragmentSource()
 {
-    static const std::string source = R"(
-    #version 330 core
+    using namespace shader_literals;
 
-    in vec2 UV;
-    out vec4 FragColor;
+    return R"(
+        #version 330 core
 
-    uniform sampler2D u_texture;
+        in vec2 UV;
+        out vec4 FragColor;
 
-    void main()
-    {
-        FragColor = texture(u_texture, UV);
-    }
-    )";
+        uniform sampler2D u_texture;
 
-    // TODO: improve this so it can handle multiple contexts (unless shared context is implemented first)
-    static auto shader = std::make_shared<ShaderSource>(std::string(source));
-    return shader;
+        void main()
+        {
+            FragColor = texture(u_texture, UV);
+        }
+    )"_fs;
 }
 
 void dk::gfx::ShaderSource::update(const std::string& path)
@@ -82,69 +79,11 @@ void dk::gfx::ShaderSource::update(const std::string& path)
     ifs.close();
 
     spdlog::trace("Shader source updated: {}", path);
-    m_source = contents.str();
+    m_code = contents.str();
     m_updated = true;
 }
 
-void writeShaderCompilationErrorInfo(unsigned int handle) {
-    int logLen, written;
-    glGetShaderiv(handle, GL_INFO_LOG_LENGTH, &logLen);
-
-    if (logLen > 0) {
-        std::string log(logLen, '\0');
-        glGetShaderInfoLog(handle, logLen, &written, &log[0]);
-        spdlog::error("Shader log:\n{}", log);
-    }
-}
-
-bool checkShaderCompilation(unsigned id, const char* source) {
-    int OK;
-    glGetShaderiv(id, GL_COMPILE_STATUS, &OK);
-    if (!OK) {
-        if (source)
-            spdlog::error("{}", source);
-
-        spdlog::error("Failed to compile shader!");
-        writeShaderCompilationErrorInfo(id);
-        return false;
-    }
-    spdlog::trace("Compiled shader source. id: {}", id);
-    return true;
-}
-
-void dk::gfx::ShaderSource::compileAs(Type type)
-{
-    m_updated = false;
-    if (m_type == Type::Unset)
-        m_type = type;
-    if (m_type != type) {
-        spdlog::error("Trying to compile {} shader as {}", magic_enum::enum_name(m_type), magic_enum::enum_name(type));
-        return;
-    }
-
-    // Create shader
-    unsigned id = glCreateShader(details::gfx::toUnderlying(type));
-    if (!id) {
-        spdlog::error("Error creating shader source");
-        std::terminate();
-    }
-
-    // Compile shader
-    const char* source = m_source.c_str();
-    glShaderSource(id, 1, (const GLchar**)&source, NULL);
-    glCompileShader(id);
-
-    // Do nothing if compilation failed
-    if (!checkShaderCompilation(id, m_source.c_str())) {
-        glDeleteShader(id);
-        return;
-    }
-
-    ++m_version;
-    m_handle = id;
-}
-
-void dk::gfx::ShaderSource::tryDetach(Type type, unsigned program)
+void dk::gfx::ShaderSource::tryDetach(Type type_, unsigned program)
 {
     GLint count = 0;
     glGetProgramiv(program, GL_ATTACHED_SHADERS, &count);
@@ -155,7 +94,7 @@ void dk::gfx::ShaderSource::tryDetach(Type type, unsigned program)
     for (GLuint shader : shaders) {
         GLint type = 0;
         glGetShaderiv(shader, GL_SHADER_TYPE, &type);
-        if (type == details::gfx::toUnderlying(m_type)) {
+        if (type == api::toUnderlying(toApi(type_))) {
             glDetachShader(program, shader);
             return;
         }
@@ -166,10 +105,12 @@ unsigned dk::gfx::ShaderSource::attach(Type type, unsigned program)
 {
     if (m_updated)
     {
-        compileAs(type);
+        m_updated = false;
+        m_apiHandle.compile(toApi(type), m_code);
+        ++m_version;
     }
     tryDetach(type, program);
-    glAttachShader(program, m_handle);
+    glAttachShader(program, m_apiHandle.handle(toApi(type)));
     return m_version;
 }
 
@@ -178,30 +119,46 @@ bool dk::gfx::ShaderSource::updated() const
     return m_updated;
 }
 
-#define __DK_SHADERLOADER_TRY_ADD_SOURCE(name, Name)                  \
-    if (descriptor.name.has_value()) {                                \
-        std::visit([&](auto&& load) {                                 \
-            source(load(descriptor.name.value()), ShaderSource::Name);\
-        }, loader);                                                   \
-    }                                                                 \
-    /* end of macro */
-
-dk::gfx::Shader::Shader(const ShaderDescriptor& descriptor, load_source_function_t loader)
+std::optional<std::reference_wrapper<dk::gfx::ShaderSource>> dk::gfx::Shader::source(ShaderSource::Type type)
 {
-    __DK_SHADERLOADER_TRY_ADD_SOURCE(fragment               , Fragment              );
-    __DK_SHADERLOADER_TRY_ADD_SOURCE(vertex                 , Vertex                );
-    __DK_SHADERLOADER_TRY_ADD_SOURCE(geometry               , Geometry              );
-    __DK_SHADERLOADER_TRY_ADD_SOURCE(tessellation_evaluation, TessellationEvaluation);
-    __DK_SHADERLOADER_TRY_ADD_SOURCE(tessellation_control   , TessellationControl   );
+    using Ret = std::optional<std::reference_wrapper<dk::gfx::ShaderSource>>;
+    return std::visit(common::overload {
+        [](std::monostate) -> Ret { return std::nullopt; },
+        [](std::unique_ptr<ShaderSource>& ptr) -> Ret {
+            return *ptr.get();
+        },
+        [](std::reference_wrapper<ShaderSource> src) -> Ret {
+            return src.get();
+        }
+    }, m_sources.at(type).data);
+}
+
+std::optional<std::reference_wrapper<const dk::gfx::ShaderSource>> dk::gfx::Shader::source(ShaderSource::Type type) const
+{
+    using Ret = std::optional<std::reference_wrapper<const dk::gfx::ShaderSource>>;
+    return std::visit(common::overload {
+        [](std::monostate) -> Ret { return std::nullopt; },
+        [](const std::unique_ptr<ShaderSource>& ptr) -> Ret {
+            return *ptr.get();
+        },
+        [](std::reference_wrapper<const ShaderSource> src) -> Ret {
+            return src.get();
+        }
+    }, m_sources.at(type).data);
 }
 
 void dk::gfx::Shader::makeActive()
 {
-    if (!m_program)
-        m_program = glCreateProgram();
-    // Compile shaders and link if compiled successfully
+    auto program = m_apiHandle.handle();
     compile();
-    glUseProgram(m_program);
+    m_apiHandle.bind();
+
+    // Call property setters for changed params
+    config.for_each([&](const auto& param) {
+        if (!config.dirty(param))
+            return;
+        setShaderProperty(*this, param);
+    });
 
     // Set vertex layout
     int attributeIndex = 0;
@@ -220,7 +177,7 @@ void dk::gfx::Shader::makeActive()
     m_textures.makeActive();
     
     // Bind uniforms
-    m_uniforms.makeActive(m_program);
+    m_uniforms.makeActive(program);
 }
 
 void dk::gfx::Shader::uniformTexture(const std::string& uniform, Texture& texture)
@@ -245,22 +202,25 @@ void dk::gfx::Shader::uniformTexture(const std::string& uniform, Texture& textur
 
 void dk::gfx::Shader::compile()
 {
-    // Compile and attach sources
-    unsigned vertexVersion   = m_vertexSource.lock()->attach(ShaderSource::Type::Vertex  , m_program);
-    unsigned fragmentVersion = m_fragmentSource.lock()->attach(ShaderSource::Type::Fragment, m_program);
-    unsigned geometryVersion = 0;
-    if (m_geometrySource.has_value())
-        geometryVersion = m_geometrySource.value().lock()->attach(ShaderSource::Type::Geometry, m_program);
-
-    // Check whether source version changed
+    auto program = m_apiHandle.handle();
     bool shouldLink = false;
-    shouldLink |= vertexVersion   != m_vertexVersion;
-    shouldLink |= fragmentVersion != m_fragmentVersion;
-    shouldLink |= geometryVersion != m_geometryVersion;
-    m_vertexVersion   = vertexVersion;
-    m_fragmentVersion = fragmentVersion;
-    m_geometryVersion = geometryVersion;
-    
+
+    // Compile and attach each bound source
+    for (auto type : magic_enum::enum_values<ShaderSource::Type>()) 
+    {
+        // Skip Unset and unbound shader types
+        if (type == ShaderSource::Unset)
+            continue;
+        if (!source(type).has_value())
+            continue;
+
+        // Compile and attach sources
+        unsigned version = source(type).value().get().attach(type, program);
+
+        // Check whether source version changed
+        shouldLink |= (version != m_sources.at(type).version);
+    }
+
     // Link if a source changed
     if (shouldLink)
         linkSources();
@@ -271,7 +231,7 @@ bool checkShaderLinking(unsigned int program) {
     glGetProgramiv(program, GL_LINK_STATUS, &OK);
     if (!OK) {
         spdlog::error("Failed to link shader program!");
-        writeShaderCompilationErrorInfo(program);
+        dk::gfx::api::writeShaderCompilationErrorInfo(program);
         return false;
     }
     return true;
@@ -279,22 +239,20 @@ bool checkShaderLinking(unsigned int program) {
 
 void dk::gfx::Shader::linkSources(std::optional<std::string> fragDataLocation)
 {
+    auto program = m_apiHandle.handle();
+
     // Connect the fragmentColor to the frame buffer memory
     if (fragDataLocation.has_value())
-        glBindFragDataLocation(m_program, 0, fragDataLocation.value().c_str());
+        glBindFragDataLocation(program, 0, fragDataLocation.value().c_str());
 
     // Link shaders
-    glLinkProgram(m_program);
-    if (!checkShaderLinking(m_program))
-        std::terminate();
+    glLinkProgram(program);
+    if (!checkShaderLinking(program))
+        throw std::runtime_error("Failed to link program");
 }
 
-//void dk::gfx::Shader::detach()
-//{
-//    if (m_vertex != 0)
-//        glDetachShader(m_program, m_vertex);
-//    if (m_fragment != 0)
-//        glDetachShader(m_program, m_fragment);
-//    if (m_geometry != 0)
-//        glDetachShader(m_program, m_geometry);
-//}
+template<>
+void dk::gfx::setShaderProperty(Shader&, const Shader::PatchVertices& patchVertices)
+{
+    glPatchParameteri(GL_PATCH_VERTICES, patchVertices.value);
+}

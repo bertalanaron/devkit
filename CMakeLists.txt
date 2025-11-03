@@ -41,7 +41,8 @@ set(COMMON_PUBLIC_SOURCES
     include/devkit/common/runtime_buffer.h
     include/devkit/common/performance_monitor.h
     include/devkit/common/filesystem_hierarchy_node.h
-    include/devkit/common/typeless.h)
+    include/devkit/common/typeless.h
+    include/devkit/common/imgui_helpers.h)
 set(COMMON_PRIVATE_SOURCES
     src/common/utils.cpp)
 # io

@@ -57,6 +57,7 @@ void dk::io::GlobalState::tryInitialize()
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE        , &mutHardware().glMaxTextureSize);
 	glGetIntegerv(GL_MAX_COLOR_ATTACHMENTS   , &mutHardware().glMaxColorAttachments);
 	glGetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &mutHardware().glMaxTextureLayers);
+	glGetIntegerv(GL_MAX_PATCH_VERTICES      , &mutHardware().glMaxPatchVertices);
 	// Destroy dummy context
 	SDL_GL_DestroyContext(dummyCtx);
 	SDL_DestroyWindow(dummyWin);

@@ -33,6 +33,7 @@ public:
 		int glMaxTextureSize       = 0;
 		int glMaxTextureLayers     = 0;
 		int glMaxColorAttachments  = 0;
+		int glMaxPatchVertices     = 0;
 	};
 
 	struct State {

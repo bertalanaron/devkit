@@ -1,7 +1,7 @@
 #pragma once
 #include <devkit/common/utils.h>
 
-namespace details {
+namespace dk::common::details {
 
 template <typename Byte>
 class typeless_ref_base {

@@ -154,7 +154,7 @@ struct string_literal {
 	constexpr string_literal() { };
 	char value[N]{};
 
-	operator std::string_view() const { return value; }
+	constexpr operator std::string_view() const { return value; }
 };
 
 template <unsigned N>
@@ -349,6 +349,21 @@ std::array<T, N> fill_array(Fn&& generator)
 		result[i] = generator(i);
 	}
 	return result;
+}
+
+inline std::string camel_to_snake(const std::string_view camelStr) {
+	std::string snakeStr;
+	for (char c : camelStr) {
+		if (std::isupper(c)) {
+			if (!snakeStr.empty()) { // Avoid leading underscore
+				snakeStr += '_';
+			}
+			snakeStr += std::tolower(c);
+		} else {
+			snakeStr += c;
+		}
+	}
+	return snakeStr;
 }
 
 std::filesystem::path executable_path();

@@ -4,7 +4,7 @@
 namespace dk::gfx {
 
 enum class Primitive : unsigned int {
-	Points, Lines, Triangles
+	Points, Lines, Triangles, Patches
 };
 
 namespace properties {
