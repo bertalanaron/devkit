@@ -116,13 +116,13 @@ tessellation_evaluation: |
 
   uniform float u_maxHeight;
   uniform float u_heightOffset;
+  uniform vec2 u_terrainSize;
 
   // received from Tessellation Control Shader - all texture coordinates for the patch vertices
   in vec2 TextureCoord[];
   out vec3 TessPosition;
   out vec2 TessTexCoord;
-  out vec3 TessTangent;
-  out vec3 TessBitangent;
+  out vec3 TessNormal;
 
   // send to Fragment Shader for coloring
   out float Height;
@@ -166,20 +166,25 @@ tessellation_evaluation: |
     vec4 p1 = (p11 - p10) * u + p10;
     vec4 p = (p1 - p0) * v + p0;
 
-    // ----------------------------------------------------------------------
-    // calculate tangents and bitangents
     // displace point along normal
     p += normal * Height;
 
-    // Derivatives (flat surface)
-    vec4 dp_du4 = mix(p10 - p00, p11 - p01, v);
-    vec4 dp_dv4 = mix(p01 - p00, p11 - p10, u);
+    // ----------------------------------------------------------------------
+    // Calculate normal
+    vec2 texel = 1.0 / textureSize(u_heightMap, 0);
 
-    vec3 dp_du = normalize(dp_du4.xyz);
-    vec3 dp_dv = normalize(dp_dv4.xyz);
+    float hL = texture(u_heightMap, texCoord - vec2(texel.x, 0)).r * u_maxHeight;
+    float hR = texture(u_heightMap, texCoord + vec2(texel.x, 0)).r * u_maxHeight;
+    float hD = texture(u_heightMap, texCoord - vec2(0, texel.y)).r * u_maxHeight;
+    float hU = texture(u_heightMap, texCoord + vec2(0, texel.y)).r * u_maxHeight;
 
-    TessTangent   = mat3(u_model) * dp_du;
-    TessBitangent = mat3(u_model) * dp_dv;
+    float dx = 500 * texel.x;
+    float dz = 200 * texel.y;
+
+    vec3 tangent = normalize(vec3(2.0 * dx, hR - hL, 0.0));
+    vec3 bitangent = normalize(vec3(0.0, hU - hD, 2.0 * dz));
+
+    TessNormal = normalize(cross(bitangent, tangent));
 
     // ----------------------------------------------------------------------
     // output patch point position in clip space
@@ -262,6 +267,7 @@ geometry: |
   in vec2 TessTexCoord[];
   in vec3 TessTangent[];
   in vec3 TessBitangent[];
+  in vec3 TessNormal[];
 
   // pass to fragment shader
   out float Height_f;
@@ -270,6 +276,9 @@ geometry: |
   out vec2 TexCoord;
   out vec3 Tangent;
   out vec3 Bitangent;
+  out vec3 Normal;
+
+  uniform bool u_shadeFlat;
 
   void main()
   {
@@ -289,6 +298,8 @@ geometry: |
 
       Height_f = Height[i];
 
+      Normal = normalize(cross(TessPosition[(i + 2) % 3] - TessPosition[i], TessPosition[(i + 1) % 3] - TessPosition[i]));
+
       gl_Position = gl_in[i].gl_Position;
       EmitVertex();
     }
@@ -302,8 +313,7 @@ fragment: |
   in vec3 Barycentric;
   in vec2 TexCoord;
   in vec3 Position;
-  in vec3 Tangent;
-  in vec3 Bitangent;
+  in vec3 Normal;
 
   out vec4 FragColor;
 
@@ -315,35 +325,144 @@ fragment: |
   }; uniform Camera u_camera;
 
   uniform mat4 u_model;
-  uniform sampler2D u_normalMap;
+
+  uniform sampler2D u_simplexNoise;
+  uniform sampler2D u_heightMap;
+  uniform sampler2D u_terrainTexture;
+  uniform sampler2D u_terrainTexture2;
+  uniform sampler2D u_terrainTexture3;
 
   uniform float u_maxHeight;
   uniform float u_heightOffset;
+  uniform bool  u_visualizeNormals;
+  uniform bool  u_shadeFlat;
+  uniform bool  u_drawWireframe;
+  uniform bool  u_textureBombing;
+  uniform bool  u_triplanarSampling;
+
+  vec3 getNormal()
+  {
+    if (u_shadeFlat)
+    {
+      return Normal;
+    }
+    vec2 texel = 1.0 / textureSize(u_heightMap, 0);
+
+    float hL = texture(u_heightMap, TexCoord - vec2(texel.x, 0)).r * u_maxHeight;
+    float hR = texture(u_heightMap, TexCoord + vec2(texel.x, 0)).r * u_maxHeight;
+    float hD = texture(u_heightMap, TexCoord - vec2(0, texel.y)).r * u_maxHeight;
+    float hU = texture(u_heightMap, TexCoord + vec2(0, texel.y)).r * u_maxHeight;
+
+    float dx = 500 * texel.x;
+    float dz = 200 * texel.y;
+
+    vec3 tangent = normalize(vec3(2.0 * dx, hR - hL, 0.0));
+    vec3 bitangent = normalize(vec3(0.0, hU - hD, 2.0 * dz));
+
+    return normalize(cross(bitangent, tangent));
+  }
 
   float getDifuse() {
-    mat3 TBN = mat3(normalize(Tangent), normalize(Bitangent), normalize(vec3(0, 1, 0)));
-    vec3 Normal = normalize(TBN * (texture(u_normalMap, TexCoord).rgb * 2.0 - 1.0));
+    //mat3 TBN = mat3(normalize(Tangent), normalize(Bitangent), normalize(vec3(0, 1, 0)));
+    // vec3 Normal = normalize(TBN * (texture(u_normalMap, TexCoord).rgb * 2.0 - 1.0));
+    // vec3 dx = dFdx(Position);
+    // vec3 dy = dFdy(Position);
+    // vec3 Normal = normalize(cross(dy, dx));
+
+    vec3 normal = getNormal();
 
     float prod = 0.0;
     // PERSPECTIVE
     if (u_camera.projection[3][3] == 1.0) {
-      prod = dot(normalize(-u_camera.direction), normalize(Normal));
+      prod = dot(normalize(-u_camera.direction), normalize(normal));
     }
     // ORTHOGRAPHIC
     else {
-      prod = dot(normalize(u_camera.position - Position), normalize(Normal));
+      prod = dot(normalize(u_camera.position - Position), normalize(normal));
     }
     //if (prod < 0)
     //  prod *= -1;
+    prod = clamp(prod, 0, 1);
     prod = prod * .2 + .5;
     return prod;
+  }
+
+  // vec4 hash4(ivec2 p)
+  // {
+  //     const vec4 prime = vec4(127.1, 311.7, 74.7, 18.3);
+  //     vec4 res = vec4(dot(vec2(p.x, p.y), prime.xy), dot(vec2(p.x, p.y), prime.zw), 0.0, 0.0);
+  //     res = fract(res);
+  //     return res;
+  // }
+
+  vec4 hash4( ivec2 p ) 
+  { 
+    return fract(sin(vec4( 1.0+dot(p,vec2(37.0,17.0)),
+                                           2.0+dot(p,vec2(11.0,47.0)),
+                                           3.0+dot(p,vec2(41.0,29.0)),
+                                           4.0+dot(p,vec2(23.0,31.0))))*103.0); 
+  }
+
+  float sum( vec3 v ) { return v.x+v.y+v.z; }
+
+  // https://www.shadertoy.com/view/Xtl3zf
+  vec4 bombedTerrainTex(in sampler2D tex, in vec2 uv) {
+    if (!u_textureBombing)
+      return texture(tex, uv);
+    float k = texture(u_simplexNoise, 0.0025*uv.xy).x; // cheap (cache friendly) lookup
+    float l = k*8.0;
+    float f = fract(l);
+    
+    float ia = floor(l+0.5); // suslik's method (see comments)
+    float ib = floor(l);
+    f = min(f, 1.0-f)*2.0;
+
+    vec2 offa = sin(vec2(3.0,7.0)*ia); // can replace with any other hash
+    vec2 offb = sin(vec2(3.0,7.0)*ib); // can replace with any other hash
+
+    vec4 cola = texture(tex, vec2(uv.xy + offa));
+    vec4 colb = texture(tex, vec2(uv.xy + offb));
+
+    return mix(cola, colb, smoothstep(0.2, 0.8, f - 0.1 * sum(cola.xyz - colb.xyz)));
+  }
+
+  const float _TRI_SCALE = 1.0;
+
+  vec4 triplanar(vec3 pos, vec3 normal, sampler2D tex) {
+    vec4 dx = bombedTerrainTex(tex, vec2(pos.zy / _TRI_SCALE));
+    vec4 dy = bombedTerrainTex(tex, vec2(pos.xz / _TRI_SCALE));
+    vec4 dz = bombedTerrainTex(tex, vec2(pos.xy / _TRI_SCALE));
+
+    vec3 weights = abs(normal.xyz);
+    weights = weights / (weights.x + weights.y + weights.z);
+
+    return dx * weights.x + dy * weights.y + dz * weights.z;
+  }
+
+  vec4 sampleTerrainTex(vec3 position, vec3 normal, sampler2D tex) {
+    if (u_triplanarSampling)
+      return triplanar(position, normal, tex);
+    else
+      return vec4(bombedTerrainTex(tex, position.xz).rgb, 1.0);
   }
 
   void main()
   {
       // base grayscale shading from Height
       float h = (Height_f + u_maxHeight) / (u_maxHeight * 2.0);
-      vec4 base = vec4(h, h, h, 1.0);
+      vec4 base;
+      if (dot(getNormal(), vec3(0,1,0)) > .8)
+        if (h > .8)
+        {
+          base = sampleTerrainTex(Position, getNormal(), u_terrainTexture);
+          vec4 terrainColor = sampleTerrainTex(Position, getNormal(), u_terrainTexture);
+          vec4 snowColor = sampleTerrainTex(Position, getNormal(), u_terrainTexture3);
+          base.xyz = mix(terrainColor.xyz, snowColor.xyz, snowColor.w);
+        }
+        else
+          base = sampleTerrainTex(Position, getNormal(), u_terrainTexture);
+      else
+        base = sampleTerrainTex(Position, getNormal(), u_terrainTexture2);
 
       // detect edge using minimum barycentric coordinate
       float edgeMetric = min(min(Barycentric.x, Barycentric.y), Barycentric.z);
@@ -359,7 +478,12 @@ fragment: |
       vec4 lineColor = vec4(0.0, 0.0, 0.0, 1.0);
 
       // mix line color (when edgeFactor close to 0) with base otherwise
-      FragColor = mix(lineColor, base * getDifuse(), edgeFactor);
-      //FragColor = vec4(Normal, 1.0);
+      vec4 color = base * getDifuse();
+      if (u_visualizeNormals)
+        color = vec4(getNormal(), 1.0);
+
+      FragColor = color;
+      if (u_drawWireframe)
+        FragColor = mix(lineColor, color, edgeFactor);
   }
 

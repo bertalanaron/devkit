@@ -25,7 +25,7 @@ public:
 		m_assets.type<ShaderSource>("glsl", ShaderSource::load);
 		m_assets.synchronize();
 
-		m_terrain = Terrain(m_assets, "/heightmaps/carpathian_basin.png");
+		m_terrain = Terrain(m_assets, "/heightmaps/pilis2.png");
 	}
 
 	void run()
@@ -48,11 +48,11 @@ public:
 			if (key::f(currentInputState()) && !key::f(previousInputState()))
 				m_window.config(dk::common::toggle(m_window.config.get<Window::Mode>()));
 
-			backBuffer().clear(Clear::Color | Clear::Depth, dk::colors::gray);
+			backBuffer().clear(Clear::Color | Clear::Depth, dk::colors::black);
 			backBuffer().config(FrameBuffer::DepthTest::Enabled);
 			backBuffer().config(FrameBuffer::Multisample::Enabled);
 			backBuffer().config(FrameBuffer::SampleShading::Enabled);
-			m_terrain.render(backBuffer(), m_camera);
+			m_terrain.render(backBuffer(), m_camera, m_assets, frame);
 
 			m_window.endFrame();
 		}

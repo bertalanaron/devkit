@@ -70,8 +70,13 @@ void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Mask mask, int inputColorInd
 	const auto filter_api = toUnderlying(filter);
 	const auto mask_api = toUnderlying(mask);
 
+	// Input
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + inputColorIndex);
+	
+	// Output
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
+	glDrawBuffer(GL_COLOR_ATTACHMENT0 + outputColorIndex);
 
 	glBlitFramebuffer(0, 0, input.color[inputColorIndex].get().targetSize().x, input.color[inputColorIndex].get().targetSize().y, 
 		0, 0, color[outputColorIndex].get().targetSize().x, color[outputColorIndex].get().targetSize().y, mask_api, filter_api);
@@ -84,8 +89,13 @@ void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Rect srcRect, Rect dstRect, 
 	const auto filter_api = toUnderlying(filter);
 	const auto mask_api = toUnderlying(mask);
 
+	// Input
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + inputColorIndex);
+
+	// Output
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
+	glDrawBuffer(GL_COLOR_ATTACHMENT0 + outputColorIndex);
 
 	glBlitFramebuffer(srcRect.offset.x, srcRect.offset.y, srcRect.size.x, srcRect.size.y, 
 		dstRect.offset.x, dstRect.offset.y, dstRect.size.x, dstRect.size.y, mask_api, filter_api);
@@ -124,6 +134,37 @@ void dk::gfx::FrameBuffer::render(Texture2D& texture)
 		s.source(ShaderSource::passthoughTextureFragmentSource());
 		return s;
 	}();
+	s_shader.uniformTexture("u_texture", texture);
+	render(s_shader);
+}
+
+void dk::gfx::FrameBuffer::render(MultisampledTexture2D& texture)
+{
+	using namespace shader_literals;
+	static Shader s_shader = []{
+		Shader s;
+		s.source(ShaderSource::postProcessVertexSource());
+		s.source(R"(
+			#version 330 core
+
+			in vec2 UV;
+			out vec4 FragColor;
+
+			uniform sampler2DMS u_texture;
+			uniform int         u_sampleCount;
+
+			void main()
+			{
+			ivec2 texelCoord = ivec2(UV * textureSize(u_texture));
+			vec4 color = vec4(0.0);
+			for (int i = 0; i < u_sampleCount; ++i)
+				color += texelFetch(u_texture, texelCoord, i);
+			FragColor = color / float(u_sampleCount);
+			}
+		)"_fs);
+		return s;
+		}();
+	s_shader.uniforms().set("u_sampleCount", texture.samples());
 	s_shader.uniformTexture("u_texture", texture);
 	render(s_shader);
 }

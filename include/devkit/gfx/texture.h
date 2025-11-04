@@ -36,10 +36,13 @@ protected:
 	virtual void setAsTarget(api::Attachment attachment, unsigned colorIndex = 0, unsigned level = 0) = 0;
 	virtual glm::ivec3 targetSize() const = 0;
 	virtual unsigned samples() const { return 1; }
-	virtual void resize(const glm::ivec2&) = 0;
 
 public:
 	virtual ~RenderTarget() { }
+
+	virtual void resize(const glm::ivec2&) = 0;
+	virtual Channels channels() const = 0;
+	virtual Format format() const = 0;
 
 	friend class FrameBuffer;
 };
@@ -109,6 +112,10 @@ public:
 	// @brief Resizing the texture requires reallocation so it's data is lost
 	void resize(const glm::ivec2& size) override;
 
+	Channels channels() const override { return m_channels; }
+	
+	Format format() const override { return m_format; }
+
 private:
 	glm::ivec2 m_size;
 
@@ -150,6 +157,12 @@ public:
 	// @brief Resizing the texture requires reallocation so it's data is lost
 	void resize(const glm::ivec2& size) override;
 
+	Channels channels() const override { return m_channels; }
+
+	Format format() const override { return m_format; }
+
+	unsigned samples() const override { return m_samples; }
+
 private:
 	glm::ivec2 m_size;
 	unsigned   m_samples;
@@ -158,8 +171,6 @@ private:
 
 	glm::ivec3 targetSize() const override
 	{ return { m_size.x, m_size.y, 1 }; }
-
-	unsigned samples() const override { return m_samples; }
 };
 
 class Texture2DArray 
@@ -175,6 +186,10 @@ public:
 		// @brief Resizes each layer of the texture array. 
 		// Resizing the texture requires reallocation so it's data is lost
 		void resize(const glm::ivec2& size) override { m_array->resize(size); }
+
+		Channels channels() const override { return m_array->m_channels; }
+
+		Format format() const override { return m_array->m_format; }
 
 	private:
 		Texture2DArray* m_array;
@@ -236,6 +251,10 @@ public:
 	glm::ivec2 size() const { return m_size; }
 
 	void resize(const glm::ivec2& size) override;
+
+	Channels channels() const override { return m_channels; }
+
+	Format format() const override { return m_format; }
 
 private:
 	using Initializer = std::optional<std::function<void(unsigned, RenderBuffer*)>>;
