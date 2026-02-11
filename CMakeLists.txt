@@ -177,6 +177,22 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${SDL3_INCLUDE_DIRS} ${GLEW_I
 # Set compile options
 target_compile_options(${PROJECT_NAME} PRIVATE "/MP")
 
+# Install the library binary
+install(TARGETS devkit 
+    EXPORT devkit-targets
+    DESTINATION lib
+)
+
+# Install the headers
+install(DIRECTORY include/ DESTINATION include)
+
+# Export the targets to a file so find_package works
+install(EXPORT devkit-targets
+    FILE devkitConfig.cmake
+    NAMESPACE devkit::
+    DESTINATION share/devkit
+)
+
 # Add tests
 add_subdirectory(tests)
 
