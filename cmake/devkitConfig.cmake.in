@@ -2,6 +2,14 @@
 
 include(CMakeFindDependencyMacro)
 
+# Private dependencies (needed at link time for static library)
+find_dependency(GLEW CONFIG)
+find_dependency(SDL3 CONFIG)
+find_dependency(assimp)
+find_dependency(nfd CONFIG)
+find_dependency(Boost COMPONENTS dll)
+find_dependency(poly2tri)
+
 # Public dependencies that consumers need
 find_dependency(imgui CONFIG)
 find_dependency(glm CONFIG)
