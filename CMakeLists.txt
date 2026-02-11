@@ -11,9 +11,14 @@ set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/ports")
 
 project(devkit LANGUAGES CXX)
 
-# Enable testing
-include(CTest)
-enable_testing()
+# Options
+option(DEVKIT_BUILD_TESTS "Build devkit tests" OFF)
+option(DEVKIT_BUILD_EXAMPLES "Build devkit examples" OFF)
+
+if(DEVKIT_BUILD_TESTS)
+    include(CTest)
+    enable_testing()
+endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -188,13 +193,28 @@ install(DIRECTORY include/ DESTINATION include)
 
 # Export the targets to a file so find_package works
 install(EXPORT devkit-targets
-    FILE devkitConfig.cmake
+    FILE devkit-targets.cmake
     NAMESPACE devkit::
     DESTINATION share/devkit
 )
 
+# Generate and install proper config file with find_dependency calls
+include(CMakePackageConfigHelpers)
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/devkitConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/devkitConfig.cmake"
+    INSTALL_DESTINATION share/devkit
+)
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/devkitConfig.cmake"
+    DESTINATION share/devkit
+)
+
 # Add tests
-add_subdirectory(tests)
+if(DEVKIT_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
 
 # Add examples
-add_subdirectory(examples)
+if(DEVKIT_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
