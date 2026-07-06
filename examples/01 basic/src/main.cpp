@@ -370,7 +370,7 @@ public:
 
 			static float t = 0;
 			t += frame.dt<std::chrono::seconds>();
-			m_postProcessLayer.shader().uniforms().set("u_t", t);
+			m_postProcessLayer.shader().uniforms().set("u_t", 0);
 
 			// Resize scene framebuffer and set viewport
 			m_sceneBuffer.resize(frame.viewport().size());
