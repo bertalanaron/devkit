@@ -1,7 +1,7 @@
 #include <devkit/gfx/shader.h>
 #include <devkit/common/properties.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 constexpr int details::gfx::toUnderlying(dk::gfx::ShaderSource::Type type) 
 {

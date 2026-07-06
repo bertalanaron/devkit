@@ -1,7 +1,7 @@
 #include <devkit/gfx/frame_buffer.h>
 #include "context.h"
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 void logFramebufferWarning(GLenum status);
 
@@ -287,16 +287,17 @@ void dk::gfx::setFrameBufferProperty(FrameBuffer& frameBuffer, const FrameBuffer
 template <>
 void dk::gfx::setFrameBufferProperty(FrameBuffer& frameBuffer, const FrameBuffer::SampleShading& sampleShading)
 {
-	if (!GLEW_ARB_sample_shading)
-	{
-		static bool logged = false;
-		if (!logged)
-		{
-			logged = true;
-			spdlog::warn("[gfx] Sample shading is not available");
-		}
-		return;
-	}
+	// if (!GLEW_ARB_sample_shading)
+	// {
+	// 	static bool logged = false;
+	// 	if (!logged)
+	// 	{
+	// 		logged = true;
+	// 		spdlog::warn("[gfx] Sample shading is not available");
+	// 	}
+	// 	return;
+	// }
+	spdlog::warn("Sample shading check not implemented using glad");
 
 	if (sampleShading == std::decay_t<decltype(sampleShading)>::Enabled) {
 		glEnable(GL_SAMPLE_SHADING);

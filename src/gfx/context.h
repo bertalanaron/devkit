@@ -3,7 +3,7 @@
 #include <devkit/io/input_combination.h>
 #include <devkit/io/window.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_system.h>
@@ -96,7 +96,9 @@ public:
 	ImGuiContext* imguiContext     = nullptr;
 	ImGuiID       imguiDockspaceId;
 	ImGuiIO*      imguiIO          = nullptr;
+#if defined(SDL_PLATFORM_WIN32)
 	WindowHandle  nativeWindowHandle;
+#endif
 
 	~WindowContext();
 

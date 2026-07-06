@@ -122,8 +122,8 @@ constexpr bool is_vertex_v = is_vertex<T>::value;
 
 template <VertexFlags Mask>
 struct decl_vertex_from_flags {
-	template <VertexFlags Mask, VertexFlags F>
-	using maybe_tuple = std::conditional_t<(static_cast<int>(Mask) & static_cast<int>(F)) != 0, std::tuple<type_of_t<F>>, std::tuple<>>;
+	template <VertexFlags VMaks, VertexFlags F>
+	using maybe_tuple = std::conditional_t<(static_cast<int>(VMaks) & static_cast<int>(F)) != 0, std::tuple<type_of_t<F>>, std::tuple<>>;
 
 #define DK_DECL_VERTEXFROMFLAGS_TUPLE(index, enumName, typeName, ...) \
 	, maybe_tuple<Mask, VertexFlags::enumName>{}             \

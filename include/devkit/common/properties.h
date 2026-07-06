@@ -42,14 +42,6 @@ template <typename T>
 concept UniquePropertySpecialization = is_unique_property<std::remove_cvref_t<T>>::value;
 
 template <typename T, string_literal Name>
-struct std::formatter<UniqueProperty<T, Name>> : std::formatter<T> {
-	template <typename FormatContext>
-	auto format(const dk::common::UniqueProperty<T, Name>& prop, FormatContext& ctx) const {
-		return std::formatter<T>::format(prop.value, ctx);
-	}
-};
-
-template <typename T, string_literal Name>
 inline void to_json(nlohmann::json& j, const UniqueProperty<T, Name>& p) 
 { to_json(j, p.value); }
 
@@ -170,6 +162,14 @@ inline void from_json(const nlohmann::json& j, ConfigurationBase<Properties...>&
 }
 
 } // namespace dk::common
+
+template <typename T, dk::common::string_literal Name>
+struct std::formatter<dk::common::UniqueProperty<T, Name>> : std::formatter<T> {
+	template <typename FormatContext>
+	auto format(const dk::common::UniqueProperty<T, Name>& prop, FormatContext& ctx) const {
+		return std::formatter<T>::format(prop.value, ctx);
+	}
+};
 
 #define DK_CONFIG_SPECIALIZATION(owner, ...)                        \
 	 private common::ConfigurationBase<__VA_ARGS__> {               \

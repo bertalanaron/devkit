@@ -86,26 +86,16 @@ private:
 	constexpr static Side otherSide = Side(!to_bool(side));
 
 	template <Side side>
-	std::deque<Vertex>& selectSide();
-
-	template <>
-	std::deque<Vertex>& selectSide<Side::Left>()
-	{ return leftQueue; }
-
-	template <>
-	std::deque<Vertex>& selectSide<Side::Right>()
-	{ return rightQueue; }
+	std::deque<Vertex>& selectSide() {
+		if constexpr (side == Side::Left) return leftQueue;
+		else                              return rightQueue;
+	}
 
 	template <Side side>
-	const std::deque<Vertex>& selectSide() const;
-
-	template <>
-	const std::deque<Vertex>& selectSide<Side::Left>() const
-	{ return leftQueue; }
-
-	template <>
-	const std::deque<Vertex>& selectSide<Side::Right>() const
-	{ return rightQueue; }
+	const std::deque<Vertex>& selectSide() const {
+		if constexpr (side == Side::Left) return leftQueue;
+		else                              return rightQueue;
+	}
 
 	template <Side side>
 	void appendVertex(const glm::dvec2& newVertex) 

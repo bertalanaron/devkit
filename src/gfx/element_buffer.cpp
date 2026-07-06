@@ -1,6 +1,6 @@
 #include <devkit/gfx/element_buffer.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 void dk::gfx::ElementBuffer::clear()
 {
