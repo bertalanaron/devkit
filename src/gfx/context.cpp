@@ -52,6 +52,10 @@ void dk::io::GlobalState::tryInitialize()
 		std::terminate();
 	}
 	SDL_GL_MakeCurrent(dummyWin, dummyCtx);
+	if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress)) {
+		spdlog::error("Failed to initialize GLAD!");
+		std::terminate();
+	}
 	// Get info
 	glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS , &mutHardware().glMaxTextureImageUnits);
 	glGetIntegerv(GL_MAX_TEXTURE_SIZE        , &mutHardware().glMaxTextureSize);
@@ -98,16 +102,12 @@ std::unique_ptr<const dk::io::WindowContext> dk::io::GlobalState::createWindowCo
 	SDL_GL_MakeCurrent(ctx->sdlWindowContext, ctx->sdlGlContext);
 	spdlog::trace("[io] Created OpenGL context for window: {}", (int)ctx->sdlWindowID);
 
-	// Initialize GLEW after creating OpenGL context
-	glewExperimental = GL_TRUE;
-	GLenum glewError = glewInit();
-	if (glewError != GLEW_OK) 
+	// Initialize GLAD after creating your OpenGL context
+	if (!gladLoadGLLoader((GLADloadproc)SDL_GL_GetProcAddress))
 	{
-		spdlog::error("[io] Error initializing GLEW!");
+		spdlog::error("[io] Error initializing GLAD!");
 		std::terminate();
-	}
-	// Remove error caused by glewExperimental
-	glGetError();
+	}	glGetError();
 	spdlog::trace("[io] Initialized GLEW for window: {}", (int)ctx->sdlWindowID);
 
 	// Get native window handle

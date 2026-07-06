@@ -1,14 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
 
-# Use vcpkg by default
-if (EXISTS "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
-set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
-CACHE STRING "Vcpkg toolchain file")
-set(VCPKG_TARGET_TRIPLET "x64-windows"
-CACHE STRING "default vcpkg triplet")
-endif ()
-set(VCPKG_OVERLAY_PORTS "${CMAKE_CURRENT_SOURCE_DIR}/ports")
-
 project(devkit LANGUAGES CXX)
 
 # Enable testing
@@ -26,9 +17,16 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/build/$<CONFIG>")
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-add_compile_options(/std:c++latest)
-add_compile_options(/bigobj)
-add_compile_options(/Zc:preprocessor)
+
+add_compile_options(
+        # MSVC-only flags
+        $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
+        $<$<CXX_COMPILER_ID:MSVC>:/std:c++latest>
+        $<$<CXX_COMPILER_ID:MSVC>:/Zc:preprocessor>
+
+        # GCC (and Clang) equivalent flags
+        $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wno-pedantic>
+)
 
 # List source files
 # common
@@ -153,7 +151,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 # Find dependencies
-find_package(GLEW CONFIG REQUIRED)
+find_package(glad CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
@@ -170,13 +168,15 @@ find_package(poly2tri REQUIRED)
 find_package(cereal CONFIG REQUIRED)
 
 # Link dependencies
-target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 GLEW::GLEW assimp::assimp nfd::nfd Boost::dll poly2tri::poly2tri)
+target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 glad::glad assimp::assimp nfd::nfd Boost::dll poly2tri::poly2tri)
 target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui glm::glm nlohmann_json::nlohmann_json spdlog::spdlog_header_only magic_enum::magic_enum yaml-cpp::yaml-cpp ftxui::dom ftxui::screen ftxui::component cereal::cereal)
 target_include_directories(${PROJECT_NAME} PUBLIC ${MINI_INCLUDE_DIRS})
 target_include_directories(${PROJECT_NAME} PRIVATE ${SDL3_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
 
 # Set compile options
-target_compile_options(${PROJECT_NAME} PRIVATE "/MP")
+target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/MP>
+)
 
 # Add tests
 add_subdirectory(tests)

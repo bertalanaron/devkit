@@ -9,7 +9,10 @@ public:
 		// Parse ini file
 		m_ini = [] {
 			std::string path = dk::common::executable_path().string();
-			path.replace(path.find(".exe"), 4, ".ini");
+			if (path.contains(".exe"))
+				path.replace(path.find(".exe"), 4, ".ini");
+			else
+				path += ".ini";
 			mINI::INIFile file(path);
 			mINI::INIStructure ini;
 			file.read(ini);

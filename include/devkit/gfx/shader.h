@@ -5,7 +5,7 @@
 #include <devkit/gfx/texture.h>
 #include <devkit/common/properties.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 namespace dk::gfx {
 

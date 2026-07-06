@@ -1,7 +1,7 @@
 #include <devkit/gfx/vertex.h>
 #include <devkit/gfx/shader.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 
 //template<>

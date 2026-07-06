@@ -84,15 +84,6 @@ private:
 		// Normalize possible path types to std::filesystem::path
 		template <typename P>
 		static P convertPath(const std::string& p);
-		template <>
-		static path_t convertPath<path_t>(const std::string& p) 
-		{ return p; }
-		template <>
-		static const std::string& convertPath<const std::string&>(const std::string& p) 
-		{ return p; }
-		template <>
-		static const char* convertPath<const char*>(const std::string& p) 
-		{ return p.c_str(); }
 
 		// Normalize possible return types of load functions
 		template<typename T>
@@ -744,6 +735,15 @@ private:
 
 private:
 };
+
+template<>
+inline AssetManager::path_t AssetManager::GenericHandler::convertPath<std::filesystem::path>(const std::string &p) { return p; }
+
+template<>
+inline const std::string & AssetManager::GenericHandler::convertPath<const std::string&>(const std::string &p) { return p; }
+
+template<>
+inline const char * AssetManager::GenericHandler::convertPath<const char*>(const std::string &p) { return p.c_str(); }
 
 template <typename T>
 struct FileStream {

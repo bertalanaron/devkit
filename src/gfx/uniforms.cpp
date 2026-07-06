@@ -1,6 +1,6 @@
 #include <devkit/gfx/uniforms.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 #define DK_DECL_UNIFORM_SETTER(setter, type)                                                                    \
 	template<>                                                                                                  \

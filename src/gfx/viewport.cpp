@@ -1,6 +1,7 @@
 #include <devkit/gfx/viewport.h>
 
-#include <gl/GL.h>
+// #include <gl/GL.h>
+#include <glad/glad.h>
 
 void dk::gfx::Viewport::makeActive() const
 {

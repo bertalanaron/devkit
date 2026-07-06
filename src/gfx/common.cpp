@@ -1,6 +1,6 @@
 #include <devkit/gfx/common.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 unsigned int details::gfx::toUnderlying(dk::gfx::Primitive primitive)
 {

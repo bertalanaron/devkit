@@ -74,7 +74,7 @@ private:
 	}
 
 	const std::type_info* typeInfo() const {
-		return reinterpret_cast<const type_info*>(m_type);
+		return reinterpret_cast<const std::type_info*>(m_type);
 	}
 };
 

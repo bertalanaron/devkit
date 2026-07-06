@@ -5,7 +5,7 @@
 
 #include <devkit/gfx/frame_buffer.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 #include <SDL3/SDL.h>
 //#include <SDL3/SDL_main.h>
@@ -21,9 +21,11 @@
 #include <imgui_internal.h> // Needed for dock node access
 #endif
 
+#ifdef _WIN32
 #pragma comment (lib, "Dwmapi")
 #include <dwmapi.h>
 #undef DELETE
+#endif
 
 #if defined(SDL_PLATFORM_WIN32)
 using WindowHandle = HWND;
@@ -256,11 +258,15 @@ void dk::io::setWindowProperty(Window& window, const Window::Border& border)
 template <>
 void dk::io::setWindowProperty(Window& window, const Window::Theme& theme)
 {
+#ifdef _WIN32
 	BOOL USE_DARK_MODE = (theme == Window::Theme::Dark);
 	BOOL SET_IMMERSIVE_DARK_MODE_SUCCESS = SUCCEEDED(DwmSetWindowAttribute(
 		window.m_context->nativeWindowHandle, DWMWINDOWATTRIBUTE::DWMWA_USE_IMMERSIVE_DARK_MODE,
 		&USE_DARK_MODE, sizeof(USE_DARK_MODE)));
 	spdlog::trace("Set {} theme for window: {}", (USE_DARK_MODE ? "dark" : "light"), window.m_context->sdlWindowID);
+#else
+	spdlog::warn("Window theme is only implemented on windows");
+#endif
 
 	// hack: Have to hide and show the window to apply color change
 	bool border = (window.config.get<Window::Border>() == Window::Border::Enabled);
@@ -289,9 +295,9 @@ void dk::io::setWindowProperty(Window& window, const Window::Mode& mode)
 	const auto underlying = [&] {
 		switch (mode)
 		{
-		case Window::Mode::Windowed  : return 0ull;
+		case Window::Mode::Windowed  : return 0ul;
 		case Window::Mode::Fullscreen: return SDL_WINDOW_FULLSCREEN;
-		default: return 0ull;
+		default: return 0ul;
 		}
 	}();
 	SDL_SetWindowFullscreen(window.m_context->sdlWindowContext, underlying);
