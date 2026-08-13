@@ -3,7 +3,7 @@
 include(CMakeFindDependencyMacro)
 
 # Private dependencies (needed at link time for static library)
-find_dependency(GLEW CONFIG)
+find_dependency(glad CONFIG)
 find_dependency(SDL3 CONFIG)
 find_dependency(assimp)
 find_dependency(nfd CONFIG)
