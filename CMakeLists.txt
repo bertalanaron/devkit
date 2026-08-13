@@ -175,7 +175,7 @@ find_package(cereal CONFIG REQUIRED)
 # Link dependencies
 target_link_libraries(${PROJECT_NAME} PRIVATE SDL3::SDL3 glad::glad assimp::assimp nfd::nfd Boost::dll poly2tri::poly2tri)
 target_link_libraries(${PROJECT_NAME} PUBLIC imgui::imgui glm::glm nlohmann_json::nlohmann_json spdlog::spdlog_header_only magic_enum::magic_enum yaml-cpp::yaml-cpp ftxui::dom ftxui::screen ftxui::component cereal::cereal)
-target_include_directories(${PROJECT_NAME} PUBLIC ${MINI_INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${MINI_INCLUDE_DIRS}>)
 target_include_directories(${PROJECT_NAME} PRIVATE ${SDL3_INCLUDE_DIRS} ${GLEW_INCLUDE_DIRS})
 
 # Set compile options
