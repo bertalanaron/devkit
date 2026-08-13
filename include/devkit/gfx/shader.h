@@ -150,19 +150,19 @@ private:
 
 namespace shader_literals {
 
-inline std::pair<ShaderSource, ShaderSource::Type> operator"" _vs(const char* cstr, size_t len)
+inline std::pair<ShaderSource, ShaderSource::Type> operator""_vs(const char* cstr, size_t len)
 { return std::make_pair(ShaderSource(std::string(cstr)), ShaderSource::Vertex); }
 
-inline std::pair<ShaderSource, ShaderSource::Type> operator"" _fs(const char* cstr, size_t len)
+inline std::pair<ShaderSource, ShaderSource::Type> operator""_fs(const char* cstr, size_t len)
 { return std::make_pair(ShaderSource(std::string(cstr)), ShaderSource::Fragment); }
 
-inline std::pair<ShaderSource, ShaderSource::Type> operator"" _gs(const char* cstr, size_t len)
+inline std::pair<ShaderSource, ShaderSource::Type> operator""_gs(const char* cstr, size_t len)
 { return std::make_pair(ShaderSource(std::string(cstr)), ShaderSource::Geometry); }
 
-inline std::pair<ShaderSource, ShaderSource::Type> operator"" _tcs(const char* cstr, size_t len)
+inline std::pair<ShaderSource, ShaderSource::Type> operator""_tcs(const char* cstr, size_t len)
 { return std::make_pair(ShaderSource(std::string(cstr)), ShaderSource::TessellationControl); }
 
-inline std::pair<ShaderSource, ShaderSource::Type> operator"" _tes(const char* cstr, size_t len)
+inline std::pair<ShaderSource, ShaderSource::Type> operator""_tes(const char* cstr, size_t len)
 { return std::make_pair(ShaderSource(std::string(cstr)), ShaderSource::TessellationEvaluation); }
 
 }

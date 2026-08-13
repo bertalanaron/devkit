@@ -129,12 +129,12 @@ private:
 	Sun              m_sun;
 };
 
-namespace dk::imgui_helpers {
-DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::MaxHeight      , 0.1,  100, 0.1);
-DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::HeightOffset   , -64,   64, 0.1);
-DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::MinTessLevel   ,   0,   64, 0.1);
-DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::MaxTessLevel   ,   0,   64, 0.1);
-DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::TessMinDistance,   0, 1000, 0.1);
-DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::TessMaxDistance,   0, 1000, 0.1);
-DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::ColorAttachmentIndex, 0, 2, 0.1);
-}
+// namespace dk::imgui_helpers {
+// DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::MaxHeight      , 0.1,  100, 0.1);
+// DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::HeightOffset   , -64,   64, 0.1);
+// DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::MinTessLevel   ,   0,   64, 1);
+// DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::MaxTessLevel   ,   0,   64, 1);
+// DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::TessMinDistance,   0, 1000, 0.1);
+// DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::TessMaxDistance,   0, 1000, 0.1);
+// DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(Terrain::ColorAttachmentIndex, 0, 2, 1);
+// }

@@ -184,7 +184,7 @@ inline void edit(const char* name, Config& config)
 			ImGui::TableSetColumnIndex(0);
 			ImGui::Text(prop_name.data());
 			ImGui::TableSetColumnIndex(1);
-			config.set<std::decay_t<decltype(prop)>>(edit(label.c_str(), prop));
+			config.template set<std::decay_t<decltype(prop)>>(edit(label.c_str(), prop));
 		});
 
 		ImGui::EndTable();
@@ -235,6 +235,6 @@ inline void draw(gfx::Texture2D& tex)
 
 #include <devkit/io/window.h>
 
-namespace dk::imgui_helpers {
-DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(io::Window::Opacity, 0, 1, 0.01);
-}
+// namespace dk::imgui_helpers {
+// DK_IMHELPER_SCALAR_CONFIG_MINMAXSTEP(io::Window::Opacity, 0, 1, 0.01);
+// }
