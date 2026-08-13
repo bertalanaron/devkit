@@ -1,5 +1,5 @@
 #include <devkit/io/frame.h>
-#include "../gfx/context.h"
+#include <gfx/context.h>
 
 #include <SDL3/SDL.h>
 

@@ -1,7 +1,7 @@
 #include <devkit/io/window.h>
 #include <devkit/io/input_combination.h>
 #include <devkit/io/frame.h>
-#include "../gfx/context.h"
+#include <gfx/context.h>
 
 #include <devkit/gfx/frame_buffer.h>
 
