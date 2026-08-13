@@ -1,5 +1,0 @@
-[data]
-path=@DATA_PATH@
-
-[graphics]
-msaa=4

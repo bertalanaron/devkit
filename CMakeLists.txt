@@ -215,7 +215,3 @@ if(DEVKIT_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# Add examples
-if(DEVKIT_BUILD_EXAMPLES)
-    add_subdirectory(examples)
-endif()
