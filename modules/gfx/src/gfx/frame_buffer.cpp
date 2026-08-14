@@ -3,6 +3,9 @@
 
 #include <glad/glad.h>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
+
 void logFramebufferWarning(GLenum status);
 
 const dk::gfx::RenderTarget& dk::gfx::FrameBuffer::Attachment::get() const {
@@ -186,6 +189,64 @@ void dk::gfx::FrameBuffer::render(Shader& shader, ElementBuffer& elementBuffer, 
 	(count == 1)
 		? glDrawElements(details::gfx::toUnderlying(primitive), elementBuffer.count(), GL_UNSIGNED_INT, 0)
 		: glDrawElementsInstanced(details::gfx::toUnderlying(primitive), elementBuffer.count(), GL_UNSIGNED_INT, 0, count);
+}
+
+void dk::gfx::FrameBuffer::saveAsPNG(const std::filesystem::path& path)
+{
+	const bool isBackbuffer = color.empty();
+	const auto captureRect = [&] {
+		if (isBackbuffer) {
+			if (m_viewport.has_value())
+				return Rect{ m_viewport->offset(), m_viewport->size() };
+
+			GLint viewport[4] = {};
+			glGetIntegerv(GL_VIEWPORT, viewport);
+			return Rect{
+				glm::ivec2(viewport[0], viewport[1]),
+				glm::ivec2(viewport[2], viewport[3])
+			};
+		}
+
+		if (!color[0].has_value())
+			throw std::runtime_error("cannot save framebuffer without a color attachment");
+
+		return Rect{ glm::ivec2(0, 0), geom::xy(color[0].size()) };
+	}();
+
+	if (captureRect.size.x <= 0 || captureRect.size.y <= 0)
+		throw std::runtime_error("cannot save framebuffer with empty capture area");
+
+	constexpr int channels = 4;
+	const int rowBytes = captureRect.size.x * channels;
+	std::vector<unsigned char> pixels(rowBytes * captureRect.size.y);
+	std::vector<unsigned char> flipped(pixels.size());
+
+	GLint previousReadFramebuffer = 0;
+	GLint previousReadBuffer = 0;
+	GLint previousPackAlignment = 0;
+	glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &previousReadFramebuffer);
+	glGetIntegerv(GL_READ_BUFFER, &previousReadBuffer);
+	glGetIntegerv(GL_PACK_ALIGNMENT, &previousPackAlignment);
+
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, m_apiHandle.handle());
+	glReadBuffer(isBackbuffer ? GL_BACK : GL_COLOR_ATTACHMENT0);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+
+	glReadPixels(captureRect.offset.x, captureRect.offset.y, captureRect.size.x, captureRect.size.y,
+		GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+	for (int y = 0; y < captureRect.size.y; ++y) {
+		const auto* src = pixels.data() + (captureRect.size.y - 1 - y) * rowBytes;
+		auto* dst = flipped.data() + y * rowBytes;
+		std::copy(src, src + rowBytes, dst);
+	}
+
+	glPixelStorei(GL_PACK_ALIGNMENT, previousPackAlignment);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, previousReadFramebuffer);
+	glReadBuffer(previousReadBuffer);
+
+	if (stbi_write_png(path.c_str(), captureRect.size.x, captureRect.size.y, channels, flipped.data(), rowBytes) == 0)
+		throw std::runtime_error("failed to save framebuffer PNG: " + path.generic_string());
 }
 
 void dk::gfx::FrameBuffer::setViewport(const gfx::Viewport& viewport)

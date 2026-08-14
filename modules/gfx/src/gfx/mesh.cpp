@@ -6,19 +6,22 @@ dk::gfx::MeshMask::MeshMask(Mesh& _mesh, VertexFlags target, VertexFlags origina
 	, indices(mesh.indices)
 	, material(mesh.material)
 {
-	unsigned targetbits = static_cast<unsigned>(target);
-	unsigned originalbits = static_cast<unsigned>(original);
+	unsigned attributeIndex = 0;
+	unsigned targetBits = static_cast<unsigned>(target);
+	unsigned originalBits = static_cast<unsigned>(original);
 	for (unsigned i = 0u; i < sizeof(VertexFlags) * 8u; ++i)
 	{
-		if (targetbits % 2) // i th bit is set in flags
-		{
-			if (!(originalbits % 2))
-				throw std::runtime_error("target includes flag not present in original");
-			m_mask |= (1u << i);
-		}
+		const bool targetHasFlag = targetBits & (1u << i);
+		const bool originalHasFlag = originalBits & (1u << i);
 
-		// shift bits
-		targetbits >>= 1u;
-		originalbits >>= 1u;
+		if (targetHasFlag && !originalHasFlag)
+			throw std::runtime_error("target includes flag not present in original");
+
+		if (originalHasFlag)
+		{
+			if (targetHasFlag)
+				m_mask |= (1u << attributeIndex);
+			++attributeIndex;
+		}
 	}
 }

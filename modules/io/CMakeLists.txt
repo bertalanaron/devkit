@@ -6,6 +6,8 @@ set(IO_PUBLIC_SOURCES
     include/devkit/io/file_dialog.h
     include/devkit/io/frame.h
     include/devkit/io/virtual_filesystem.h
+    include/devkit/io/asset_factories/shader.h
+    include/devkit/io/asset_factories/texture.h
 )
 
 set(IO_PRIVATE_SOURCES
@@ -41,6 +43,9 @@ target_link_libraries(devkit_io PUBLIC
     SDL3::SDL3
     nfd::nfd
     Boost::dll
+    Boost::bimap
+    reflectcpp::reflectcpp
+    yaml-cpp::yaml-cpp
 )
 
 target_compile_options(devkit_io PRIVATE
@@ -55,6 +60,7 @@ set_target_properties(devkit_io PROPERTIES
 if(DEVKIT_BUILD_TESTS)
     add_executable(devkit_io_tests
         tests/io_test.cpp
+        tests/io_assets_test.cpp
     )
     target_link_libraries(devkit_io_tests PRIVATE
         devkit::io

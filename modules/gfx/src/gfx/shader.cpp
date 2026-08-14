@@ -219,6 +219,7 @@ void dk::gfx::Shader::compile()
 
         // Check whether source version changed
         shouldLink |= (version != m_sources.at(type).version);
+        m_sources.at(type).version = version;
     }
 
     // Link if a source changed
@@ -249,6 +250,7 @@ void dk::gfx::Shader::linkSources(std::optional<std::string> fragDataLocation)
     glLinkProgram(program);
     if (!checkShaderLinking(program))
         throw std::runtime_error("Failed to link program");
+    spdlog::trace("Linked program {}", program);
 }
 
 template<>

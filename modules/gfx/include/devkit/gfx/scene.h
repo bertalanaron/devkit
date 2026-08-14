@@ -56,6 +56,11 @@ public:
 			});
 	}
 
+	auto& meshFactories()
+	{
+		return m_meshFactories;
+	}
+
 	auto meshes(VertexFlags flags)
 	{
 		return m_meshFactories

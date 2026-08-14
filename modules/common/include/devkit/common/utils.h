@@ -21,6 +21,7 @@
 #include <queue>
 #include <numbers>
 #include <bitset>
+#include <shared_mutex>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/async.h>
@@ -367,6 +368,10 @@ inline std::string camel_to_snake(const std::string_view camelStr) {
 }
 
 std::filesystem::path executable_path();
+
+std::filesystem::path program_location();
+
+std::string program_name();
 
 namespace fs {
 

@@ -22,6 +22,11 @@
 	"boost-dll",
 	"mini",
 	"jhasse-poly2tri",
-	"cereal"
+	"cereal",
+    {
+      "name": "reflectcpp",
+      "features": [ "yaml" ]
+    },
+    "boost-bimap"
   ]
 }

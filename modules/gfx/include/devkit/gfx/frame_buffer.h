@@ -144,6 +144,8 @@ public:
 	// @brief Render multisampled texture as a fullscreen quad
 	void render(MultisampledTexture2D& texture);
 
+	void saveAsPNG(const std::filesystem::path& path);
+
 private:
 	api::FrameBuffer        m_apiHandle;
 	std::optional<Viewport> m_viewport;

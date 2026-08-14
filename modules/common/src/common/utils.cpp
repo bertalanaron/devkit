@@ -7,6 +7,13 @@ std::filesystem::path dk::common::executable_path()
     return boost::dll::program_location().string();
 }
 
+std::filesystem::path dk::common::program_location()
+{
+	return boost::dll::program_location().parent_path().string();
+}
+
+std::string dk::common::program_name() { return boost::dll::program_location().filename().string(); }
+
 void nlohmann_extension::smart_dump(const nlohmann::json& j, std::ostream& os, int indent, int indent_step, int threshold)
 {
 	auto write_indent = [&](int i) {
