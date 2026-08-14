@@ -9,6 +9,7 @@ set(COMMON_PUBLIC_SOURCES
     include/devkit/common/filesystem_hierarchy_node.h
     include/devkit/common/typeless.h
     include/devkit/common/imgui_helpers.h
+    include/devkit/common/rfl_helpers.h
 )
 
 set(COMMON_PRIVATE_SOURCES
@@ -45,6 +46,7 @@ target_link_libraries(devkit_common PUBLIC
     ftxui::component
     cereal::cereal
     Boost::filesystem
+    reflectcpp::reflectcpp
 )
 
 target_compile_options(devkit_common PRIVATE

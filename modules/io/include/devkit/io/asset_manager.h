@@ -4,7 +4,6 @@
 
 #include <boost/bimap.hpp>
 #include <rfl.hpp>
-#include <rfl/yaml/write.hpp>
 
 namespace dk::io::assets {
 
@@ -598,7 +597,6 @@ Meta::Meta(const std::filesystem::path &absolute_path, Format)
     auto metadata_result = read_metadata<Format>(ifs);
     if (!metadata_result.has_value())
     {
-        spdlog::error("Invalid metadata: {}", rfl::yaml::write(m_meta));
         throw std::runtime_error("Could not parse asset metadata in " + absolute_path.string() + ": " + metadata_result.error().what());
     }
     m_meta = metadata_result.value();

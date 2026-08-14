@@ -54,7 +54,10 @@ target_link_libraries(devkit_io PUBLIC devkit::gfx)
 target_link_libraries(devkit_algo PUBLIC devkit::gfx)
 target_link_libraries(devkit_gfx PUBLIC devkit::io devkit::algo)
 
-add_library(devkit INTERFACE)
+add_library(devkit INTERFACE
+        "../examples/01 basic/src/primitives.h"
+        "../examples/01 basic/src/render_context.h"
+        "../examples/01 basic/src/render_context.cpp")
 add_library(devkit::devkit ALIAS devkit)
 target_link_libraries(devkit INTERFACE
     devkit::common

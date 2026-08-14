@@ -38,6 +38,8 @@
 
 #include <magic_enum/magic_enum.hpp>
 
+#include <devkit/common/rfl_helpers.h>
+
 #include <devkit/common/constants.h>
 
 #define DK_ASSERT assert
