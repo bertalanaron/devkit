@@ -1,6 +1,9 @@
 #pragma once
 #include <devkit/common/utils.h>
 
+#include <rfl/generic/read.hpp>
+#include <rfl/generic/write.hpp>
+
 namespace dk::common {
 
 template <typename T, string_literal Name>
@@ -222,3 +225,57 @@ struct std::formatter<dk::common::UniqueProperty<T, Name>> : std::formatter<T> {
 		friend class owner;                                         \
 	} 																\
 	/* end of macro */
+
+namespace dk::common::details {
+
+template <typename T>
+struct configuration_reflector {
+	using ReflType = rfl::Generic;
+
+	static rfl::Generic from(const T& config)
+	{
+		rfl::Generic::Object object;
+		config.for_each([&](const auto& property) {
+			object.insert(
+				std::string(T::property_name(property)),
+				rfl::generic::write(T::property_value(property)));
+		});
+		return rfl::Generic(std::move(object));
+	}
+
+	static T to(const rfl::Generic& value)
+	{
+		const auto object_result = value.to_object();
+		if (!object_result)
+			throw std::runtime_error(object_result.error().what());
+
+		T config;
+		config.for_each([&](const auto& property) {
+			using Property = std::remove_cvref_t<decltype(property)>;
+			using Value = std::remove_cvref_t<decltype(T::property_value(property))>;
+
+			const auto field = object_result.value().get(std::string(T::property_name(property)));
+			if (!field)
+				return;
+
+			auto parsed = rfl::generic::read<Value>(field.value());
+			if (!parsed)
+				throw std::runtime_error(parsed.error().what());
+
+			if constexpr (std::is_enum_v<Property>)
+				config.template set<Property>(parsed.value());
+			else
+				config.template set<Property>(Property(std::move(parsed.value())));
+		});
+		return config;
+	}
+};
+
+} // namespace dk::common::details
+
+namespace rfl {
+
+template <dk::common::ConfigurationSpecialization T>
+struct Reflector<T> : dk::common::details::configuration_reflector<T> {};
+
+} // namespace rfl
