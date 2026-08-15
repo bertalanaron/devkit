@@ -435,6 +435,9 @@ private:
         struct FileState {
             std::filesystem::file_time_type last_modified;
             std::uintmax_t                  file_size;
+            std::optional<std::filesystem::file_time_type> pending_last_modified;
+            std::optional<std::uintmax_t>                  pending_file_size;
+            std::chrono::steady_clock::time_point          pending_since;
         };
 
     public:

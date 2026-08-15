@@ -450,6 +450,12 @@ void Manager::FileSystemHandler::execute_scan(const std::filesystem::path& root,
                                               AbstractFactoryCollection& factories,
                                               const MetaReader& read_meta)
 {
+    // A number of editors save by truncating and rewriting a file. During that
+    // operation the file may have a valid stat result while its contents are
+    // incomplete. Require edits to an already known file to remain unchanged
+    // briefly before attempting to parse them.
+    constexpr auto stability_delay = std::chrono::milliseconds(100);
+
     auto storage_write_session = storages->begin_write();
     for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
         if (!is_asset_metafile(entry))
@@ -472,9 +478,25 @@ void Manager::FileSystemHandler::execute_scan(const std::filesystem::path& root,
         auto state_it = m_file_states.find(entry.path());
         if (state_it != m_file_states.end()
             && state_it->second.last_modified == last_modified
-            && state_it->second.file_size == file_size)
+            && state_it->second.file_size == file_size) {
+            state_it->second.pending_last_modified.reset();
+            state_it->second.pending_file_size.reset();
             continue;
-        const bool has_loaded_asset = state_it != m_file_states.end();
+        }
+
+        if (state_it != m_file_states.end()) {
+            auto& state = state_it->second;
+            const bool same_pending_version = state.pending_last_modified == last_modified
+                                           && state.pending_file_size == file_size;
+            if (!same_pending_version) {
+                state.pending_last_modified = last_modified;
+                state.pending_file_size = file_size;
+                state.pending_since = std::chrono::steady_clock::now();
+                continue;
+            }
+            if (std::chrono::steady_clock::now() - state.pending_since < stability_delay)
+                continue;
+        }
 
         // Get asset name its path relative to root
         const auto relative_path = std::filesystem::relative(entry.path(), root);
@@ -502,8 +524,8 @@ void Manager::FileSystemHandler::execute_scan(const std::filesystem::path& root,
             auto& storage = storage_write_session.get_or_insert(asset_name, std::move(context_base));
             storage.set_meta(factory, std::move(meta), std::make_unique<VirtualAssetManager>(storages, asset_name));
 
-            // A failed or interrupted read must remain eligible for retry.
-            m_file_states.insert_or_assign(entry.path(), FileState{final_last_modified, final_file_size});
+            // Record only a version that parsed successfully and stayed stable.
+            m_file_states.insert_or_assign(entry.path(), FileState{final_last_modified, final_file_size, {}, {}, {}});
         } catch (const std::exception& error) {
             std::error_code final_modification_error;
             const auto final_last_modified = std::filesystem::last_write_time(entry.path(), final_modification_error);
@@ -516,12 +538,9 @@ void Manager::FileSystemHandler::execute_scan(const std::filesystem::path& root,
                 continue;
             }
 
-            if (has_loaded_asset) {
-                spdlog::debug("Could not reload asset metadata {}; keeping the previous asset and retrying on the next scan: {}",
-                              entry.path().string(), error.what());
-                continue;
-            }
-
+            // The file remained unchanged throughout both the debounce period
+            // and the read, so this is a persistent error rather than evidence
+            // of an in-progress save.
             throw;
         }
     }

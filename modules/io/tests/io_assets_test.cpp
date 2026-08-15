@@ -274,6 +274,13 @@ protected:
                    "}\n");
     }
 
+    void finish_stable_edit(io::assets::Manager& assets) const
+    {
+        assets.scan_filesystem();
+        std::this_thread::sleep_for(std::chrono::milliseconds(110));
+        assets.scan_filesystem();
+    }
+
     std::filesystem::path root;
 };
 
@@ -349,7 +356,7 @@ TEST_F(Assets2Test, ReScanningChangedFileSchedulesLazyModification)
         absolute_asset_path,
         std::filesystem::last_write_time(absolute_asset_path) + std::chrono::seconds(2));
 
-    assets.scan_filesystem();
+    finish_stable_edit(assets);
 
     EXPECT_TRUE(storage.has_pending_task());
     EXPECT_EQ(counters->modified, 0);
@@ -360,6 +367,48 @@ TEST_F(Assets2Test, ReScanningChangedFileSchedulesLazyModification)
     EXPECT_EQ(counters->initialized, 1);
     EXPECT_EQ(counters->modified, 1);
     EXPECT_NE(modified_asset.contents.find("asset_data: changed"), std::string::npos);
+}
+
+TEST_F(Assets2Test, DefersParsingWhileAnExistingAssetIsStillBeingSaved)
+{
+    const auto asset_path = std::filesystem::path("items/one.asset.yaml");
+    write_asset(asset_path, "initial");
+
+    io::assets::Manager assets(io::assets::Yaml{}, ".asset.yaml");
+    assets.register_factory("dummy", DummyFactory{std::make_shared<FactoryCounters>()});
+    assets.root(root);
+    assets.scan_filesystem();
+    auto& storage = assets["items/one"];
+    std::ignore = storage.as<DummyAsset>();
+
+    write_text(asset_path, "asset_type:");
+    assets.scan_filesystem();
+    EXPECT_FALSE(storage.has_pending_task());
+
+    write_asset(asset_path, "complete");
+    finish_stable_edit(assets);
+
+    EXPECT_TRUE(storage.has_pending_task());
+    EXPECT_NE(storage.as<DummyAsset>().contents.find("asset_data: complete"), std::string::npos);
+}
+
+TEST_F(Assets2Test, ReportsMalformedMetadataAfterItRemainsStable)
+{
+    const auto asset_path = std::filesystem::path("items/one.asset.yaml");
+    write_asset(asset_path, "initial");
+
+    io::assets::Manager assets(io::assets::Yaml{}, ".asset.yaml");
+    assets.register_factory("dummy", DummyFactory{std::make_shared<FactoryCounters>()});
+    assets.root(root);
+    assets.scan_filesystem();
+    auto& storage = assets["items/one"];
+    std::ignore = storage.as<DummyAsset>();
+
+    write_text(asset_path, "not valid asset metadata");
+    EXPECT_NO_THROW(assets.scan_filesystem());
+    std::this_thread::sleep_for(std::chrono::milliseconds(110));
+    EXPECT_THROW(assets.scan_filesystem(), std::runtime_error);
+    EXPECT_FALSE(storage.has_pending_task());
 }
 
 TEST_F(Assets2Test, InitializesAndModifiesNonCopyableAssets)
@@ -390,7 +439,7 @@ TEST_F(Assets2Test, InitializesAndModifiesNonCopyableAssets)
         absolute_asset_path,
         std::filesystem::last_write_time(absolute_asset_path) + std::chrono::seconds(2));
 
-    assets.scan_filesystem();
+    finish_stable_edit(assets);
 
     EXPECT_TRUE(storage.has_pending_task());
 
@@ -470,7 +519,7 @@ TEST_F(Assets2Test, PODFactoryUpdatesAssetFromModifiedMetadataAssetData)
         absolute_config_path,
         std::filesystem::last_write_time(absolute_config_path) + std::chrono::seconds(2));
 
-    assets.scan_filesystem();
+    finish_stable_edit(assets);
 
     auto& updated_config = assets["config/app"].as<Config>();
     EXPECT_EQ(&updated_config, &config);
@@ -768,7 +817,7 @@ TEST_F(Assets2Test, AssetModificationUpdatesAndRemovesOutdatedVirtualAssets)
         absolute_scene_path,
         std::filesystem::last_write_time(absolute_scene_path) + std::chrono::seconds(2));
 
-    assets.scan_filesystem();
+    finish_stable_edit(assets);
     assets["scenes/planets"].execute_pending_task();
 
     EXPECT_EQ(counters->initialized, 1);
