@@ -51,16 +51,53 @@ class Asset;
 
 namespace detail {
 
+class DependencyTracker {
+public:
+    struct Dependency {
+        std::filesystem::path           path;
+        std::filesystem::file_time_type last_modified;
+        std::uintmax_t                  file_size;
+    };
+
+    void set_dependencies(const std::filesystem::path& asset_meta_path,
+                          std::vector<Dependency> dependencies);
+
+    std::vector<Dependency> dependencies_for(const std::filesystem::path& asset_meta_path) const;
+
+    std::vector<std::pair<std::filesystem::path, std::vector<Dependency>>> all_dependencies() const;
+
+private:
+    std::unordered_map<std::filesystem::path, std::vector<Dependency>> m_dependencies_by_asset_meta;
+    mutable std::mutex                                                 m_mutex;
+};
+
 // Shared path/name data passed to asset factory contexts.
 struct FactoryContextBase {
+    FactoryContextBase() = default;
+
+    FactoryContextBase(std::filesystem::path root,
+                       std::filesystem::path relative_path,
+                       std::string asset_name,
+                       std::shared_ptr<DependencyTracker> dependency_tracker);
+
     std::filesystem::path root;
     std::filesystem::path relative_path;
     std::string           asset_name;
+    std::shared_ptr<DependencyTracker> dependency_tracker;
 
     auto absolute_path() const { return root / relative_path; }
 
     auto absolute_path(const std::filesystem::path& relative) const
     { return std::filesystem::canonical((root / relative_path).parent_path() / relative).lexically_normal(); }
+
+    void begin_dependency_watch();
+
+    void watch_dependency(const std::filesystem::path& relative);
+
+    void publish_watched_dependencies();
+
+private:
+    std::vector<DependencyTracker::Dependency> m_watched_dependencies;
 };
 
 } // namespace detail
@@ -441,7 +478,8 @@ private:
         };
 
     public:
-        FileSystemHandler(const std::string& asset_meta_suffix);
+        FileSystemHandler(const std::string& asset_meta_suffix,
+                          std::shared_ptr<detail::DependencyTracker> dependency_tracker);
 
         // Scans asset metadata files and updates storage state.
         void execute_scan(const std::filesystem::path& root,
@@ -452,6 +490,7 @@ private:
     private:
         std::unordered_map<std::filesystem::path, FileState> m_file_states;
         std::string                                          m_asset_meta_suffix;
+        std::shared_ptr<detail::DependencyTracker>           m_dependency_tracker;
 
         bool is_asset_metafile(const std::filesystem::directory_entry& entry) const;
 
@@ -477,7 +516,8 @@ public:
             return Meta(path, std::decay_t<Format>{});
         })
         , m_storages(std::make_shared<StorageCollection>())
-        , m_file_system_handler(asset_suffix)
+        , m_dependency_tracker(std::make_shared<detail::DependencyTracker>())
+        , m_file_system_handler(asset_suffix, m_dependency_tracker)
     {
         (void)format;
     }
@@ -530,6 +570,7 @@ private:
 
     AbstractFactoryCollection          m_factories;
     std::shared_ptr<StorageCollection> m_storages;
+    std::shared_ptr<detail::DependencyTracker> m_dependency_tracker;
     FileSystemHandler                  m_file_system_handler;
 
     friend class VirtualAssetManager;

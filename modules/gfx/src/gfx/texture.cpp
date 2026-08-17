@@ -573,6 +573,8 @@ dk::gfx::TextureUnit::SlotRef::SlotRef(TextureUnit& unit, int slot)
 
 void dk::gfx::TextureUnit::SlotRef::operator=(Texture & texture)
 {
+    // TODO: If texture is destroyed before the shader which owns the texture unit (which is a likely scenario)
+    // The texture reference will point to invalid memory.
     m_unit.m_textures.at(m_slot) = texture;
 }
 

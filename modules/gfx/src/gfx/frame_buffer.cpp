@@ -12,7 +12,7 @@ const dk::gfx::RenderTarget& dk::gfx::FrameBuffer::Attachment::get() const {
 	return std::visit(common::overload{
 		[](const std::reference_wrapper<RenderTarget>& data) -> const RenderTarget& { return data.get(); },
 		[](const std::unique_ptr<RenderTarget>& data) -> const RenderTarget& { return *data.get(); },
-		[](const std::monostate) -> const RenderTarget& { return *((const RenderTarget*)nullptr); }
+		[](const std::monostate) -> const RenderTarget& { throw std::logic_error("frame buffer attachment is empty"); }
 	}, m_data);
 }
 
@@ -20,7 +20,7 @@ dk::gfx::RenderTarget& dk::gfx::FrameBuffer::Attachment::get() {
 	return std::visit(common::overload{
 		[](std::reference_wrapper<RenderTarget>& data) -> RenderTarget& { return data.get(); },
 		[](std::unique_ptr<RenderTarget>& data) -> RenderTarget& { return *data.get(); },
-		[](std::monostate) -> RenderTarget& { return *((RenderTarget*)nullptr); }
+		[](std::monostate) -> RenderTarget& { throw std::logic_error("frame buffer attachment is empty"); }
 	}, m_data);
 }
 
@@ -68,21 +68,16 @@ unsigned toUnderlying(dk::gfx::Mask mask)
 
 void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Mask mask, int inputColorIndex, int outputColorIndex, Texture::MagFilter filter)
 {
-	makeActive();
-
-	const auto filter_api = toUnderlying(filter);
-	const auto mask_api = toUnderlying(mask);
-
-	// Input
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
-	glReadBuffer(GL_COLOR_ATTACHMENT0 + inputColorIndex);
-	
-	// Output
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
-	glDrawBuffer(GL_COLOR_ATTACHMENT0 + outputColorIndex);
-
-	glBlitFramebuffer(0, 0, input.color[inputColorIndex].get().targetSize().x, input.color[inputColorIndex].get().targetSize().y, 
-		0, 0, color[outputColorIndex].get().targetSize().x, color[outputColorIndex].get().targetSize().y, mask_api, filter_api);
+	const auto inputViewport = input.viewport();
+	const auto outputViewport = viewport();
+	blit(
+		input,
+		Rect{ inputViewport.offset(), inputViewport.size() },
+		Rect{ outputViewport.offset(), outputViewport.size() },
+		mask,
+		inputColorIndex,
+		outputColorIndex,
+		filter);
 }
 
 void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Rect srcRect, Rect dstRect, Mask mask, int inputColorIndex, int outputColorIndex, Texture::MagFilter filter)
@@ -91,17 +86,35 @@ void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Rect srcRect, Rect dstRect, 
 
 	const auto filter_api = toUnderlying(filter);
 	const auto mask_api = toUnderlying(mask);
+	const bool copiesColor = (static_cast<unsigned>(mask) & static_cast<unsigned>(Mask::Color)) != 0;
+	const auto validateColorAttachment = [](const FrameBuffer& framebuffer, int index, const char* role) {
+		if (framebuffer.color.empty())
+			return;
+		if (index < 0 || static_cast<std::size_t>(index) >= framebuffer.color.size() ||
+			!framebuffer.color[index].has_value())
+			throw std::out_of_range(std::string(role) + " frame buffer has no color attachment " + std::to_string(index));
+	};
+	if (copiesColor) {
+		validateColorAttachment(input, inputColorIndex, "input");
+		validateColorAttachment(*this, outputColorIndex, "output");
+	}
 
 	// Input
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
-	glReadBuffer(GL_COLOR_ATTACHMENT0 + inputColorIndex);
+	if (copiesColor)
+		glReadBuffer(input.color.empty() ? GL_BACK : GL_COLOR_ATTACHMENT0 + inputColorIndex);
 
 	// Output
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
-	glDrawBuffer(GL_COLOR_ATTACHMENT0 + outputColorIndex);
+	if (copiesColor)
+		glDrawBuffer(color.empty() ? GL_BACK : GL_COLOR_ATTACHMENT0 + outputColorIndex);
 
-	glBlitFramebuffer(srcRect.offset.x, srcRect.offset.y, srcRect.size.x, srcRect.size.y, 
-		dstRect.offset.x, dstRect.offset.y, dstRect.size.x, dstRect.size.y, mask_api, filter_api);
+	glBlitFramebuffer(
+		srcRect.offset.x, srcRect.offset.y,
+		srcRect.offset.x + srcRect.size.x, srcRect.offset.y + srcRect.size.y,
+		dstRect.offset.x, dstRect.offset.y,
+		dstRect.offset.x + dstRect.size.x, dstRect.offset.y + dstRect.size.y,
+		mask_api, filter_api);
 }
 
 void dk::gfx::FrameBuffer::render(Shader& shader)
@@ -254,9 +267,24 @@ void dk::gfx::FrameBuffer::setViewport(const gfx::Viewport& viewport)
 	m_viewport = viewport;
 }
 
+dk::gfx::Viewport dk::gfx::FrameBuffer::viewport() const
+{
+	if (m_viewport.has_value())
+		return *m_viewport;
+	for (const auto& attachment : color) {
+		if (attachment.has_value())
+			return Viewport(geom::xy(attachment.size()));
+	}
+	if (depth.has_value())
+		return Viewport(geom::xy(depth.size()));
+	if (stencil.has_value())
+		return Viewport(geom::xy(stencil.size()));
+	throw std::logic_error("frame buffer requires a viewport or at least one attachment");
+}
+
 float dk::gfx::FrameBuffer::aspectRatio() const
 {
-	return [&]{ return m_viewport.has_value() ? m_viewport.value() : Viewport(color[0].size()); }().aspectRatio();
+	return viewport().aspectRatio();
 }
 
 void dk::gfx::FrameBuffer::resize(const glm::ivec2& size)
@@ -277,8 +305,7 @@ void dk::gfx::FrameBuffer::makeActive()
 {
 	m_apiHandle.bind();
 
-	const Viewport viewport = [&]{ return m_viewport.has_value() ? m_viewport.value() : Viewport(color[0].size()); }();
-	viewport.makeActive();
+	viewport().makeActive();
 
 	// Bind properties to global gl context
 	config.for_each([&](const auto& prop) {
@@ -303,13 +330,16 @@ void dk::gfx::FrameBuffer::makeActive()
 
 		activeColorAttachmentIndices.push_back(GL_COLOR_ATTACHMENT0 + i);
 	}
-	if (color.size() > 0)
+	if (!color.empty()) {
 		glDrawBuffers(activeColorAttachmentIndices.size(), activeColorAttachmentIndices.data());
-	glReadBuffer(GL_COLOR_ATTACHMENT0);
+		glReadBuffer(activeColorAttachmentIndices.empty() ? GL_NONE : activeColorAttachmentIndices.front());
+	}
 
 	// Set depth attachment	
 	if (depth.has_value())
 		depth.get().setAsTarget(api::Attachment::Depth);
+	if (stencil.has_value())
+		stencil.get().setAsTarget(api::Attachment::Stencil);
 
 	// Check framebuffer status and log warnings if necessary
 	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);

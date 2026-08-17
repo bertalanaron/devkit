@@ -47,11 +47,12 @@ public:
     }
 
 private:
-    static void handle_sources(Shader& shader, const auto& variant_sources, const auto& ctx)
+    static void handle_sources(Shader& shader, const auto& variant_sources, auto& ctx)
     {
         auto to_string = dk::common::overload{
             [&](const std::string& shader_source_str) { return shader_source_str; },
             [&](const std::filesystem::path& shader_source_path) {
+                ctx.watch_dependency(shader_source_path);
                 const auto absolute_path = ctx.absolute_path(shader_source_path);
                 std::ifstream file(absolute_path, std::ios::in);
                 if (!file.is_open())

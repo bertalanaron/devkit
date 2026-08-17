@@ -104,6 +104,9 @@ public:
 	// @brief Bind shader to a uniform and to the texture unit
 	void uniformTexture(const std::string& uniform, Texture& texture);
 
+	// @brief Remove bound textures from texture unit of shader
+	void clearTextureUnit();
+
 	// @brief Set vertex layout including per instance data
 	void layout(std::convertible_to<LayoutElement> auto&&... elements)
 	{ m_layout = { std::move((LayoutElement)elements)... }; }

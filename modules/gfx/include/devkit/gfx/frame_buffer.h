@@ -103,10 +103,10 @@ public:
 	Attachment              stencil;
 
 	// @brief Set size and offset of viewport. 
-	// When not set, viewport size is the size of the first attachment. 
+	// When not set, viewport size is the size of the first available attachment.
 	void setViewport(const gfx::Viewport& viewport);
 
-	Viewport viewport() const { return m_viewport.value_or(geom::xy(color[0].size())); }
+	Viewport viewport() const;
 
 	float aspectRatio() const;
 

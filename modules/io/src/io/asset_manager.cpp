@@ -22,6 +22,77 @@ rfl::Result<Meta::AssetMeta> Meta::read_metadata<Yaml>(std::istream& istream)
 
 const std::string& Meta::asset_type() const { return m_meta.asset_type; }
 
+void detail::DependencyTracker::set_dependencies(
+    const std::filesystem::path& asset_meta_path,
+    std::vector<Dependency> dependencies)
+{
+    std::ranges::sort(dependencies, {}, &Dependency::path);
+    const auto duplicate_dependencies = std::ranges::unique(dependencies, {}, &Dependency::path);
+    dependencies.erase(duplicate_dependencies.begin(), duplicate_dependencies.end());
+
+    std::scoped_lock lock(m_mutex);
+    m_dependencies_by_asset_meta.insert_or_assign(asset_meta_path, std::move(dependencies));
+}
+
+std::vector<detail::DependencyTracker::Dependency> detail::DependencyTracker::dependencies_for(
+    const std::filesystem::path& asset_meta_path) const
+{
+    std::scoped_lock lock(m_mutex);
+    const auto it = m_dependencies_by_asset_meta.find(asset_meta_path);
+    if (it == m_dependencies_by_asset_meta.end())
+        return {};
+    return it->second;
+}
+
+std::vector<std::pair<std::filesystem::path, std::vector<detail::DependencyTracker::Dependency>>>
+detail::DependencyTracker::all_dependencies() const
+{
+    std::scoped_lock lock(m_mutex);
+    return {m_dependencies_by_asset_meta.begin(), m_dependencies_by_asset_meta.end()};
+}
+
+detail::FactoryContextBase::FactoryContextBase(
+    std::filesystem::path root,
+    std::filesystem::path relative_path,
+    std::string asset_name,
+    std::shared_ptr<DependencyTracker> dependency_tracker)
+    : root(std::move(root))
+    , relative_path(std::move(relative_path))
+    , asset_name(std::move(asset_name))
+    , dependency_tracker(std::move(dependency_tracker))
+{ }
+
+void detail::FactoryContextBase::begin_dependency_watch()
+{
+    m_watched_dependencies.clear();
+}
+
+void detail::FactoryContextBase::watch_dependency(const std::filesystem::path& relative)
+{
+    const auto path = absolute_path(relative);
+
+    std::error_code modification_error;
+    const auto last_modified = std::filesystem::last_write_time(path, modification_error);
+    if (modification_error)
+        throw std::runtime_error("Could not stat asset dependency " + path.generic_string() + ": " + modification_error.message());
+
+    std::error_code size_error;
+    const auto file_size = std::filesystem::file_size(path, size_error);
+    if (size_error)
+        throw std::runtime_error("Could not read the size of asset dependency " + path.generic_string() + ": " + size_error.message());
+
+    m_watched_dependencies.push_back({path, last_modified, file_size});
+}
+
+void detail::FactoryContextBase::publish_watched_dependencies()
+{
+    if (!dependency_tracker)
+        return;
+
+    dependency_tracker->set_dependencies(absolute_path(), std::move(m_watched_dependencies));
+    m_watched_dependencies.clear();
+}
+
 InitializationContext::InitializationContext(detail::FactoryContextBase&& base, Meta&& meta, VirtualAssetManagerPtr&& virtual_asset_manager)
     : detail::FactoryContextBase(std::move(base))
     , meta(std::move(meta))
@@ -87,7 +158,11 @@ Manager::Storage::PendingModificationState::PendingModificationState(common::mov
 
 Manager::Storage::ReadyState Manager::Storage::PendingModificationState::execute()
 {
+    auto modification_fut = m_task.get_future();
+    m_ctx.begin_dependency_watch();
     m_task(m_asset, m_ctx);
+    modification_fut.get();
+    m_ctx.publish_watched_dependencies();
     return ReadyState(std::move(m_asset),
                       std::move(m_ctx.meta),
                       std::move(static_cast<detail::FactoryContextBase&>(m_ctx)));
@@ -113,8 +188,11 @@ Manager::Storage::PendingInitializationState::PendingInitializationState(Initial
 Manager::Storage::ReadyState Manager::Storage::PendingInitializationState::execute()
 {
     auto asset_fut = m_task.get_future();
+    m_ctx.begin_dependency_watch();
     m_task(m_ctx);
-    return ReadyState(asset_fut.get(),
+    auto asset = asset_fut.get();
+    m_ctx.publish_watched_dependencies();
+    return ReadyState(std::move(asset),
                       std::move(m_ctx.meta),
                       std::move(static_cast<detail::FactoryContextBase&>(m_ctx)));
 }
@@ -441,8 +519,11 @@ Manager::AbstractFactory& Manager::AbstractFactoryCollection::get(const std::str
     return m_factories.at(type_it->second);
 }
 
-Manager::FileSystemHandler::FileSystemHandler(const std::string& asset_meta_suffix)
+Manager::FileSystemHandler::FileSystemHandler(
+    const std::string& asset_meta_suffix,
+    std::shared_ptr<detail::DependencyTracker> dependency_tracker)
     : m_asset_meta_suffix(asset_meta_suffix)
+    , m_dependency_tracker(std::move(dependency_tracker))
 { }
 
 void Manager::FileSystemHandler::execute_scan(const std::filesystem::path& root,
@@ -457,6 +538,68 @@ void Manager::FileSystemHandler::execute_scan(const std::filesystem::path& root,
     constexpr auto stability_delay = std::chrono::milliseconds(100);
 
     auto storage_write_session = storages->begin_write();
+    std::unordered_set<std::filesystem::path> reloaded_meta_files;
+
+    auto observe_known_file_change = [&](const detail::DependencyTracker::Dependency& dependency) -> std::optional<FileState> {
+        const auto& path = dependency.path;
+
+        std::error_code modification_error;
+        const auto last_modified = std::filesystem::last_write_time(path, modification_error);
+        if (modification_error) {
+            spdlog::debug("Could not stat watched dependency {} while it is being updated: {}", path.string(), modification_error.message());
+            return std::nullopt;
+        }
+
+        std::error_code size_error;
+        const auto file_size = std::filesystem::file_size(path, size_error);
+        if (size_error) {
+            spdlog::debug("Could not read the size of watched dependency {} while it is being updated: {}", path.string(), size_error.message());
+            return std::nullopt;
+        }
+
+        auto state_it = m_file_states.find(path);
+        if (state_it == m_file_states.end()) {
+            if (dependency.last_modified == last_modified && dependency.file_size == file_size) {
+                m_file_states.insert_or_assign(path, FileState{last_modified, file_size, {}, {}, {}});
+                return std::nullopt;
+            }
+
+            auto [inserted_it, inserted] = m_file_states.emplace(
+                path,
+                FileState{
+                    dependency.last_modified,
+                    dependency.file_size,
+                    last_modified,
+                    file_size,
+                    std::chrono::steady_clock::now(),
+                });
+            (void)inserted_it;
+            (void)inserted;
+            return std::nullopt;
+        }
+
+        auto& state = state_it->second;
+        if (state.last_modified == last_modified && state.file_size == file_size) {
+            state.pending_last_modified.reset();
+            state.pending_file_size.reset();
+            return std::nullopt;
+        }
+
+        const bool same_pending_version = state.pending_last_modified == last_modified
+                                       && state.pending_file_size == file_size;
+        if (!same_pending_version) {
+            state.pending_last_modified = last_modified;
+            state.pending_file_size = file_size;
+            state.pending_since = std::chrono::steady_clock::now();
+            return std::nullopt;
+        }
+
+        if (std::chrono::steady_clock::now() - state.pending_since < stability_delay)
+            return std::nullopt;
+
+        return FileState{last_modified, file_size, {}, {}, {}};
+    };
+
     for (const auto& entry : std::filesystem::recursive_directory_iterator(root)) {
         if (!is_asset_metafile(entry))
             continue;
@@ -520,12 +663,13 @@ void Manager::FileSystemHandler::execute_scan(const std::filesystem::path& root,
             auto& factory = factories.get(meta.asset_type());
 
             // Get or create storage only after a complete, stable metadata read.
-            detail::FactoryContextBase context_base(root, relative_path, asset_name);
+            detail::FactoryContextBase context_base(root, relative_path, asset_name, m_dependency_tracker);
             auto& storage = storage_write_session.get_or_insert(asset_name, std::move(context_base));
             storage.set_meta(factory, std::move(meta), std::make_unique<VirtualAssetManager>(storages, asset_name));
 
             // Record only a version that parsed successfully and stayed stable.
             m_file_states.insert_or_assign(entry.path(), FileState{final_last_modified, final_file_size, {}, {}, {}});
+            reloaded_meta_files.insert(entry.path());
         } catch (const std::exception& error) {
             std::error_code final_modification_error;
             const auto final_last_modified = std::filesystem::last_write_time(entry.path(), final_modification_error);
@@ -543,6 +687,34 @@ void Manager::FileSystemHandler::execute_scan(const std::filesystem::path& root,
             // of an in-progress save.
             throw;
         }
+    }
+
+    for (const auto& [asset_meta_path, dependencies] : m_dependency_tracker->all_dependencies()) {
+        if (reloaded_meta_files.contains(asset_meta_path))
+            continue;
+
+        std::optional<std::pair<std::filesystem::path, FileState>> changed_dependency;
+        for (const auto& dependency : dependencies) {
+            if (const auto changed_state = observe_known_file_change(dependency)) {
+                changed_dependency.emplace(dependency.path, *changed_state);
+                break;
+            }
+        }
+
+        if (!changed_dependency)
+            continue;
+
+        const auto relative_path = std::filesystem::relative(asset_meta_path, root);
+        const auto asset_name    = generate_asset_name(relative_path);
+
+        Meta meta = read_meta(asset_meta_path);
+        auto& factory = factories.get(meta.asset_type());
+
+        detail::FactoryContextBase context_base(root, relative_path, asset_name, m_dependency_tracker);
+        auto& storage = storage_write_session.get_or_insert(asset_name, std::move(context_base));
+        storage.set_meta(factory, std::move(meta), std::make_unique<VirtualAssetManager>(storages, asset_name));
+
+        m_file_states.insert_or_assign(changed_dependency->first, changed_dependency->second);
     }
 }
 

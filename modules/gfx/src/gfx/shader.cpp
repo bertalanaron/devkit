@@ -200,6 +200,11 @@ void dk::gfx::Shader::uniformTexture(const std::string& uniform, Texture& textur
     uniforms().set(uniform, opt_slot.value());
 }
 
+void dk::gfx::Shader::clearTextureUnit()
+{
+    m_textures.clear();
+}
+
 void dk::gfx::Shader::compile()
 {
     auto program = m_apiHandle.handle();

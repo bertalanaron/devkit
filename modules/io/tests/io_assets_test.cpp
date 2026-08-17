@@ -74,6 +74,30 @@ struct OtherFactory {
     }
 };
 
+struct ExternalDependencyAsset {
+    std::string contents;
+};
+
+struct ExternalDependencyFactory {
+    std::shared_ptr<FactoryCounters> counters;
+
+    ExternalDependencyAsset initialize(io::assets::InitializationContext& ctx)
+    {
+        ++counters->initialized;
+        const auto dependency = std::filesystem::path(ctx.meta.parse<std::string>());
+        ctx.watch_dependency(dependency);
+        return ExternalDependencyAsset{.contents = read_file(ctx.absolute_path(dependency))};
+    }
+
+    void modify(ExternalDependencyAsset& asset, io::assets::ModificationContext& ctx)
+    {
+        ++counters->modified;
+        const auto dependency = std::filesystem::path(ctx.meta.parse<std::string>());
+        ctx.watch_dependency(dependency);
+        asset.contents = read_file(ctx.absolute_path(dependency));
+    }
+};
+
 struct NonCopyableAsset {
     NonCopyableAsset(std::string asset_name, std::string contents)
         : asset_name(std::move(asset_name))
@@ -367,6 +391,42 @@ TEST_F(Assets2Test, ReScanningChangedFileSchedulesLazyModification)
     EXPECT_EQ(counters->initialized, 1);
     EXPECT_EQ(counters->modified, 1);
     EXPECT_NE(modified_asset.contents.find("asset_data: changed"), std::string::npos);
+}
+
+TEST_F(Assets2Test, ReScanningChangedWatchedDependencySchedulesLazyModification)
+{
+    const auto asset_path = std::filesystem::path("items/one.asset.yaml");
+    const auto dependency_path = std::filesystem::path("items/source.glsl");
+    write_asset_of_type(asset_path, "external_dependency", "source.glsl");
+    write_text(dependency_path, "initial shader source");
+
+    const auto counters = std::make_shared<FactoryCounters>();
+    io::assets::Manager assets(io::assets::Yaml{}, ".asset.yaml");
+    assets.register_factory("external_dependency", ExternalDependencyFactory{counters});
+    assets.root(root);
+
+    assets.scan_filesystem();
+    auto& storage = assets["items/one"];
+    auto& asset = storage.as<ExternalDependencyAsset>();
+    EXPECT_EQ(asset.contents, "initial shader source");
+
+    write_text(dependency_path, "changed shader source");
+    const auto absolute_dependency_path = root / dependency_path;
+    std::filesystem::last_write_time(
+        absolute_dependency_path,
+        std::filesystem::last_write_time(absolute_dependency_path) + std::chrono::seconds(2));
+
+    finish_stable_edit(assets);
+
+    EXPECT_TRUE(storage.has_pending_task());
+    EXPECT_EQ(counters->modified, 0);
+
+    auto& modified_asset = storage.as<ExternalDependencyAsset>();
+    EXPECT_EQ(&modified_asset, &asset);
+    EXPECT_FALSE(storage.has_pending_task());
+    EXPECT_EQ(counters->initialized, 1);
+    EXPECT_EQ(counters->modified, 1);
+    EXPECT_EQ(modified_asset.contents, "changed shader source");
 }
 
 TEST_F(Assets2Test, DefersParsingWhileAnExistingAssetIsStillBeingSaved)
