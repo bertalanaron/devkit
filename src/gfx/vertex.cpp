@@ -1,6 +1,6 @@
 #include <devkit/gfx/vertex.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 const dk::gfx::VertexAttributes* dk::gfx::VertexAttributes::get(std::vector<details::gfx::GLType>&& types)
 {

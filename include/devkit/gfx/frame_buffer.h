@@ -57,6 +57,10 @@ private:
 
 		glm::ivec3 size() const;
 
+		Channels channels() const { return get().channels(); }
+
+		Format format() const { return get().format(); }
+
 	private:
 		using data_t = std::variant<std::monostate, 
 			std::reference_wrapper<RenderTarget>, 
@@ -102,6 +106,8 @@ public:
 	// When not set, viewport size is the size of the first attachment. 
 	void setViewport(const gfx::Viewport& viewport);
 
+	Viewport viewport() const { return m_viewport.value_or(geom::xy(color[0].size())); }
+
 	float aspectRatio() const;
 
 	// @brief Resizes currently bound render targets
@@ -134,6 +140,9 @@ public:
 
 	// @brief Render texture as a fullscreen quad
 	void render(Texture2D& texture);
+
+	// @brief Render multisampled texture as a fullscreen quad
+	void render(MultisampledTexture2D& texture);
 
 private:
 	api::FrameBuffer        m_apiHandle;

@@ -91,10 +91,11 @@ public:
 	PostProcessLayer(PostProcessLayer&&)            = default;
 	PostProcessLayer& operator=(PostProcessLayer&&) = default;
 
-	PostProcessLayer(const std::string& textureUniform, const std::weak_ptr<dk::gfx::ShaderSource>& fragmentSource)
+	PostProcessLayer(const std::string& textureUniform, dk::gfx::ShaderSource& fragmentSource)
 		: m_textureUniform(textureUniform)
 	{ 
-		m_shader = std::make_unique<dk::gfx::Shader>(dk::gfx::ShaderSource::postProcessVertexSource(), fragmentSource);
+		m_shader.source(dk::gfx::ShaderSource::postProcessVertexSource());
+		m_shader.source(fragmentSource, dk::gfx::ShaderSource::Fragment);
 		m_frameBuffer.color[0] = dk::gfx::Texture2D(glm::ivec2(100, 100), dk::gfx::Channels::RGB);
 	}
 
@@ -102,20 +103,20 @@ public:
 	{
 		auto& outTex = m_frameBuffer.color[0].get<dk::gfx::Texture2D>();
 		outTex.resize(input.size());
-		m_shader->uniformTexture(m_textureUniform, input);
-		m_frameBuffer.render(*m_shader);
+		m_shader.uniformTexture(m_textureUniform, input);
+		m_frameBuffer.render(m_shader);
 		return outTex;
 	}
 
-	dk::gfx::Shader& shader() { return *m_shader; }
+	dk::gfx::Shader& shader() { return m_shader; }
 
 	dk::gfx::Texture2D& get()
 	{ return m_frameBuffer.color[0].get<dk::gfx::Texture2D>(); }
 
 private:
-	std::string                      m_textureUniform;
-	std::unique_ptr<dk::gfx::Shader> m_shader;
-	dk::gfx::FrameBuffer             m_frameBuffer;
+	std::string          m_textureUniform;
+	dk::gfx::Shader      m_shader;
+	dk::gfx::FrameBuffer m_frameBuffer;
 };
 
 class ResolverLayer {
@@ -169,9 +170,9 @@ public:
 	void setup()
 	{
 		// Setup shaders
-		m_shaders.insert("planet"  , m_assets->getMultipleWeak<ShaderSource>("/shaders/mesh_vs.glsl"          , "/shaders/textured_fs.glsl"));
-		m_shaders.insert("asteroid", m_assets->getMultipleWeak<ShaderSource>("/shaders/instanced_mesh_vs.glsl", "/shaders/asteroid_fs.glsl"));
-		m_shaders.insert("skybox"  , m_assets->getMultipleWeak<ShaderSource>("/shaders/skybox_vs.glsl"        , "/shaders/skybox_fs.glsl"));
+		m_shaders.insert("planet"  , m_assets->getMultiple<ShaderSource>("/shaders/mesh_vs.glsl"          , "/shaders/textured_fs.glsl"));
+		m_shaders.insert("asteroid", m_assets->getMultiple<ShaderSource>("/shaders/instanced_mesh_vs.glsl", "/shaders/asteroid_fs.glsl"));
+		m_shaders.insert("skybox"  , m_assets->getMultiple<ShaderSource>("/shaders/skybox_vs.glsl"        , "/shaders/skybox_fs.glsl"));
 
 		auto& scene = m_assets->get<Scene>("/models/planet_scene.fbx");
 
@@ -347,7 +348,7 @@ public:
 
 		// Setup layers
 		m_resolveLayer     = ResolverLayer(Channels::RGB);
-		m_postProcessLayer = PostProcessLayer("u_texture", m_assets.getWeak<dk::gfx::ShaderSource>("/shaders/chromatic_aberration_fs.glsl"));
+		m_postProcessLayer = PostProcessLayer("u_texture", m_assets.get<dk::gfx::ShaderSource>("/shaders/chromatic_aberration_fs.glsl"));
 
 		// Create camera asset if doesn't exist
 		if (!m_assets.contains("camera.json"))
@@ -370,7 +371,7 @@ public:
 
 			static float t = 0;
 			t += frame.dt<std::chrono::seconds>();
-			m_postProcessLayer.shader().uniforms().set("u_t", t);
+			m_postProcessLayer.shader().uniforms().set("u_t", 0);
 
 			// Resize scene framebuffer and set viewport
 			m_sceneBuffer.resize(frame.viewport().size());

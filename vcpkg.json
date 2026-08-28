@@ -1,10 +1,10 @@
 {
   "name": "devkit",
   "version": "0.1.0",
-  "builtin-baseline": "9e8416f15d93fa9347e3291bd8c128dd44200ba5",
+  "builtin-baseline": "08f20962d32bb1cff9a0428c9c3667dd46960c09",
   "dependencies": [
     "sdl3",
-    "glew",
+    "glad",
 	{
       "name": "imgui",
       "features": [ "opengl3-binding", "sdl3-binding", "docking-experimental" ]

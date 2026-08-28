@@ -3,17 +3,21 @@
 
 namespace dk::gfx::api {
 
-template <typename D>
+template <typename D, typename... Args>
 class Resource {
 public:
-	const unsigned& handle()
+	const unsigned& handle(Args... args)
 	{
 		if (!initialized())
-			m_handle = static_cast<D*>(this)->initialize();
+			m_handle = static_cast<D*>(this)->initialize(std::forward<decltype(args)>(args)...);
 		return m_handle;
 	}
 
 	bool initialized() const { return m_handle != 0; }
+
+protected:
+	// @brief Doesn't delete resource, just resets handle to 0
+	void resetHandle() { m_handle = 0; }
 
 private:
 	unsigned m_handle = 0;
@@ -96,6 +100,37 @@ private:
 	unsigned initialize();
 
 	friend class Resource<FrameBuffer>;
+};
+
+enum class ShaderType { Unset = -1, Fragment = 0, Vertex, Geometry, TessellationControl, TessellationEvaluation };
+unsigned toUnderlying(ShaderType);
+
+void writeShaderCompilationErrorInfo(unsigned program);
+
+class Shader 
+	: public Resource<Shader, ShaderType>
+{
+public:
+	void compile(ShaderType type, const std::string& code);
+
+private:
+	ShaderType m_type = ShaderType::Unset;
+
+	unsigned initialize(ShaderType type);
+
+	friend class Resource<Shader, ShaderType>;
+};
+
+class Program 
+	: public Resource<Program>
+{
+public:
+	void bind();
+
+private:
+	unsigned initialize();
+
+	friend class Resource<Program>;
 };
 
 } // namespace dk::gfx::api

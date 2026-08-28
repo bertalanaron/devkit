@@ -252,7 +252,7 @@ std::vector<std::pair<glm::mat4, int>> marchingSquaresConstructInstances(
 			const auto& rotationId = lookup[index][i * 2 + 1];
 
 			result.emplace_back(
-				glm::translate(glm::vec3(x, 0, y)) * glm::rotate(std::numbers::pi * (double)rotationId, geom::axis::Y), 
+				glm::translate(glm::dvec3(x, 0, y)) * glm::rotate(std::numbers::pi * (double)rotationId, geom::axis::Y),
 				instanceId);
 		}
 	}

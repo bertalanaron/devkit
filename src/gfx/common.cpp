@@ -1,6 +1,6 @@
 #include <devkit/gfx/common.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 unsigned int details::gfx::toUnderlying(dk::gfx::Primitive primitive)
 {
@@ -9,9 +9,9 @@ unsigned int details::gfx::toUnderlying(dk::gfx::Primitive primitive)
     case dk::gfx::Primitive::Points:    return GL_POINTS;
     case dk::gfx::Primitive::Lines:     return GL_LINES;
     case dk::gfx::Primitive::Triangles: return GL_TRIANGLES;
-    default:
-        return 0;
+    case dk::gfx::Primitive::Patches: return GL_PATCHES;
     }
+    throw std::invalid_argument("Unknown primitive type");
 }
 
 template <>

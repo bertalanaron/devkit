@@ -154,7 +154,7 @@ struct string_literal {
 	constexpr string_literal() { };
 	char value[N]{};
 
-	operator std::string_view() const { return value; }
+	constexpr operator std::string_view() const { return value; }
 };
 
 template <unsigned N>
@@ -349,6 +349,21 @@ std::array<T, N> fill_array(Fn&& generator)
 		result[i] = generator(i);
 	}
 	return result;
+}
+
+inline std::string camel_to_snake(const std::string_view camelStr) {
+	std::string snakeStr;
+	for (char c : camelStr) {
+		if (std::isupper(c)) {
+			if (!snakeStr.empty()) { // Avoid leading underscore
+				snakeStr += '_';
+			}
+			snakeStr += std::tolower(c);
+		} else {
+			snakeStr += c;
+		}
+	}
+	return snakeStr;
 }
 
 std::filesystem::path executable_path();
@@ -594,7 +609,7 @@ GLM_FMT(dvec4, "({}, {}, {})", v.x, v.y, v.z, v.w)
 // Places a comma if check is 1 and nothing if check is 0
 #define DK_OPT_COMMA(check) __DK_CONCAT2_DEFERRED(__DK_OPT_COMMA_, check)
 
-#define __DK_TABLE_AT_0( X, ...) X 
+#define __DK_TABLE_AT_0( X, ...) X
 #define __DK_TABLE_AT_1( _0, X, ...) X 
 #define __DK_TABLE_AT_2( _0, _1, X, ...) X 
 #define __DK_TABLE_AT_3( _0, _1, _2, X, ...) X 
@@ -615,9 +630,9 @@ GLM_FMT(dvec4, "({}, {}, {})", v.x, v.y, v.z, v.w)
 #define __DK_TABLE_AT_18(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, X, ...) X 
 #define __DK_TABLE_AT_19(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, X, ...) X 
 #define __DK_TABLE_AT_20(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, X, ...) X 
-#define __DK_TABLE_AT_INDIRECT(IDX, ...) __DK_TABLE_AT_##IDX##(__VA_ARGS__)
+#define __DK_TABLE_AT_INDIRECT(IDX, ...) __DK_TABLE_AT_##IDX(__VA_ARGS__)
 #define DK_TABLE_AT(IDX, TABLE) __DK_TABLE_AT_INDIRECT(IDX, TABLE(__DK_WRAP))
-#define DK_EXPAND_TABLE_AT(IDX, TABLE) __DK_CONCAT2_DEFERRED(__DK_EXPAND_ALL, DK_TABLE_AT(IDX, TABLE))
+#define DK_EXPAND_TABLE_AT(IDX, TABLE) __DK_EXPAND(__DK_EXPAND_ALL DK_TABLE_AT(IDX, TABLE))
 
 #define __DK_MEMBERS_XY(F  , ...) F(__VA_ARGS__ __VA_OPT__(,) x , 1) F(__VA_ARGS__ __VA_OPT__(,) y , 0)
 #define __DK_MEMBERS_XYZ(F , ...) F(__VA_ARGS__ __VA_OPT__(,) x , 1) F(__VA_ARGS__ __VA_OPT__(,) y , 1) F(__VA_ARGS__ __VA_OPT__(,) z , 0)

@@ -1,7 +1,7 @@
 #include <devkit/gfx/frame_buffer.h>
 #include "context.h"
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 
 void logFramebufferWarning(GLenum status);
 
@@ -70,8 +70,13 @@ void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Mask mask, int inputColorInd
 	const auto filter_api = toUnderlying(filter);
 	const auto mask_api = toUnderlying(mask);
 
+	// Input
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + inputColorIndex);
+	
+	// Output
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
+	glDrawBuffer(GL_COLOR_ATTACHMENT0 + outputColorIndex);
 
 	glBlitFramebuffer(0, 0, input.color[inputColorIndex].get().targetSize().x, input.color[inputColorIndex].get().targetSize().y, 
 		0, 0, color[outputColorIndex].get().targetSize().x, color[outputColorIndex].get().targetSize().y, mask_api, filter_api);
@@ -84,8 +89,13 @@ void dk::gfx::FrameBuffer::blit(FrameBuffer& input, Rect srcRect, Rect dstRect, 
 	const auto filter_api = toUnderlying(filter);
 	const auto mask_api = toUnderlying(mask);
 
+	// Input
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, input.m_apiHandle.handle());
+	glReadBuffer(GL_COLOR_ATTACHMENT0 + inputColorIndex);
+
+	// Output
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_apiHandle.handle());
+	glDrawBuffer(GL_COLOR_ATTACHMENT0 + outputColorIndex);
 
 	glBlitFramebuffer(srcRect.offset.x, srcRect.offset.y, srcRect.size.x, srcRect.size.y, 
 		dstRect.offset.x, dstRect.offset.y, dstRect.size.x, dstRect.size.y, mask_api, filter_api);
@@ -118,7 +128,43 @@ void dk::gfx::FrameBuffer::render(Shader& shader)
 
 void dk::gfx::FrameBuffer::render(Texture2D& texture)
 {
-	static Shader s_shader(ShaderSource::postProcessVertexSource(), ShaderSource::passthoughTextureFragmentSource());
+	static Shader s_shader = []{
+		Shader s;
+		s.source(ShaderSource::postProcessVertexSource());
+		s.source(ShaderSource::passthoughTextureFragmentSource());
+		return s;
+	}();
+	s_shader.uniformTexture("u_texture", texture);
+	render(s_shader);
+}
+
+void dk::gfx::FrameBuffer::render(MultisampledTexture2D& texture)
+{
+	using namespace shader_literals;
+	static Shader s_shader = []{
+		Shader s;
+		s.source(ShaderSource::postProcessVertexSource());
+		s.source(R"(
+			#version 330 core
+
+			in vec2 UV;
+			out vec4 FragColor;
+
+			uniform sampler2DMS u_texture;
+			uniform int         u_sampleCount;
+
+			void main()
+			{
+			ivec2 texelCoord = ivec2(UV * textureSize(u_texture));
+			vec4 color = vec4(0.0);
+			for (int i = 0; i < u_sampleCount; ++i)
+				color += texelFetch(u_texture, texelCoord, i);
+			FragColor = color / float(u_sampleCount);
+			}
+		)"_fs);
+		return s;
+		}();
+	s_shader.uniforms().set("u_sampleCount", texture.samples());
 	s_shader.uniformTexture("u_texture", texture);
 	render(s_shader);
 }
@@ -287,16 +333,17 @@ void dk::gfx::setFrameBufferProperty(FrameBuffer& frameBuffer, const FrameBuffer
 template <>
 void dk::gfx::setFrameBufferProperty(FrameBuffer& frameBuffer, const FrameBuffer::SampleShading& sampleShading)
 {
-	if (!GLEW_ARB_sample_shading)
-	{
-		static bool logged = false;
-		if (!logged)
-		{
-			logged = true;
-			spdlog::warn("[gfx] Sample shading is not available");
-		}
-		return;
-	}
+	// if (!GLEW_ARB_sample_shading)
+	// {
+	// 	static bool logged = false;
+	// 	if (!logged)
+	// 	{
+	// 		logged = true;
+	// 		spdlog::warn("[gfx] Sample shading is not available");
+	// 	}
+	// 	return;
+	// }
+	spdlog::warn("Sample shading check not implemented using glad");
 
 	if (sampleShading == std::decay_t<decltype(sampleShading)>::Enabled) {
 		glEnable(GL_SAMPLE_SHADING);
@@ -351,9 +398,9 @@ void logFramebufferWarning(GLenum status) {
 void dk::gfx::FrameBuffer::render(DemoScene ds)
 {
 	struct Scene {
-		std::shared_ptr<ShaderSource> vertShader;
-		std::shared_ptr<ShaderSource> fragShader;
-		std::unique_ptr<Shader>       shader;
+		ShaderSource vertShader = g_vssource;
+		ShaderSource fragShader = g_fssource;
+		Shader       shader;
 
 		VertexBuffer                  vertexBuffer;
 		Camera                        camera;
@@ -361,9 +408,8 @@ void dk::gfx::FrameBuffer::render(DemoScene ds)
 		Scene()
 		{
 			// Setup shader
-			vertShader = std::make_shared<ShaderSource>(std::string(g_vssource));
-			fragShader = std::make_shared<ShaderSource>(std::string(g_fssource));
-			shader = std::make_unique<Shader>(vertShader, fragShader);
+			shader.source(vertShader, ShaderSource::Vertex);
+			shader.source(fragShader, ShaderSource::Fragment);
 
 			// Setup vertex and element buffers
 			std::vector<Vertex<glm::vec3, glm::vec3>> vertices = {__DK_DEMOSCENE_MONKEY_VERTICES};
@@ -372,7 +418,7 @@ void dk::gfx::FrameBuffer::render(DemoScene ds)
 			std::memcpy(vertexBuffer.modify().data(), vertices.data(), vertexBuffer.get().elem_size() * vertexBuffer.get().size());
 
 			// Setup layout
-			shader->layout(vertexBuffer);
+			shader.layout(vertexBuffer);
 		}
 	};
 
@@ -383,11 +429,11 @@ void dk::gfx::FrameBuffer::render(DemoScene ds)
 	const auto& cam = ds.camera.value_or(scene.camera);
 	scene.camera.position = glm::vec3(0, -3, 0.01);
 	scene.camera.asp = aspectRatio();
-	scene.shader->uniforms().set("u_camera.VP",        cam.P() * cam.V());
-	scene.shader->uniforms().set("u_camera.position",  cam.position);
-	scene.shader->uniforms().set("u_camera.direction", cam.lookat - cam.position);
+	scene.shader.uniforms().set("u_camera.VP",        cam.P() * cam.V());
+	scene.shader.uniforms().set("u_camera.position",  cam.position);
+	scene.shader.uniforms().set("u_camera.direction", cam.lookat - cam.position);
 
 	// Execute draw calls
 	clear(Clear::Color | Clear::Depth, DK_COLOR(0x333333ff));
-	render(*scene.shader, scene.vertexBuffer, Primitive::Triangles);
+	render(scene.shader, scene.vertexBuffer, Primitive::Triangles);
 }

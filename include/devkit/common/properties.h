@@ -39,15 +39,7 @@ template <typename U, string_literal Name>
 struct is_unique_property<UniqueProperty<U, Name>> : std::true_type {};
 
 template <typename T>
-concept UniquePropertySpecialization = is_unique_property<std::remove_cvref_t<T>>::value;
-
-template <typename T, string_literal Name>
-struct std::formatter<UniqueProperty<T, Name>> : std::formatter<T> {
-	template <typename FormatContext>
-	auto format(const dk::common::UniqueProperty<T, Name>& prop, FormatContext& ctx) const {
-		return std::formatter<T>::format(prop.value, ctx);
-	}
-};
+concept UniquePropertySpecialization = is_unique_property<T>::value;
 
 template <typename T, string_literal Name>
 inline void to_json(nlohmann::json& j, const UniqueProperty<T, Name>& p) 
@@ -147,10 +139,34 @@ public:
 	static std::string_view property_name(const P&)
 	{ return P::property_name; }
 
+	template <OfList<Properties...> E>
+		requires (std::is_enum_v<E>)
+	static const E& property_value(const E& e)
+	{ return e; }
+
+	template <OfList<Properties...> P>
+		requires requires { { P::property_name }; }
+	static const typename P::type& property_value(const P& p)
+	{ return p.value; }
+
 private:
 	dirty_flags m_dirty;
 	value_type  m_value;
 };
+
+namespace details {
+
+template <typename T>
+struct is_derived_from_configurationbase_specialization : std::false_type {};
+
+template <typename T>
+	requires (common::is_specialization_of<typename T::Base, ConfigurationBase>)
+struct is_derived_from_configurationbase_specialization<T> : std::true_type {};
+
+}
+
+template <typename T>
+concept ConfigurationSpecialization = details::is_derived_from_configurationbase_specialization<T>::value;
 
 template <typename... Properties>
 inline void to_json(nlohmann::json& j, const ConfigurationBase<Properties...>& config)
@@ -171,10 +187,18 @@ inline void from_json(const nlohmann::json& j, ConfigurationBase<Properties...>&
 
 } // namespace dk::common
 
+template <typename T, dk::common::string_literal Name>
+struct std::formatter<dk::common::UniqueProperty<T, Name>> : std::formatter<T> {
+	template <typename FormatContext>
+	auto format(const dk::common::UniqueProperty<T, Name>& prop, FormatContext& ctx) const {
+		return std::formatter<T>::format(prop.value, ctx);
+	}
+};
+
 #define DK_CONFIG_SPECIALIZATION(owner, ...)                        \
-	 private common::ConfigurationBase<__VA_ARGS__> {               \
+	 private dk::common::ConfigurationBase<__VA_ARGS__> {           \
 	private:                                                        \
-	using Base = common::ConfigurationBase<__VA_ARGS__>;	        \
+	using Base = dk::common::ConfigurationBase<__VA_ARGS__>;	    \
 																	\
 	public:															\
 		using ConfigurationBase::operator();						\
@@ -182,6 +206,7 @@ inline void from_json(const nlohmann::json& j, ConfigurationBase<Properties...>&
 		using ConfigurationBase::get;								\
 		using ConfigurationBase::for_each;							\
 		using ConfigurationBase::property_name;                     \
+		using ConfigurationBase::property_value;                    \
 																	\
 		inline friend void to_json(nlohmann::json& j, const Config& config) \
 		{ to_json(j, (const Base&)config); }						\
@@ -192,6 +217,8 @@ inline void from_json(const nlohmann::json& j, ConfigurationBase<Properties...>&
 	private:														\
 		using ConfigurationBase::ConfigurationBase;					\
 																	\
+		template <typename T>                                       \
+		friend struct dk::common::details::is_derived_from_configurationbase_specialization;\
 		friend class owner;                                         \
 	} 																\
 	/* end of macro */
